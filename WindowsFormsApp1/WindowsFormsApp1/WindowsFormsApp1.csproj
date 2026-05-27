@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{20C9E1D1-7F39-40B7-AFF0-691A030B8574}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>WindowsFormsApp1</RootNamespace>
+    <AssemblyName>WindowsFormsApp1</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Deployment" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Form1.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Form1.Designer.cs">
+      <DependentUpon>Form1.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\food\AddFood.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\food\AddFood.Designer.cs">
+      <DependentUpon>AddFood.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\food\AddFoodCategory.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\food\AddFoodCategory.Designer.cs">
+      <DependentUpon>AddFoodCategory.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\main\KassirPage.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\main\MainPage.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\main\MainPage.Designer.cs">
+      <DependentUpon>MainPage.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\order\AddOrder.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\payment\PaymentPanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\payment\PaymentPanel.Designer.cs">
+      <DependentUpon>PaymentPanel.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\order\AddOrder.Designer.cs">
+      <DependentUpon>AddOrder.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\place\place.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\place\place.Designer.cs">
+      <DependentUpon>place.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\place\PlaceAll.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\place\PlaceAll.Designer.cs">
+      <DependentUpon>PlaceAll.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\place\PlaceAllin.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\place\PlaceAllin.Designer.cs">
+      <DependentUpon>PlaceAllin.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\place\PlaceCategory.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\place\PlaceCategory.Designer.cs">
+      <DependentUpon>PlaceCategory.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\place\PlaceOut.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\place\PlaceOut.Designer.cs">
+      <DependentUpon>PlaceOut.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\report\ReportPage.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\report\ReportWaiter1.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\report\ReportWaiter1.Designer.cs">
+      <DependentUpon>ReportWaiter1.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\user\Password.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\user\Password.Designer.cs">
+      <DependentUpon>Password.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\user\userAdd.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\user\userAdd.Designer.cs">
+      <DependentUpon>userAdd.cs</DependentUpon>
+    </Compile>
+    <Compile Include="forms\user\userCategoryAdd.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\user\userCategoryAdd.Designer.cs">
+      <DependentUpon>userCategoryAdd.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Program.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="services\dbconnect.cs" />
+    <Compile Include="services\Session.cs" />
+    <Compile Include="services\PrintService.cs" />
+    <Compile Include="forms\order\OrdersPanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\ReorderForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\settings\ConnectionSetupForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\settings\SettingsPanel.cs" />
+    <Compile Include="forms\warehouse\WarehousePanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\warehouse\IngredientForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\warehouse\PurchaseForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\warehouse\RecipeIngredientForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\cashflow\CashFlowPanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="forms\cashflow\CashFlowForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="forms\customer\CustomerPanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="WaiterPage.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <EmbeddedResource Include="Form1.resx">
+      <DependentUpon>Form1.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\food\AddFood.resx">
+      <DependentUpon>AddFood.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\food\AddFoodCategory.resx">
+      <DependentUpon>AddFoodCategory.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\main\MainPage.resx">
+      <DependentUpon>MainPage.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\order\AddOrder.resx">
+      <DependentUpon>AddOrder.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\place\place.resx">
+      <DependentUpon>place.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\place\PlaceAll.resx">
+      <DependentUpon>PlaceAll.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\place\PlaceAllin.resx">
+      <DependentUpon>PlaceAllin.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\place\PlaceCategory.resx">
+      <DependentUpon>PlaceCategory.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\place\PlaceOut.resx">
+      <DependentUpon>PlaceOut.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\report\ReportWaiter1.resx">
+      <DependentUpon>ReportWaiter1.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\user\Password.resx">
+      <DependentUpon>Password.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\user\userAdd.resx">
+      <DependentUpon>userAdd.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="forms\user\userCategoryAdd.resx">
+      <DependentUpon>userCategoryAdd.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="photo\food_ingredients_flatlay.jpg" />
+    <Content Include="photo\round-fruit-platter-with-pears-apple-berries-isolated-blue-background-corner.jpg" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
