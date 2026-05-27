@@ -8,7 +8,6 @@ namespace WindowsFormsApp1.services
 {
     internal class dbconnect
     {
-        // ── Ulanish satrlari ──────────────────────────────────────────────────
         private static readonly string _central = LoadCentral();
         private static readonly string _local   = LoadLocal();
 
@@ -36,7 +35,6 @@ namespace WindowsFormsApp1.services
                 ?? @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=FoodX;Integrated Security=True;TrustServerCertificate=True";
         }
 
-        // ── Instance ─────────────────────────────────────────────────────────
         private SqlConnection _conn;
 
         public dbconnect()
@@ -44,7 +42,7 @@ namespace WindowsFormsApp1.services
             _conn = new SqlConnection(Session.IsOnline ? _central : _local);
         }
 
-        public SqlConnection GetCon() => _conn;
+        public SqlConnection GetCon() { return _conn; }
 
         public void OpenCon()
         {
@@ -62,38 +60,41 @@ namespace WindowsFormsApp1.services
                 _conn.Close();
         }
 
-        // ── SESSION_CONTEXT orqali RLS ni yoqish ──────────────────────────────
         private void SetTenantContext()
         {
-            using var cmd = new SqlCommand(
-                "EXEC sys.sp_set_session_context N'tenant_id', @tid, @readonly", _conn);
-            cmd.Parameters.AddWithValue("@tid",      Session.TenantId);
-            cmd.Parameters.AddWithValue("@readonly", false);
-            cmd.ExecuteNonQuery();
+            using (var cmd = new SqlCommand(
+                "EXEC sys.sp_set_session_context N'tenant_id', @tid, @readonly", _conn))
+            {
+                cmd.Parameters.AddWithValue("@tid",      Session.TenantId);
+                cmd.Parameters.AddWithValue("@readonly", false);
+                cmd.ExecuteNonQuery();
+            }
         }
 
-        // ── Statik yordamchi: markaziy serverga ulanish mumkinmi? ─────────────
         public static bool CheckCentral()
         {
             try
             {
-                using var c = new SqlConnection(_central + ";Connect Timeout=3");
-                c.Open();
-                return true;
+                using (var c = new SqlConnection(_central + ";Connect Timeout=3"))
+                {
+                    c.Open();
+                    return true;
+                }
             }
             catch { return false; }
         }
 
-        // ── SyncEngine uchun ochiq ulanishlar ─────────────────────────────────
         public static SqlConnection OpenCentralForSync(int tenantId)
         {
             var c = new SqlConnection(_central);
             c.Open();
-            using var cmd = new SqlCommand(
-                "EXEC sys.sp_set_session_context N'tenant_id', @t, @r", c);
-            cmd.Parameters.AddWithValue("@t", tenantId);
-            cmd.Parameters.AddWithValue("@r", false);
-            cmd.ExecuteNonQuery();
+            using (var cmd = new SqlCommand(
+                "EXEC sys.sp_set_session_context N'tenant_id', @t, @r", c))
+            {
+                cmd.Parameters.AddWithValue("@t", tenantId);
+                cmd.Parameters.AddWithValue("@r", false);
+                cmd.ExecuteNonQuery();
+            }
             return c;
         }
 
