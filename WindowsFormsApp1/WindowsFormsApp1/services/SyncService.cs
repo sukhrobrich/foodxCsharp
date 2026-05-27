@@ -8,7 +8,7 @@ namespace WindowsFormsApp1.services
     // Oflayn→online o'tishda sinxronizatsiyani avtomatik ishga tushiradi.
     internal static class SyncService
     {
-        private static Timer _timer;
+        private static System.Threading.Timer _timer;
 
         public static void Start()
         {
