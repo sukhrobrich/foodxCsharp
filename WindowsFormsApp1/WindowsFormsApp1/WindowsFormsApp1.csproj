@@ -148,6 +148,8 @@
     <Compile Include="services\dbconnect.cs" />
     <Compile Include="services\Session.cs" />
     <Compile Include="services\PrintService.cs" />
+    <Compile Include="services\LicenseService.cs" />
+    <Compile Include="forms\license\LicenseLoginForm.cs" />
     <Compile Include="forms\order\OrdersPanel.cs">
       <SubType>UserControl</SubType>
     </Compile>
