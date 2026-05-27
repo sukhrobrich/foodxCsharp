@@ -1,6 +1,5 @@
 using System;
 using System.Data.SqlClient;
-using System.Threading;
 using System.Windows.Forms;
 using WindowsFormsApp1.forms.license;
 using WindowsFormsApp1.forms.settings;
@@ -11,9 +10,9 @@ namespace WindowsFormsApp1
 {
     internal static class Program
     {
-        private static Timer      _licTimer;
-        private static string     _licLogin;
-        private static string     _licPass;
+        private static System.Threading.Timer _licTimer;
+        private static string                _licLogin;
+        private static string                _licPass;
 
         [STAThread]
         static void Main()
@@ -50,7 +49,7 @@ namespace WindowsFormsApp1
             // 3. Background watchdog — har 30 daqiqada litsenziyani qayta tekshiradi
             _licLogin = login;
             _licPass  = pass;
-            _licTimer = new Timer(WatchdogTick, null,
+            _licTimer = new System.Threading.Timer(WatchdogTick, null,
                 TimeSpan.FromMinutes(30),
                 TimeSpan.FromMinutes(30));
 
