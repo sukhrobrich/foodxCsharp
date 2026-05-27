@@ -12,7 +12,7 @@ namespace WindowsFormsApp1
 {
     public class WaiterPage : Form
     {
-	private test1;
+	
         private FlowLayoutPanel flpTables;
         private Label lblWelcome;
         private Timer refreshTimer;
