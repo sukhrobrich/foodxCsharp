@@ -4,8 +4,8 @@ using System.Windows.Forms;
 
 namespace WindowsFormsApp1.services
 {
-    // Fon monitori: har 60 soniyada markaziy serverga ulanishni tekshiradi.
-    // Online↔offline holatini Session.IsOnline orqali yangilaydi.
+    // Har 60 soniyada serverga ulanishni tekshiradi.
+    // Oflayn→online o'tishda sinxronizatsiyani avtomatik ishga tushiradi.
     internal static class SyncService
     {
         private static Timer _timer;
@@ -17,15 +17,12 @@ namespace WindowsFormsApp1.services
                 TimeSpan.FromSeconds(60));
         }
 
-        public static void Stop()
-        {
-            _timer?.Dispose();
-        }
+        public static void Stop() => _timer?.Dispose();
 
         private static void Tick(object state)
         {
-            bool wasOnline  = Session.IsOnline;
-            bool nowOnline  = dbconnect.CheckCentral();
+            bool wasOnline = Session.IsOnline;
+            bool nowOnline = dbconnect.CheckCentral();
 
             if (wasOnline == nowOnline) return;
 
@@ -34,17 +31,41 @@ namespace WindowsFormsApp1.services
             var form = Application.OpenForms.Count > 0 ? Application.OpenForms[0] : null;
             if (form == null || form.IsDisposed) return;
 
-            form.BeginInvoke(new Action(() =>
+            if (nowOnline)
             {
-                if (nowOnline)
-                    MessageBox.Show(
-                        "Server bilan ulanish tiklandi.\nDastur onlayn rejimda ishlaydi.",
-                        "FoodX — Onlayn", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                else
+                // Oflayn→Online: sinxronizatsiyani fon threadda ishlatamiz
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    var result = SyncEngine.SyncAll();
+
+                    form.BeginInvoke(new Action(() =>
+                    {
+                        if (result.Errors > 0)
+                            MessageBox.Show(
+                                $"Server bilan ulanish tiklandi, lekin sinxronizatsiyada xatolik:\n{result.LastError}",
+                                "FoodX — Sinxronizatsiya xatosi",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        else if (result.Synced > 0)
+                            MessageBox.Show(
+                                $"Ulanish tiklandi!\n{result.Synced} ta oflayn yozuv markaziy serverga yuklandi.",
+                                "FoodX — Sinxronizatsiya tugadi",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        else
+                            MessageBox.Show(
+                                "Server bilan ulanish tiklandi.\nDastur onlayn rejimda ishlaydi.",
+                                "FoodX — Onlayn",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }));
+                });
+            }
+            else
+            {
+                form.BeginInvoke(new Action(() =>
                     MessageBox.Show(
                         "Server bilan ulanish uzildi.\nDastur oflayn rejimda davom etadi.\nMa'lumotlar mahalliy bazaga yoziladi.",
-                        "FoodX — Oflayn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }));
+                        "FoodX — Oflayn",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+            }
         }
     }
 }

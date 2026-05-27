@@ -79,10 +79,29 @@ namespace WindowsFormsApp1.services
             {
                 using var c = new SqlConnection(_central + ";Connect Timeout=3");
                 c.Open();
-                c.Close();
                 return true;
             }
             catch { return false; }
+        }
+
+        // ── SyncEngine uchun ochiq ulanishlar ─────────────────────────────────
+        public static SqlConnection OpenCentralForSync(int tenantId)
+        {
+            var c = new SqlConnection(_central);
+            c.Open();
+            using var cmd = new SqlCommand(
+                "EXEC sys.sp_set_session_context N'tenant_id', @t, @r", c);
+            cmd.Parameters.AddWithValue("@t", tenantId);
+            cmd.Parameters.AddWithValue("@r", false);
+            cmd.ExecuteNonQuery();
+            return c;
+        }
+
+        public static SqlConnection OpenLocalForSync()
+        {
+            var c = new SqlConnection(_local);
+            c.Open();
+            return c;
         }
     }
 }

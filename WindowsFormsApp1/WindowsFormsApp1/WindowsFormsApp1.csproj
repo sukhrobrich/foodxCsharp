@@ -149,6 +149,7 @@
     <Compile Include="services\Session.cs" />
     <Compile Include="services\PrintService.cs" />
     <Compile Include="services\LicenseService.cs" />
+    <Compile Include="services\SyncEngine.cs" />
     <Compile Include="services\SyncService.cs" />
     <Compile Include="forms\license\LicenseLoginForm.cs" />
     <Compile Include="forms\order\OrdersPanel.cs">
@@ -248,6 +249,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <Content Include="install_local_db.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <Content Include="photo\food_ingredients_flatlay.jpg" />
