@@ -23,29 +23,33 @@ namespace WindowsFormsApp1.services
             public string CafeName   = "";
             public string ExpiresAt  = "";
             public int    DaysLeft;
+            public int    TenantId;
         }
 
         // ── Saqlash / o'qish ────────────────────────────────────────────────
-        public static (string login, string pass)? LoadSaved()
+        public static (string login, string pass, int tenantId)? LoadSaved()
         {
             try
             {
                 if (!File.Exists(LicFile)) return null;
                 var lines = File.ReadAllLines(LicFile, Encoding.UTF8);
                 if (lines.Length >= 2 && !string.IsNullOrEmpty(lines[0]))
-                    return (lines[0], lines[1]);
+                {
+                    int tid = lines.Length >= 3 ? (int.TryParse(lines[2], out int t) ? t : 0) : 0;
+                    return (lines[0], lines[1], tid);
+                }
             }
             catch { }
             return null;
         }
 
-        public static void Save(string login, string pass)
+        public static void Save(string login, string pass, int tenantId = 0)
         {
             try
             {
                 string dir = Path.GetDirectoryName(LicFile);
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                File.WriteAllLines(LicFile, new[] { login, pass }, Encoding.UTF8);
+                File.WriteAllLines(LicFile, new[] { login, pass, tenantId.ToString() }, Encoding.UTF8);
             }
             catch { }
         }
@@ -84,8 +88,11 @@ namespace WindowsFormsApp1.services
                 wx.Status == WebExceptionStatus.Timeout         ||
                 wx.Status == WebExceptionStatus.NameResolutionFailure)
             {
-                // Server yetib bo'lmasa — avvalgi kirish asosida ishlatishga ruxsat
-                return new Result { Valid = true, Offline = true,
+                // Server yetib bo'lmasa — saqlangan tenant_id bilan oflayn ruxsat
+                int savedTid = 0;
+                var saved = LoadSaved();
+                if (saved.HasValue) savedTid = saved.Value.tenantId;
+                return new Result { Valid = true, Offline = true, TenantId = savedTid,
                     Message = "Server bilan ulanish yo'q. Oflayn rejimda ishlayapti.", DaysLeft = 999 };
             }
             catch (Exception ex)
@@ -103,7 +110,8 @@ namespace WindowsFormsApp1.services
             r.ClientName = Get(json, "clientName");
             r.CafeName   = Get(json, "cafeName");
             r.ExpiresAt  = Get(json, "expiresAt");
-            int.TryParse(Get(json, "daysLeft"), out r.DaysLeft);
+            int.TryParse(Get(json, "daysLeft"),  out r.DaysLeft);
+            int.TryParse(Get(json, "tenantId"),  out r.TenantId);
             return r;
         }
 

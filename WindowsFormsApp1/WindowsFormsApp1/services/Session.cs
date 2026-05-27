@@ -1,9 +1,13 @@
 public static class Session
 {
-    public static int UserId { get; set; }
-    public static string Login { get; set; }
-    public static string UserName { get; set; }
+    public static int    UserId     { get; set; }
+    public static string Login      { get; set; }
+    public static string UserName   { get; set; }
     public static string UserCategory { get; set; }
+
+    // Litsenziya / tenant
+    public static int    TenantId   { get; set; }
+    public static bool   IsOnline   { get; set; }
 
     public static bool IsAdmin => UserCategory == "admin";
     public static bool IsKassir => UserCategory == "kassir";

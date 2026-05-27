@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Configuration;
+using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 
@@ -7,38 +8,81 @@ namespace WindowsFormsApp1.services
 {
     internal class dbconnect
     {
-        private static readonly string _connString = LoadConnectionString();
+        // ── Ulanish satrlari ──────────────────────────────────────────────────
+        private static readonly string _central = LoadCentral();
+        private static readonly string _local   = LoadLocal();
 
-        private static string LoadConnectionString()
+        private static string LoadCentral()
         {
-            string cfgFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "connection.cfg");
-            if (File.Exists(cfgFile))
+            string cfg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "connection.cfg");
+            if (File.Exists(cfg))
             {
-                string cs = File.ReadAllText(cfgFile).Trim();
-                if (!string.IsNullOrEmpty(cs)) return cs;
+                string s = File.ReadAllText(cfg).Trim();
+                if (!string.IsNullOrEmpty(s)) return s;
             }
             return ConfigurationManager.ConnectionStrings["FoodX"]?.ConnectionString
-                ?? @"Data Source=DESKTOP-MH76F5N;Initial Catalog=FoodX;Integrated Security=True;TrustServerCertificate=True";
+                ?? @"Data Source=192.168.35.230,1433;Initial Catalog=FoodX;User ID=sa;Password=Ac0323301;TrustServerCertificate=True;Encrypt=False";
         }
 
-        private SqlConnection connection = new SqlConnection(_connString);
-
-        public SqlConnection GetCon()
+        private static string LoadLocal()
         {
-            return connection;
+            string cfg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "local_connection.cfg");
+            if (File.Exists(cfg))
+            {
+                string s = File.ReadAllText(cfg).Trim();
+                if (!string.IsNullOrEmpty(s)) return s;
+            }
+            return ConfigurationManager.ConnectionStrings["FoodXLocal"]?.ConnectionString
+                ?? @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=FoodX;Integrated Security=True;TrustServerCertificate=True";
         }
+
+        // ── Instance ─────────────────────────────────────────────────────────
+        private SqlConnection _conn;
+
+        public dbconnect()
+        {
+            _conn = new SqlConnection(Session.IsOnline ? _central : _local);
+        }
+
+        public SqlConnection GetCon() => _conn;
 
         public void OpenCon()
         {
-            if (connection.State == System.Data.ConnectionState.Closed)
-                connection.Open();
+            if (_conn.State == ConnectionState.Closed)
+            {
+                _conn.Open();
+                if (Session.IsOnline && Session.TenantId > 0)
+                    SetTenantContext();
+            }
         }
 
         public void CloseCon()
         {
-            if (connection.State == System.Data.ConnectionState.Open)
-                connection.Close();
+            if (_conn.State == ConnectionState.Open)
+                _conn.Close();
+        }
+
+        // ── SESSION_CONTEXT orqali RLS ni yoqish ──────────────────────────────
+        private void SetTenantContext()
+        {
+            using var cmd = new SqlCommand(
+                "EXEC sys.sp_set_session_context N'tenant_id', @tid, @readonly", _conn);
+            cmd.Parameters.AddWithValue("@tid",      Session.TenantId);
+            cmd.Parameters.AddWithValue("@readonly", false);
+            cmd.ExecuteNonQuery();
+        }
+
+        // ── Statik yordamchi: markaziy serverga ulanish mumkinmi? ─────────────
+        public static bool CheckCentral()
+        {
+            try
+            {
+                using var c = new SqlConnection(_central + ";Connect Timeout=3");
+                c.Open();
+                c.Close();
+                return true;
+            }
+            catch { return false; }
         }
     }
-
 }

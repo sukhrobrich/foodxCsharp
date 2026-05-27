@@ -20,8 +20,10 @@ namespace WindowsFormsApp1.forms.license
         private static readonly Color Danger  = Color.FromArgb(220, 38, 38);
 
         // Muvaffaqiyatli kirishdan keyin saqlash uchun
-        public string SavedLogin    { get; private set; }
-        public string SavedPassword { get; private set; }
+        public string SavedLogin     { get; private set; }
+        public string SavedPassword  { get; private set; }
+        public int    SavedTenantId  { get; private set; }
+        public bool   SavedIsOffline { get; private set; }
 
         public LicenseLoginForm(string initialError = null)
         {
@@ -32,7 +34,7 @@ namespace WindowsFormsApp1.forms.license
             // Faqat login nomini oldindan to'ldirish (parol har safar kiritiladi)
             var saved = LicenseService.LoadSaved();
             if (saved.HasValue)
-                _login.Text = saved.Value.login;
+                _login.Text = saved.Value.Item1;
         }
 
         private void InitializeComponent()
@@ -163,9 +165,11 @@ namespace WindowsFormsApp1.forms.license
             if (result.Valid)
             {
                 // Login va parolni keyingi session uchun saqlash (oflayn rejim va watchdog uchun)
-                LicenseService.Save(l, p);
-                SavedLogin    = l;
-                SavedPassword = p;
+                LicenseService.Save(l, p, result.TenantId);
+                SavedLogin     = l;
+                SavedPassword  = p;
+                SavedTenantId  = result.TenantId;
+                SavedIsOffline = result.Offline;
 
                 if (result.Offline)
                     MessageBox.Show("Server bilan ulanish yo'q.\nOflayn rejimda ishlanmoqda.",
