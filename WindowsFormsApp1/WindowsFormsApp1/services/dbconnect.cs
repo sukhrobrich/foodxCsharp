@@ -41,12 +41,12 @@ namespace WindowsFormsApp1.services
         private static string DetectLocalServer()
         {
             string[] candidates = {
-                @"(LocalDB)\MSSQLLocalDB",
                 @".\SQLEXPRESS",
                 @".\MSSQLSERVER",
                 @".",
                 @"localhost",
                 System.Environment.MachineName,
+                @"(LocalDB)\MSSQLLocalDB",   // oxirgi — faqat developer mashinasida
             };
 
             foreach (string ds in candidates)
