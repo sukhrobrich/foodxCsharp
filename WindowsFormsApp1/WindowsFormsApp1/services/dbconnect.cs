@@ -13,14 +13,36 @@ namespace WindowsFormsApp1.services
 
         private static string LoadCentral()
         {
+            string fallback = ConfigurationManager.ConnectionStrings["FoodX"]?.ConnectionString
+                ?? @"Data Source=192.168.35.230,1433;Initial Catalog=FoodX;User ID=sa;Password=Ac0323301;TrustServerCertificate=True;Encrypt=False";
+
             string cfg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "connection.cfg");
             if (File.Exists(cfg))
             {
                 string s = File.ReadAllText(cfg).Trim();
-                if (!string.IsNullOrEmpty(s)) return s;
+                if (!string.IsNullOrEmpty(s))
+                {
+                    try
+                    {
+                        var b = new SqlConnectionStringBuilder(s);
+                        if (b.IntegratedSecurity)
+                        {
+                            // Eski noto'g'ri format — SQL Auth ga o'tkazamiz
+                            var fb = new SqlConnectionStringBuilder(fallback);
+                            b.IntegratedSecurity = false;
+                            b.UserID   = fb.UserID;
+                            b.Password = fb.Password;
+                            if (!b.ConnectionString.Contains("Encrypt="))
+                                b.Encrypt = false;
+                            s = b.ConnectionString;
+                            try { File.WriteAllText(cfg, s); } catch { }
+                        }
+                        return s;
+                    }
+                    catch { return s; }
+                }
             }
-            return ConfigurationManager.ConnectionStrings["FoodX"]?.ConnectionString
-                ?? @"Data Source=192.168.35.230,1433;Initial Catalog=FoodX;User ID=sa;Password=Ac0323301;TrustServerCertificate=True;Encrypt=False";
+            return fallback;
         }
 
         private static string LoadLocal()

@@ -1,4 +1,5 @@
 using System;
+using System.Configuration;
 using System.Data.SqlClient;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -156,7 +157,21 @@ namespace WindowsFormsApp1.forms.settings
             btnConnect.Text    = "Tekshirilmoqda...";
             SetStatus("", TextMuted);
 
-            string cs = $"Data Source={server};Initial Catalog=FoodX;Integrated Security=True;TrustServerCertificate=True;Connect Timeout=6";
+            // SQL Server auth (sa) — Integrated Security Linux da ishlamaydi
+            string appCs = System.Configuration.ConfigurationManager
+                .ConnectionStrings["FoodX"]?.ConnectionString ?? "";
+            string user = "sa", pass = "Ac0323301";
+            try
+            {
+                var b2 = new SqlConnectionStringBuilder(appCs);
+                if (!b2.IntegratedSecurity && !string.IsNullOrEmpty(b2.UserID))
+                { user = b2.UserID; pass = b2.Password; }
+            }
+            catch { }
+
+            string cs = $"Data Source={server},1433;Initial Catalog=FoodX;" +
+                        $"User ID={user};Password={pass};" +
+                        $"TrustServerCertificate=True;Encrypt=False;Connect Timeout=6";
 
             bool ok = await Task.Run(() =>
             {
