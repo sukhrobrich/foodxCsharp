@@ -806,17 +806,9 @@ namespace WindowsFormsApp1.forms.settings
 
         void LoadConnectionSetting()
         {
-            string mode = PrintService.GetSetting("connection_mode", "");
-            if (mode == "offline")
-            {
-                Session.IsOnline     = false;
-                Session.ForceOffline = true;
-            }
-            else if (mode == "online")
-            {
-                Session.ForceOffline = false;
-            }
-
+            // Faqat UI ni yangilaydi.
+            // Session.IsOnline / ForceOffline ni BU YERDA o'zgartirmaymiz —
+            // ular Program.cs startup da bir marta belgilanadi.
             Color colorOn = Color.FromArgb(22, 163, 74);
             if (_connectionTogglePanel != null) _connectionTogglePanel.Invalidate();
             if (_cardConn             != null) _cardConn.Invalidate();

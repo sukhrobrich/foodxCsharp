@@ -309,15 +309,16 @@ namespace WindowsFormsApp1.services
                 local   = dbconnect.OpenLocalForSync();
                 central = dbconnect.OpenCentralForSync(Session.TenantId);
 
-                result.Synced += DlSettings(local, central);
-                result.Synced += DlUserCategories(local, central);
-                result.Synced += DlUsers(local, central);
-                result.Synced += DlFoodCategories(local, central);
-                result.Synced += DlFoods(local, central);
-                result.Synced += DlPlaceCategories(local, central);
-                result.Synced += DlPlaceOuts(local, central);
-                result.Synced += DlPlaceIns(local, central);
-                result.Synced += DlPayments(local, central);
+                // Har bir jadval mustaqil — biri xato bo'lsa qolganlari davom etadi
+                TryDl(() => DlSettings(local, central),        result);
+                TryDl(() => DlUserCategories(local, central),  result);
+                TryDl(() => DlUsers(local, central),           result);
+                TryDl(() => DlFoodCategories(local, central),  result);
+                TryDl(() => DlFoods(local, central),           result);
+                TryDl(() => DlPlaceCategories(local, central), result);
+                TryDl(() => DlPlaceOuts(local, central),       result);
+                TryDl(() => DlPlaceIns(local, central),        result);
+                TryDl(() => DlPayments(local, central),        result);
             }
             catch (Exception ex)
             {
@@ -330,6 +331,12 @@ namespace WindowsFormsApp1.services
                 if (central != null) { central.Close(); central.Dispose(); }
             }
             return result;
+        }
+
+        private static void TryDl(Func<int> action, SyncResult result)
+        {
+            try { result.Synced += action(); }
+            catch (Exception ex) { result.Errors++; if (result.LastError == null) result.LastError = ex.Message; }
         }
 
         private static int DlSettings(SqlConnection local, SqlConnection central)

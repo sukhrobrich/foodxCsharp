@@ -64,6 +64,9 @@ namespace WindowsFormsApp1
             Session.TenantId = tenantId;
             Session.IsOnline = !isOffline && dbconnect.CheckCentral();
 
+            // 3a. Foydalanuvchi oldin qo'lda "Oflayn" qo'ygan bo'lsa — tiklaymiz
+            ApplySavedConnectionMode();
+
             // 4. Watchdog — har 30 daqiqada litsenziyani qayta tekshiradi
             _licLogin = login;
             _licPass  = pass;
@@ -116,6 +119,31 @@ namespace WindowsFormsApp1
         }
 
         // ── Yordamchi metodlar ───────────────────────────────────────────────
+
+        // Lokal bazadan saqlangan connection_mode ni o'qib Session ga qo'llaydi.
+        // Faqat local DB mavjud bo'lsa ishlaydi; yo'q bo'lsa hech narsa qilmaydi.
+        static void ApplySavedConnectionMode()
+        {
+            try
+            {
+                if (!dbconnect.CheckLocal()) return;
+
+                bool prevOnline = Session.IsOnline;
+                Session.IsOnline = false;            // lokal bazani o'qish uchun
+                string mode = "";
+                try { mode = PrintService.GetSetting("connection_mode", ""); }
+                finally { Session.IsOnline = prevOnline; }
+
+                if (mode == "offline")
+                {
+                    Session.IsOnline     = false;
+                    Session.ForceOffline = true;
+                }
+                // "online" yoki bo'sh bo'lsa — CheckCentral natijasi saqlanib qoladi
+            }
+            catch { }
+        }
+
         static bool CanConnectLocal()
         {
             try
