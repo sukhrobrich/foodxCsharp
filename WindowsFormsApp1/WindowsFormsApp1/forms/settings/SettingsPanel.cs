@@ -1169,6 +1169,8 @@ namespace WindowsFormsApp1.forms.settings
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
+                    // Offline o'tishdan oldin centraldan so'nggi ma'lumotlarni yuklab olamiz
+                    SyncEngine.DownloadAll();
                     Session.IsOnline     = false;
                     Session.ForceOffline = true;
                     PrintService.SetSetting("connection_mode", "offline");

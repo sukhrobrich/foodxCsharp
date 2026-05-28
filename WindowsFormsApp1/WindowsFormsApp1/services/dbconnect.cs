@@ -137,7 +137,11 @@ namespace WindowsFormsApp1.services
         // Mahalliy bazani tekshiradi; yo'q bo'lsa install_local_db.sql dan yaratadi.
         public static bool EnsureLocalDatabase()
         {
-            if (CheckLocal()) return true;
+            if (CheckLocal())
+            {
+                FixLocalDefaults();
+                return true;
+            }
 
             try
             {
@@ -176,9 +180,69 @@ namespace WindowsFormsApp1.services
                     }
                 }
 
-                return CheckLocal();
+                bool ok = CheckLocal();
+                if (ok) FixLocalDefaults();
+                return ok;
             }
             catch { return false; }
+        }
+
+        // Mavjud local DB dagi noto'g'ri DEFAULT larni tuzatadi
+        public static void FixLocalDefaults()
+        {
+            try
+            {
+                using (var c = new SqlConnection(_local + ";Connect Timeout=3"))
+                {
+                    c.Open();
+                    string[] fixes = {
+                        // [order].is_synced default 1 → 0
+                        "IF EXISTS (SELECT 1 FROM sys.default_constraints dc " +
+                        "  JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "  WHERE OBJECT_NAME(dc.parent_object_id)='order' AND col.name='is_synced' AND dc.definition='((1))') " +
+                        "BEGIN " +
+                        "  DECLARE @cn1 NVARCHAR(200)=(SELECT dc.name FROM sys.default_constraints dc " +
+                        "    JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "    WHERE OBJECT_NAME(dc.parent_object_id)='order' AND col.name='is_synced'); " +
+                        "  EXEC('ALTER TABLE [order] DROP CONSTRAINT ['+@cn1+']'); " +
+                        "  ALTER TABLE [order] ADD DEFAULT 0 FOR is_synced " +
+                        "END",
+
+                        // order_debt.is_synced default 1 → 0
+                        "IF EXISTS (SELECT 1 FROM sys.default_constraints dc " +
+                        "  JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "  WHERE OBJECT_NAME(dc.parent_object_id)='order_debt' AND col.name='is_synced' AND dc.definition='((1))') " +
+                        "BEGIN " +
+                        "  DECLARE @cn2 NVARCHAR(200)=(SELECT dc.name FROM sys.default_constraints dc " +
+                        "    JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "    WHERE OBJECT_NAME(dc.parent_object_id)='order_debt' AND col.name='is_synced'); " +
+                        "  EXEC('ALTER TABLE order_debt DROP CONSTRAINT ['+@cn2+']'); " +
+                        "  ALTER TABLE order_debt ADD DEFAULT 0 FOR is_synced " +
+                        "END",
+
+                        // order_cancellation_log.is_synced default 1 → 0
+                        "IF EXISTS (SELECT 1 FROM sys.default_constraints dc " +
+                        "  JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "  WHERE OBJECT_NAME(dc.parent_object_id)='order_cancellation_log' AND col.name='is_synced' AND dc.definition='((1))') " +
+                        "BEGIN " +
+                        "  DECLARE @cn3 NVARCHAR(200)=(SELECT dc.name FROM sys.default_constraints dc " +
+                        "    JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "    WHERE OBJECT_NAME(dc.parent_object_id)='order_cancellation_log' AND col.name='is_synced'); " +
+                        "  EXEC('ALTER TABLE order_cancellation_log DROP CONSTRAINT ['+@cn3+']'); " +
+                        "  ALTER TABLE order_cancellation_log ADD DEFAULT 0 FOR is_synced " +
+                        "END",
+                    };
+                    foreach (string sql in fixes)
+                    {
+                        using (var cmd = new SqlCommand(sql, c))
+                        {
+                            cmd.CommandTimeout = 10;
+                            try { cmd.ExecuteNonQuery(); } catch { }
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         public static SqlConnection OpenCentralForSync(int tenantId)

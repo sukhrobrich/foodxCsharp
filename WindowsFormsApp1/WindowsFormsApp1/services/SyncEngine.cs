@@ -294,6 +294,246 @@ namespace WindowsFormsApp1.services
             return count;
         }
 
+        // ══════════════════════════════════════════════════════════════════════
+        // DOWNLOAD: Central → Local  (reference ma'lumotlar)
+        // ══════════════════════════════════════════════════════════════════════
+        public static SyncResult DownloadAll()
+        {
+            var result = new SyncResult();
+            if (!Session.IsOnline || Session.TenantId == 0) return result;
+
+            SqlConnection local   = null;
+            SqlConnection central = null;
+            try
+            {
+                local   = dbconnect.OpenLocalForSync();
+                central = dbconnect.OpenCentralForSync(Session.TenantId);
+
+                result.Synced += DlSettings(local, central);
+                result.Synced += DlUserCategories(local, central);
+                result.Synced += DlUsers(local, central);
+                result.Synced += DlFoodCategories(local, central);
+                result.Synced += DlFoods(local, central);
+                result.Synced += DlPlaceCategories(local, central);
+                result.Synced += DlPlaceOuts(local, central);
+                result.Synced += DlPlaceIns(local, central);
+                result.Synced += DlPayments(local, central);
+            }
+            catch (Exception ex)
+            {
+                result.LastError = ex.Message;
+                result.Errors++;
+            }
+            finally
+            {
+                if (local   != null) { local.Close();   local.Dispose(); }
+                if (central != null) { central.Close(); central.Dispose(); }
+            }
+            return result;
+        }
+
+        private static int DlSettings(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central, "SELECT [key], value FROM settings");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS (SELECT 1 FROM settings WHERE [key]=@k) " +
+                    "  UPDATE settings SET value=@v WHERE [key]=@k " +
+                    "ELSE INSERT INTO settings([key],value) VALUES(@k,@v)",
+                    P("@k", r["key"]), P("@v", r["value"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlUserCategories(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central, "SELECT id,name,role_type,color FROM user_category");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS (SELECT 1 FROM user_category WHERE id=@id) " +
+                    "  UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE id=@id " +
+                    "ELSE BEGIN " +
+                    "  SET IDENTITY_INSERT user_category ON; " +
+                    "  INSERT INTO user_category(id,name,role_type,color) VALUES(@id,@n,@rt,@c); " +
+                    "  SET IDENTITY_INSERT user_category OFF " +
+                    "END",
+                    P("@id", r["id"]), P("@n", r["name"]),
+                    P("@rt", r["role_type"]), P("@c", r["color"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlUsers(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id,name,user_category_id,login,password,phone_number,created_at,updated_at,sort_order FROM [user]");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS (SELECT 1 FROM [user] WHERE id=@id) " +
+                    "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw," +
+                    "    phone_number=@ph,updated_at=@ua,sort_order=@so WHERE id=@id " +
+                    "ELSE BEGIN " +
+                    "  SET IDENTITY_INSERT [user] ON; " +
+                    "  INSERT INTO [user](id,name,user_category_id,login,password,phone_number,created_at,updated_at,sort_order) " +
+                    "  VALUES(@id,@n,@uc,@l,@pw,@ph,@ca,@ua,@so); " +
+                    "  SET IDENTITY_INSERT [user] OFF " +
+                    "END",
+                    P("@id", r["id"]), P("@n", r["name"]), P("@uc", r["user_category_id"]),
+                    P("@l", r["login"]), P("@pw", r["password"]), P("@ph", r["phone_number"]),
+                    P("@ca", r["created_at"]), P("@ua", r["updated_at"]), P("@so", r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlFoodCategories(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central, "SELECT id,name,printer_name,sort_order FROM food_category");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS (SELECT 1 FROM food_category WHERE id=@id) " +
+                    "  UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so WHERE id=@id " +
+                    "ELSE BEGIN " +
+                    "  SET IDENTITY_INSERT food_category ON; " +
+                    "  INSERT INTO food_category(id,name,printer_name,sort_order) VALUES(@id,@n,@pn,@so); " +
+                    "  SET IDENTITY_INSERT food_category OFF " +
+                    "END",
+                    P("@id", r["id"]), P("@n", r["name"]),
+                    P("@pn", r["printer_name"]), P("@so", r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlFoods(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id,food_category_id,name,count,original_price,selling_price," +
+                "photo,created_at,updated_at,unit,description,is_unlimited,sort_order FROM food");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS (SELECT 1 FROM food WHERE id=@id) " +
+                    "  UPDATE food SET food_category_id=@fc,name=@n,count=@cnt,original_price=@op," +
+                    "    selling_price=@sp,photo=@ph,updated_at=@ua,unit=@u,description=@d," +
+                    "    is_unlimited=@iu,sort_order=@so WHERE id=@id " +
+                    "ELSE BEGIN " +
+                    "  SET IDENTITY_INSERT food ON; " +
+                    "  INSERT INTO food(id,food_category_id,name,count,original_price,selling_price," +
+                    "    photo,created_at,updated_at,unit,description,is_unlimited,sort_order) " +
+                    "  VALUES(@id,@fc,@n,@cnt,@op,@sp,@ph,@ca,@ua,@u,@d,@iu,@so); " +
+                    "  SET IDENTITY_INSERT food OFF " +
+                    "END",
+                    P("@id", r["id"]), P("@fc", r["food_category_id"]), P("@n", r["name"]),
+                    P("@cnt", r["count"]), P("@op", r["original_price"]), P("@sp", r["selling_price"]),
+                    P("@ph", r["photo"]), P("@ca", r["created_at"]), P("@ua", r["updated_at"]),
+                    P("@u", r["unit"]), P("@d", r["description"]),
+                    P("@iu", r["is_unlimited"]), P("@so", r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlPlaceCategories(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central, "SELECT id,name FROM place_category");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS (SELECT 1 FROM place_category WHERE id=@id) " +
+                    "  UPDATE place_category SET name=@n WHERE id=@id " +
+                    "ELSE BEGIN " +
+                    "  SET IDENTITY_INSERT place_category ON; " +
+                    "  INSERT INTO place_category(id,name) VALUES(@id,@n); " +
+                    "  SET IDENTITY_INSERT place_category OFF " +
+                    "END",
+                    P("@id", r["id"]), P("@n", r["name"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlPlaceOuts(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order FROM place_out");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS (SELECT 1 FROM place_out WHERE id=@id) " +
+                    "  UPDATE place_out SET place_category_id=@pc,name=@n,place_count=@cnt," +
+                    "    updated_at=@ua,serviceFee=@sf,price=@pr,sort_order=@so WHERE id=@id " +
+                    "ELSE BEGIN " +
+                    "  SET IDENTITY_INSERT place_out ON; " +
+                    "  INSERT INTO place_out(id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order) " +
+                    "  VALUES(@id,@pc,@n,@cnt,@ca,@ua,@sf,@pr,@so); " +
+                    "  SET IDENTITY_INSERT place_out OFF " +
+                    "END",
+                    P("@id", r["id"]), P("@pc", r["place_category_id"]), P("@n", r["name"]),
+                    P("@cnt", r["place_count"]), P("@ca", r["created_at"]), P("@ua", r["updated_at"]),
+                    P("@sf", r["serviceFee"]), P("@pr", r["price"]), P("@so", r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlPlaceIns(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id,place_out_id,room_name,empty,created_at,user_id,price FROM place_in");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS (SELECT 1 FROM place_in WHERE id=@id) " +
+                    "  UPDATE place_in SET place_out_id=@po,room_name=@rn,empty=@e,user_id=@uid,price=@pr WHERE id=@id " +
+                    "ELSE BEGIN " +
+                    "  SET IDENTITY_INSERT place_in ON; " +
+                    "  INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,user_id,price) " +
+                    "  VALUES(@id,@po,@rn,@e,@ca,@uid,@pr); " +
+                    "  SET IDENTITY_INSERT place_in OFF " +
+                    "END",
+                    P("@id", r["id"]), P("@po", r["place_out_id"]), P("@rn", r["room_name"]),
+                    P("@e", r["empty"]), P("@ca", r["created_at"]),
+                    P("@uid", r["user_id"]), P("@pr", r["price"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlPayments(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central, "SELECT id,name,sort_order FROM payment");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS (SELECT 1 FROM payment WHERE id=@id) " +
+                    "  UPDATE payment SET name=@n,sort_order=@so WHERE id=@id " +
+                    "ELSE BEGIN " +
+                    "  SET IDENTITY_INSERT payment ON; " +
+                    "  INSERT INTO payment(id,name,sort_order) VALUES(@id,@n,@so); " +
+                    "  SET IDENTITY_INSERT payment OFF " +
+                    "END",
+                    P("@id", r["id"]), P("@n", r["name"]), P("@so", r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
         // ── ADO.NET yordamchilar ─────────────────────────────────────────────
         private static DataTable ReadAll(SqlConnection conn, string sql)
         {

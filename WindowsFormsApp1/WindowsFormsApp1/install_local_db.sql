@@ -145,7 +145,7 @@ CREATE TABLE [order] (
     custom_svc_type  NVARCHAR(3)    NULL,
     payment2_id      INT            NULL REFERENCES payment(id),
     payment2_amount  DECIMAL(18,2)  NULL,
-    is_synced        BIT            NOT NULL DEFAULT 1,
+    is_synced        BIT            NOT NULL DEFAULT 0,
     sync_token       UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),
     central_id       INT            NULL
 );
@@ -239,7 +239,7 @@ CREATE TABLE order_debt (
     created_at   DATETIME      NOT NULL DEFAULT GETDATE(),
     is_paid      BIT           NOT NULL DEFAULT 0,
     paid_at      DATETIME      NULL,
-    is_synced    BIT           NOT NULL DEFAULT 1,
+    is_synced    BIT           NOT NULL DEFAULT 0,
     sync_token   UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID()
 );
 
@@ -253,7 +253,7 @@ CREATE TABLE order_cancellation_log (
     cancelled_qty INT           NOT NULL DEFAULT 1,
     cancelled_by  NVARCHAR(255) NULL,
     cancelled_at  DATETIME      NOT NULL DEFAULT GETDATE(),
-    is_synced     BIT           NOT NULL DEFAULT 1,
+    is_synced     BIT           NOT NULL DEFAULT 0,
     sync_token    UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID()
 );
 
