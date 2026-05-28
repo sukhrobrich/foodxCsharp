@@ -43,14 +43,15 @@ namespace WindowsFormsApp1
             Panel footer = new Panel { Dock = DockStyle.Bottom, Height = 40, BackColor = BgCard };
             footer.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, footer.Width, 0);
-            new Label
+            var lblStatus = new Label
             {
-                Text = "FoodX v2.0  •  Kafe va Restoran Boshqaruv Tizimi",
+                Text = $"FoodX v2.0  •  {(Session.IsOnline ? "Online ✓" : "Offline ✗")}  •  TenantId:{Session.TenantId}",
                 Font = new Font("Segoe UI", 9),
-                ForeColor = TextMuted,
+                ForeColor = Session.IsOnline ? Color.FromArgb(22, 163, 74) : Color.FromArgb(220, 38, 38),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleCenter
-            }.Also(l => footer.Controls.Add(l));
+            };
+            footer.Controls.Add(lblStatus);
 
             Button btnDbConn = new Button
             {
@@ -154,16 +155,36 @@ namespace WindowsFormsApp1
                 SqlCommand cmd = new SqlCommand(query, db.GetCon());
                 db.OpenCon();
                 SqlDataReader dr = cmd.ExecuteReader();
+                int count = 0;
                 while (dr.Read())
+                {
+                    count++;
                     flpUsers.Controls.Add(CreateUserCard(
                         Convert.ToInt32(dr["id"]),
                         dr["name"].ToString(),
                         dr["login"].ToString(),
                         dr["category"].ToString(),
                         dr["color"].ToString()));
+                }
                 dr.Close();
+                if (count == 0)
+                {
+                    MessageBox.Show(
+                        $"Foydalanuvchilar topilmadi!\n\n" +
+                        $"IsOnline: {Session.IsOnline}\n" +
+                        $"TenantId: {Session.TenantId}\n" +
+                        $"ForceOffline: {Session.ForceOffline}\n\n" +
+                        "Agar Online=True va TenantId=0 bo'lsa — litsenziya qayta tekshirilsin.\n" +
+                        "Agar Online=False bo'lsa — server bilan ulanish tekshirilsin.",
+                        "FoodX — Diagnostika", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
             }
-            catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Xatolik: {ex.Message}\n\nIsOnline:{Session.IsOnline}  TenantId:{Session.TenantId}",
+                    "FoodX — Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
             finally { db.CloseCon(); }
         }
 

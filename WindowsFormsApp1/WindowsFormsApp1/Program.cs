@@ -81,7 +81,22 @@ namespace WindowsFormsApp1
             SyncService.Start();
 
             // 6. Asosiy forma
-            if (IsAdminExists())
+            bool adminExists = IsAdminExists();
+            // VAQTINCHALIK DIAGNOSTIKA — muammo hal bo'lgach o'chiriladi
+            MessageBox.Show(
+                $"Ulanish holati:\n\n" +
+                $"IsOnline:     {Session.IsOnline}\n" +
+                $"TenantId:     {Session.TenantId}\n" +
+                $"ForceOffline: {Session.ForceOffline}\n" +
+                $"AdminExists:  {adminExists}\n\n" +
+                (Session.IsOnline
+                    ? "✓ Markaziy server bilan ulangan"
+                    : "✗ Oflayn — mahalliy baza ishlatilmoqda"),
+                "FoodX — Diagnostika",
+                MessageBoxButtons.OK,
+                Session.IsOnline ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+            if (adminExists)
                 Application.Run(new Form1());
             else
                 Application.Run(new Password("admin", false));
