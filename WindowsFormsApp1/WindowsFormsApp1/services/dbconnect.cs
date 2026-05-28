@@ -231,6 +231,30 @@ namespace WindowsFormsApp1.services
                         "  EXEC('ALTER TABLE order_cancellation_log DROP CONSTRAINT ['+@cn3+']'); " +
                         "  ALTER TABLE order_cancellation_log ADD DEFAULT 0 FOR is_synced " +
                         "END",
+
+                    // ingredient_purchase.is_synced default 1 → 0
+                        "IF EXISTS (SELECT 1 FROM sys.default_constraints dc " +
+                        "  JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "  WHERE OBJECT_NAME(dc.parent_object_id)='ingredient_purchase' AND col.name='is_synced' AND dc.definition='((1))') " +
+                        "BEGIN " +
+                        "  DECLARE @cn4 NVARCHAR(200)=(SELECT dc.name FROM sys.default_constraints dc " +
+                        "    JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "    WHERE OBJECT_NAME(dc.parent_object_id)='ingredient_purchase' AND col.name='is_synced'); " +
+                        "  EXEC('ALTER TABLE ingredient_purchase DROP CONSTRAINT ['+@cn4+']'); " +
+                        "  ALTER TABLE ingredient_purchase ADD DEFAULT 0 FOR is_synced " +
+                        "END",
+
+                    // food_purchase.is_synced default 1 → 0
+                        "IF EXISTS (SELECT 1 FROM sys.default_constraints dc " +
+                        "  JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "  WHERE OBJECT_NAME(dc.parent_object_id)='food_purchase' AND col.name='is_synced' AND dc.definition='((1))') " +
+                        "BEGIN " +
+                        "  DECLARE @cn5 NVARCHAR(200)=(SELECT dc.name FROM sys.default_constraints dc " +
+                        "    JOIN sys.columns col ON dc.parent_object_id=col.object_id AND dc.parent_column_id=col.column_id " +
+                        "    WHERE OBJECT_NAME(dc.parent_object_id)='food_purchase' AND col.name='is_synced'); " +
+                        "  EXEC('ALTER TABLE food_purchase DROP CONSTRAINT ['+@cn5+']'); " +
+                        "  ALTER TABLE food_purchase ADD DEFAULT 0 FOR is_synced " +
+                        "END",
                     };
                     foreach (string sql in fixes)
                     {

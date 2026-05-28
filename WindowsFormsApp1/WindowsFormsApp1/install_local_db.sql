@@ -198,7 +198,7 @@ CREATE TABLE ingredient_purchase (
     total_price    DECIMAL(18,2) NOT NULL,
     purchased_at   DATETIME      NULL DEFAULT GETDATE(),
     notes          NVARCHAR(200) NULL,
-    is_synced      BIT           NOT NULL DEFAULT 1,
+    is_synced      BIT           NOT NULL DEFAULT 0,
     sync_token     UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID()
 );
 
@@ -211,7 +211,7 @@ CREATE TABLE food_purchase (
     total_price    DECIMAL(18,2) NOT NULL DEFAULT 0,
     purchased_at   DATETIME      NULL DEFAULT GETDATE(),
     notes          NVARCHAR(200) NULL,
-    is_synced      BIT           NOT NULL DEFAULT 1,
+    is_synced      BIT           NOT NULL DEFAULT 0,
     sync_token     UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID()
 );
 

@@ -63,9 +63,11 @@ namespace WindowsFormsApp1.forms.settings
         private TextBox txtMaxDiscount;
 
         // Ulanish rejimi
-        private Panel _connectionTogglePanel;
-        private Label _lblConnStatus;
-        private Panel _cardConn;
+        private Panel  _connectionTogglePanel;
+        private Label  _lblConnStatus;
+        private Panel  _cardConn;
+        private Button _btnSync;
+        private Button _btnForce;
 
         // Chek shrift sozlamalari
         private Panel chekFontView;
@@ -806,9 +808,6 @@ namespace WindowsFormsApp1.forms.settings
 
         void LoadConnectionSetting()
         {
-            // Faqat UI ni yangilaydi.
-            // Session.IsOnline / ForceOffline ni BU YERDA o'zgartirmaymiz —
-            // ular Program.cs startup da bir marta belgilanadi.
             Color colorOn = Color.FromArgb(22, 163, 74);
             if (_connectionTogglePanel != null) _connectionTogglePanel.Invalidate();
             if (_cardConn             != null) _cardConn.Invalidate();
@@ -817,6 +816,8 @@ namespace WindowsFormsApp1.forms.settings
                 _lblConnStatus.Text      = Session.IsOnline ? "Onlayn — serverga ulangan" : "Oflayn — mahalliy bazada";
                 _lblConnStatus.ForeColor = Session.IsOnline ? colorOn : TextM;
             }
+            if (_btnSync  != null) _btnSync.Enabled  = Session.IsOnline;
+            if (_btnForce != null) _btnForce.Enabled = Session.IsOnline;
         }
 
         void SaveAll(object sender, EventArgs e)
@@ -1118,9 +1119,9 @@ namespace WindowsFormsApp1.forms.settings
             // Sinxronlashtirish tugmasi
             Button btnSync = new Button
             {
-                Text      = "↑↓  Hozir sinxronlashtirish",
+                Text      = "↑↓  Sinxronlashtirish",
                 Location  = new Point(82, 78),
-                Width     = 210, Height = 30,
+                Width     = 170, Height = 30,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(239, 246, 255),
                 ForeColor = Color.FromArgb(37, 99, 235),
@@ -1130,6 +1131,24 @@ namespace WindowsFormsApp1.forms.settings
             };
             btnSync.FlatAppearance.BorderColor = Color.FromArgb(147, 197, 253);
             card.Controls.Add(btnSync);
+            _btnSync = btnSync;
+
+            // Majburiy yuklash — is_synced=1 bo'lsa ham barchasini yuboradi
+            Button btnForce = new Button
+            {
+                Text      = "⚠  Majburiy yuklash",
+                Location  = new Point(260, 78),
+                Width     = 160, Height = 30,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(255, 247, 237),
+                ForeColor = Color.FromArgb(194, 65, 12),
+                Font      = new Font("Segoe UI", 9),
+                Cursor    = Cursors.Hand,
+                Enabled   = Session.IsOnline
+            };
+            btnForce.FlatAppearance.BorderColor = Color.FromArgb(253, 186, 116);
+            card.Controls.Add(btnForce);
+            _btnForce = btnForce;
 
             int W = 50, H = 28;
             _connectionTogglePanel = new Panel { Width = W, Height = H, Location = new Point(card.Width - 70, 36), Cursor = Cursors.Hand, BackColor = Color.Transparent };
@@ -1147,44 +1166,52 @@ namespace WindowsFormsApp1.forms.settings
                 e.Graphics.FillEllipse(Brushes.White, tx, 2, H - 4, H - 4);
             };
 
-            Action<Label, Button, Panel> updateUi = (lbl, btn, toggle) =>
+            Action<Label, Panel> updateUi = (lbl, toggle) =>
             {
                 lbl.Text      = Session.IsOnline ? "Onlayn — serverga ulangan" : "Oflayn — mahalliy bazada";
                 lbl.ForeColor = Session.IsOnline ? colorOn : TextM;
-                btn.Enabled   = Session.IsOnline;
+                btnSync.Enabled  = Session.IsOnline;
+                btnForce.Enabled = Session.IsOnline;
                 toggle.Invalidate();
                 card.Invalidate();
             };
 
-            // Sinxronlash natijasini ko'rsatish
-            Action runSyncAndReport = delegate
+            Action<bool> runSyncCore = delegate(bool force)
             {
                 _lblConnStatus.Text      = "Sinxronlanmoqda...";
                 _lblConnStatus.ForeColor = Color.FromArgb(37, 99, 235);
-                btnSync.Enabled = false;
+                btnSync.Enabled  = false;
+                btnForce.Enabled = false;
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate
                 {
-                    var r = SyncEngine.SyncAll();
+                    var r = force ? SyncEngine.ForceUploadAll() : SyncEngine.SyncAll();
                     _connectionTogglePanel.BeginInvoke(new Action(delegate
                     {
-                        updateUi(_lblConnStatus, btnSync, _connectionTogglePanel);
-                        if (r.Errors == 0 && r.Synced == 0)
-                            MessageBox.Show(
-                                "Barcha ma'lumotlar allaqachon sinxronlangan.\n\nYangi yozuv topilmadi.",
-                                "Sinxronlash", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        else if (r.Errors == 0)
-                            MessageBox.Show(
-                                r.Synced + " ta yozuv markaziy serverga yuklandi!",
-                                "Sinxronlash muvaffaqiyatli", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        else
+                        updateUi(_lblConnStatus, _connectionTogglePanel);
+                        if (r.Errors > 0)
                             MessageBox.Show(
                                 r.Synced + " ta yuklandi.\n" + r.Errors + " ta xato:\n\n" + r.LastError,
                                 "Sinxronlash xatosi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        else if (r.Synced == 0)
+                            MessageBox.Show(
+                                "Yangi yozuv topilmadi.\n\nAgar lokal ma'lumotlar o'tmagan bo'lsa\n\"Majburiy yuklash\" tugmasini bosing.",
+                                "Sinxronlash", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        else
+                            MessageBox.Show(
+                                r.Synced + " ta yozuv markaziy serverga yuklandi!",
+                                "Muvaffaqiyat", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }));
                 });
             };
 
-            btnSync.Click += delegate { runSyncAndReport(); };
+            btnSync.Click  += delegate { runSyncCore(false); };
+            btnForce.Click += delegate
+            {
+                var ans = MessageBox.Show(
+                    "Bu tugma lokal barcha buyurtmalarni \"yuborilmagan\" deb belgilab,\nmarkaziy serverga qayta yuklaydi.\n\nDavom etasizmi?",
+                    "Majburiy yuklash", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (ans == DialogResult.Yes) runSyncCore(true);
+            };
 
             _connectionTogglePanel.Click += delegate
             {
@@ -1202,8 +1229,8 @@ namespace WindowsFormsApp1.forms.settings
                     Session.IsOnline     = true;
                     Session.ForceOffline = false;
                     PrintService.SetSetting("connection_mode", "online");
-                    updateUi(_lblConnStatus, btnSync, _connectionTogglePanel);
-                    runSyncAndReport();
+                    updateUi(_lblConnStatus, _connectionTogglePanel);
+                    runSyncCore(false);
                 }
                 else
                 {
@@ -1222,7 +1249,7 @@ namespace WindowsFormsApp1.forms.settings
                     Session.IsOnline     = false;
                     Session.ForceOffline = true;
                     PrintService.SetSetting("connection_mode", "offline");
-                    updateUi(_lblConnStatus, btnSync, _connectionTogglePanel);
+                    updateUi(_lblConnStatus, _connectionTogglePanel);
                 }
             };
             card.Controls.Add(_connectionTogglePanel);
@@ -1231,7 +1258,9 @@ namespace WindowsFormsApp1.forms.settings
             {
                 _connectionTogglePanel.Location = new Point(card.Width - 70, (card.Height / 2) - H);
                 if (_lblConnStatus != null) _lblConnStatus.Width = card.Width - 200;
-                btnSync.Width = Math.Min(210, card.Width - 100);
+                btnSync.Width  = 170;
+                btnForce.Left  = btnSync.Right + 8;
+                btnForce.Width = Math.Max(120, card.Width - btnForce.Left - 80);
             };
 
             return card;

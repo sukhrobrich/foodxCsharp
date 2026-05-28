@@ -13,6 +13,37 @@ namespace WindowsFormsApp1.services
             public string LastError { get; set; }
         }
 
+        // Lokal is_synced=1 bo'lgan yozuvlarni 0 ga qaytarib, keyin yuklaydi
+        public static SyncResult ForceUploadAll()
+        {
+            var result = new SyncResult();
+            if (!Session.IsOnline) { result.Errors++; result.LastError = "Oflayn rejimda bo'lmaydi."; return result; }
+            if (Session.TenantId == 0) { result.Errors++; result.LastError = "TenantId=0."; return result; }
+
+            SqlConnection local = null;
+            try
+            {
+                local = dbconnect.OpenLocalForSync();
+                string[] resets = {
+                    "UPDATE customer               SET is_synced=0, central_id=NULL",
+                    "UPDATE [order]                SET is_synced=0, central_id=NULL",
+                    "UPDATE order_food              SET is_synced=0",
+                    "UPDATE order_payments          SET is_synced=0",
+                    "UPDATE order_debt              SET is_synced=0",
+                    "UPDATE order_cancellation_log  SET is_synced=0",
+                    "UPDATE cash_transaction        SET is_synced=0",
+                    "UPDATE ingredient_purchase     SET is_synced=0",
+                    "UPDATE food_purchase           SET is_synced=0",
+                };
+                foreach (string sql in resets)
+                    using (var cmd = new SqlCommand(sql, local)) cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex) { result.Errors++; result.LastError = "Reset xatosi: " + ex.Message; return result; }
+            finally { if (local != null) { local.Close(); local.Dispose(); } }
+
+            return SyncAll();
+        }
+
         public static SyncResult SyncAll()
         {
             var result = new SyncResult();
@@ -36,13 +67,28 @@ namespace WindowsFormsApp1.services
                 local   = dbconnect.OpenLocalForSync();
                 central = dbconnect.OpenCentralForSync(Session.TenantId);
 
-                result.Synced += SyncCustomers(local, central);
-                result.Synced += SyncOrders(local, central);
-                result.Synced += SyncOrderFoods(local, central);
-                result.Synced += SyncOrderPayments(local, central);
-                result.Synced += SyncOrderDebts(local, central);
-                result.Synced += SyncCancellationLogs(local, central);
-                result.Synced += SyncCashTransactions(local, central);
+                // ── 1. Referens jadvallar (FK tartibida) ──────────────────────
+                TryUl(() => SyncRefUserCategories(local, central),    result);
+                TryUl(() => SyncRefUsers(local, central),             result);
+                TryUl(() => SyncRefFoodCategories(local, central),    result);
+                TryUl(() => SyncRefFoods(local, central),             result);
+                TryUl(() => SyncRefPlaceCategories(local, central),   result);
+                TryUl(() => SyncRefPlaceOuts(local, central),         result);
+                TryUl(() => SyncRefPlaceIns(local, central),          result);
+                TryUl(() => SyncRefPayments(local, central),          result);
+                TryUl(() => SyncRefIngredients(local, central),       result);
+                TryUl(() => SyncRefRecipeIngredients(local, central), result);
+
+                // ── 2. Tranzaksiya jadvallari ─────────────────────────────────
+                TryUl(() => SyncIngredientPurchases(local, central),  result);
+                TryUl(() => SyncFoodPurchases(local, central),        result);
+                TryUl(() => SyncCustomers(local, central),            result);
+                TryUl(() => SyncOrders(local, central),               result);
+                TryUl(() => SyncOrderFoods(local, central),           result);
+                TryUl(() => SyncOrderPayments(local, central),        result);
+                TryUl(() => SyncOrderDebts(local, central),           result);
+                TryUl(() => SyncCancellationLogs(local, central),     result);
+                TryUl(() => SyncCashTransactions(local, central),     result);
             }
             catch (Exception ex)
             {
@@ -55,6 +101,251 @@ namespace WindowsFormsApp1.services
                 if (central != null) { central.Close(); central.Dispose(); }
             }
             return result;
+        }
+
+        private static void TryUl(Func<int> action, SyncResult result)
+        {
+            try { result.Synced += action(); }
+            catch (Exception ex) { result.Errors++; if (result.LastError == null) result.LastError = ex.Message; }
+        }
+
+        // ── REFERENS JADVALLAR: local → central (id bo'yicha) ────────────────
+
+        private static int SyncRefUserCategories(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local, "SELECT id,name,role_type,color FROM user_category").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM user_category WHERE id=@id)" +
+                    " UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT user_category ON;" +
+                    " INSERT INTO user_category(id,name,role_type,color) VALUES(@id,@n,@rt,@c);" +
+                    " SET IDENTITY_INSERT user_category OFF END",
+                    P("@id",r["id"]),P("@n",r["name"]),P("@rt",r["role_type"]),P("@c",r["color"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncRefUsers(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,name,user_category_id,login,password,phone_number,created_at,updated_at,sort_order FROM [user]").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM [user] WHERE id=@id)" +
+                    " UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw," +
+                    "   phone_number=@ph,updated_at=@ua,sort_order=@so WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT [user] ON;" +
+                    " INSERT INTO [user](id,name,user_category_id,login,password,phone_number,created_at,updated_at,sort_order)" +
+                    " VALUES(@id,@n,@uc,@l,@pw,@ph,@ca,@ua,@so);" +
+                    " SET IDENTITY_INSERT [user] OFF END",
+                    P("@id",r["id"]),P("@n",r["name"]),P("@uc",r["user_category_id"]),
+                    P("@l",r["login"]),P("@pw",r["password"]),P("@ph",r["phone_number"]),
+                    P("@ca",r["created_at"]),P("@ua",r["updated_at"]),P("@so",r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncRefFoodCategories(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local, "SELECT id,name,printer_name,sort_order FROM food_category").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM food_category WHERE id=@id)" +
+                    " UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT food_category ON;" +
+                    " INSERT INTO food_category(id,name,printer_name,sort_order) VALUES(@id,@n,@pn,@so);" +
+                    " SET IDENTITY_INSERT food_category OFF END",
+                    P("@id",r["id"]),P("@n",r["name"]),P("@pn",r["printer_name"]),P("@so",r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncRefFoods(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,food_category_id,name,count,original_price,selling_price," +
+                "photo,created_at,updated_at,unit,description,is_unlimited,sort_order FROM food").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM food WHERE id=@id)" +
+                    " UPDATE food SET food_category_id=@fc,name=@n,count=@cnt,original_price=@op," +
+                    "   selling_price=@sp,photo=@ph,updated_at=@ua,unit=@u,description=@d," +
+                    "   is_unlimited=@iu,sort_order=@so WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT food ON;" +
+                    " INSERT INTO food(id,food_category_id,name,count,original_price,selling_price," +
+                    "   photo,created_at,updated_at,unit,description,is_unlimited,sort_order)" +
+                    " VALUES(@id,@fc,@n,@cnt,@op,@sp,@ph,@ca,@ua,@u,@d,@iu,@so);" +
+                    " SET IDENTITY_INSERT food OFF END",
+                    P("@id",r["id"]),P("@fc",r["food_category_id"]),P("@n",r["name"]),
+                    P("@cnt",r["count"]),P("@op",r["original_price"]),P("@sp",r["selling_price"]),
+                    P("@ph",r["photo"]),P("@ca",r["created_at"]),P("@ua",r["updated_at"]),
+                    P("@u",r["unit"]),P("@d",r["description"]),
+                    P("@iu",r["is_unlimited"]),P("@so",r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncRefPlaceCategories(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local, "SELECT id,name FROM place_category").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM place_category WHERE id=@id)" +
+                    " UPDATE place_category SET name=@n WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT place_category ON;" +
+                    " INSERT INTO place_category(id,name) VALUES(@id,@n);" +
+                    " SET IDENTITY_INSERT place_category OFF END",
+                    P("@id",r["id"]),P("@n",r["name"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncRefPlaceOuts(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order FROM place_out").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM place_out WHERE id=@id)" +
+                    " UPDATE place_out SET place_category_id=@pc,name=@n,place_count=@cnt," +
+                    "   updated_at=@ua,serviceFee=@sf,price=@pr,sort_order=@so WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT place_out ON;" +
+                    " INSERT INTO place_out(id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order)" +
+                    " VALUES(@id,@pc,@n,@cnt,@ca,@ua,@sf,@pr,@so);" +
+                    " SET IDENTITY_INSERT place_out OFF END",
+                    P("@id",r["id"]),P("@pc",r["place_category_id"]),P("@n",r["name"]),
+                    P("@cnt",r["place_count"]),P("@ca",r["created_at"]),P("@ua",r["updated_at"]),
+                    P("@sf",r["serviceFee"]),P("@pr",r["price"]),P("@so",r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncRefPlaceIns(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,place_out_id,room_name,empty,created_at,user_id,price FROM place_in").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM place_in WHERE id=@id)" +
+                    " UPDATE place_in SET place_out_id=@po,room_name=@rn,empty=@e,user_id=@uid,price=@pr WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT place_in ON;" +
+                    " INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,user_id,price)" +
+                    " VALUES(@id,@po,@rn,@e,@ca,@uid,@pr);" +
+                    " SET IDENTITY_INSERT place_in OFF END",
+                    P("@id",r["id"]),P("@po",r["place_out_id"]),P("@rn",r["room_name"]),
+                    P("@e",r["empty"]),P("@ca",r["created_at"]),P("@uid",r["user_id"]),P("@pr",r["price"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncRefPayments(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local, "SELECT id,name,sort_order FROM payment").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM payment WHERE id=@id)" +
+                    " UPDATE payment SET name=@n,sort_order=@so WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT payment ON;" +
+                    " INSERT INTO payment(id,name,sort_order) VALUES(@id,@n,@so);" +
+                    " SET IDENTITY_INSERT payment OFF END",
+                    P("@id",r["id"]),P("@n",r["name"]),P("@so",r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncRefIngredients(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,name,unit,quantity,price_per_unit,min_quantity FROM ingredient").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM ingredient WHERE id=@id)" +
+                    " UPDATE ingredient SET name=@n,unit=@u,quantity=@q,price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT ingredient ON;" +
+                    " INSERT INTO ingredient(id,name,unit,quantity,price_per_unit,min_quantity) VALUES(@id,@n,@u,@q,@pp,@mq);" +
+                    " SET IDENTITY_INSERT ingredient OFF END",
+                    P("@id",r["id"]),P("@n",r["name"]),P("@u",r["unit"]),
+                    P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncRefRecipeIngredients(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,food_id,ingredient_id,quantity_per_portion FROM recipe_ingredient").Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM recipe_ingredient WHERE id=@id)" +
+                    " UPDATE recipe_ingredient SET food_id=@fid,ingredient_id=@iid,quantity_per_portion=@qpp WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT recipe_ingredient ON;" +
+                    " INSERT INTO recipe_ingredient(id,food_id,ingredient_id,quantity_per_portion) VALUES(@id,@fid,@iid,@qpp);" +
+                    " SET IDENTITY_INSERT recipe_ingredient OFF END",
+                    P("@id",r["id"]),P("@fid",r["food_id"]),
+                    P("@iid",r["ingredient_id"]),P("@qpp",r["quantity_per_portion"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncIngredientPurchases(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,ingredient_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token " +
+                "FROM ingredient_purchase WHERE is_synced=0").Rows)
+            {
+                Guid tok = (Guid)r["sync_token"];
+                if (ScalarOrNull(central,"SELECT id FROM ingredient_purchase WHERE sync_token=@t","@t",tok) == null)
+                    Exec(central,
+                        "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token)" +
+                        " VALUES(@iid,@q,@pp,@tp,@pa,@n,@tok)",
+                        P("@iid",r["ingredient_id"]),P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),
+                        P("@tp",r["total_price"]),P("@pa",r["purchased_at"]),P("@n",r["notes"]),P("@tok",tok));
+                Exec(local,"UPDATE ingredient_purchase SET is_synced=1 WHERE id=@id",P("@id",r["id"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int SyncFoodPurchases(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,food_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token " +
+                "FROM food_purchase WHERE is_synced=0").Rows)
+            {
+                Guid tok = (Guid)r["sync_token"];
+                if (ScalarOrNull(central,"SELECT id FROM food_purchase WHERE sync_token=@t","@t",tok) == null)
+                    Exec(central,
+                        "INSERT INTO food_purchase(food_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token)" +
+                        " VALUES(@fid,@q,@pp,@tp,@pa,@n,@tok)",
+                        P("@fid",r["food_id"]),P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),
+                        P("@tp",r["total_price"]),P("@pa",r["purchased_at"]),P("@n",r["notes"]),P("@tok",tok));
+                Exec(local,"UPDATE food_purchase SET is_synced=1 WHERE id=@id",P("@id",r["id"]));
+                count++;
+            }
+            return count;
         }
 
         // ── 1. Mijozlar ──────────────────────────────────────────────────────
@@ -321,15 +612,17 @@ namespace WindowsFormsApp1.services
                 central = dbconnect.OpenCentralForSync(Session.TenantId);
 
                 // Har bir jadval mustaqil — biri xato bo'lsa qolganlari davom etadi
-                TryDl(() => DlSettings(local, central),        result);
-                TryDl(() => DlUserCategories(local, central),  result);
-                TryDl(() => DlUsers(local, central),           result);
-                TryDl(() => DlFoodCategories(local, central),  result);
-                TryDl(() => DlFoods(local, central),           result);
-                TryDl(() => DlPlaceCategories(local, central), result);
-                TryDl(() => DlPlaceOuts(local, central),       result);
-                TryDl(() => DlPlaceIns(local, central),        result);
-                TryDl(() => DlPayments(local, central),        result);
+                TryDl(() => DlSettings(local, central),          result);
+                TryDl(() => DlUserCategories(local, central),   result);
+                TryDl(() => DlUsers(local, central),            result);
+                TryDl(() => DlFoodCategories(local, central),   result);
+                TryDl(() => DlFoods(local, central),            result);
+                TryDl(() => DlPlaceCategories(local, central),  result);
+                TryDl(() => DlPlaceOuts(local, central),        result);
+                TryDl(() => DlPlaceIns(local, central),         result);
+                TryDl(() => DlPayments(local, central),         result);
+                TryDl(() => DlIngredients(local, central),      result);
+                TryDl(() => DlRecipeIngredients(local, central),result);
             }
             catch (Exception ex)
             {
@@ -547,6 +840,46 @@ namespace WindowsFormsApp1.services
                     "  SET IDENTITY_INSERT payment OFF " +
                     "END",
                     P("@id", r["id"]), P("@n", r["name"]), P("@so", r["sort_order"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlIngredients(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id,name,unit,quantity,price_per_unit,min_quantity FROM ingredient");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS(SELECT 1 FROM ingredient WHERE id=@id)" +
+                    " UPDATE ingredient SET name=@n,unit=@u,quantity=@q,price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT ingredient ON;" +
+                    " INSERT INTO ingredient(id,name,unit,quantity,price_per_unit,min_quantity) VALUES(@id,@n,@u,@q,@pp,@mq);" +
+                    " SET IDENTITY_INSERT ingredient OFF END",
+                    P("@id",r["id"]),P("@n",r["name"]),P("@u",r["unit"]),
+                    P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlRecipeIngredients(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id,food_id,ingredient_id,quantity_per_portion FROM recipe_ingredient");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(local,
+                    "IF EXISTS(SELECT 1 FROM recipe_ingredient WHERE id=@id)" +
+                    " UPDATE recipe_ingredient SET food_id=@fid,ingredient_id=@iid,quantity_per_portion=@qpp WHERE id=@id" +
+                    " ELSE BEGIN SET IDENTITY_INSERT recipe_ingredient ON;" +
+                    " INSERT INTO recipe_ingredient(id,food_id,ingredient_id,quantity_per_portion) VALUES(@id,@fid,@iid,@qpp);" +
+                    " SET IDENTITY_INSERT recipe_ingredient OFF END",
+                    P("@id",r["id"]),P("@fid",r["food_id"]),
+                    P("@iid",r["ingredient_id"]),P("@qpp",r["quantity_per_portion"]));
                 count++;
             }
             return count;
