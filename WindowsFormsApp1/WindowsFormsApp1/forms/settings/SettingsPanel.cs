@@ -1158,7 +1158,18 @@ namespace WindowsFormsApp1.forms.settings
                 }
                 else
                 {
-                    Session.IsOnline    = false;
+                    if (!dbconnect.CheckLocal())
+                    {
+                        MessageBox.Show(
+                            "Mahalliy baza topilmadi yoki ochib bo'lmadi!\n\n" +
+                            "Avval quyidagi buyruqni ishga tushiring:\n" +
+                            "sqlcmd -S .\\SQLEXPRESS -E -i install_local_db.sql\n\n" +
+                            "Yoki local_connection.cfg faylida to'g'ri ulanish manzilini ko'rsating.",
+                            "Mahalliy baza xatosi",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    Session.IsOnline     = false;
                     Session.ForceOffline = true;
                     PrintService.SetSetting("connection_mode", "offline");
                 }

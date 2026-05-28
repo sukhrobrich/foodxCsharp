@@ -84,6 +84,19 @@ namespace WindowsFormsApp1.services
             catch { return false; }
         }
 
+        public static bool CheckLocal()
+        {
+            try
+            {
+                using (var c = new SqlConnection(_local + ";Connect Timeout=3"))
+                {
+                    c.Open();
+                    return true;
+                }
+            }
+            catch { return false; }
+        }
+
         public static SqlConnection OpenCentralForSync(int tenantId)
         {
             var c = new SqlConnection(_central);
