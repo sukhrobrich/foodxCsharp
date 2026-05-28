@@ -16,7 +16,18 @@ namespace WindowsFormsApp1.services
         public static SyncResult SyncAll()
         {
             var result = new SyncResult();
-            if (!Session.IsOnline || Session.TenantId == 0) return result;
+            if (!Session.IsOnline)
+            {
+                result.Errors++;
+                result.LastError = "Oflayn rejimda sinxronlash mumkin emas.";
+                return result;
+            }
+            if (Session.TenantId == 0)
+            {
+                result.Errors++;
+                result.LastError = "TenantId = 0. Dasturni qayta ishga tushirib litsenziya bilan kiring.";
+                return result;
+            }
 
             SqlConnection local   = null;
             SqlConnection central = null;

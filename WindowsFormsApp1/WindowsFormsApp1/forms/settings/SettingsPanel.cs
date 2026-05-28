@@ -1089,7 +1089,7 @@ namespace WindowsFormsApp1.forms.settings
             Color colorOn  = Color.FromArgb(22, 163, 74);
             Color colorOff = Color.FromArgb(107, 114, 128);
 
-            Panel card = new Panel { Width = 480, Height = 100, Location = loc, BackColor = BgCard };
+            Panel card = new Panel { Width = 480, Height = 140, Location = loc, BackColor = BgCard };
             card.Paint += (s, e) =>
             {
                 Color accent = Session.IsOnline ? colorOn : colorOff;
@@ -1115,6 +1115,22 @@ namespace WindowsFormsApp1.forms.settings
             };
             card.Controls.Add(_lblConnStatus);
 
+            // Sinxronlashtirish tugmasi
+            Button btnSync = new Button
+            {
+                Text      = "↑↓  Hozir sinxronlashtirish",
+                Location  = new Point(82, 78),
+                Width     = 210, Height = 30,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(239, 246, 255),
+                ForeColor = Color.FromArgb(37, 99, 235),
+                Font      = new Font("Segoe UI", 9),
+                Cursor    = Cursors.Hand,
+                Enabled   = Session.IsOnline
+            };
+            btnSync.FlatAppearance.BorderColor = Color.FromArgb(147, 197, 253);
+            card.Controls.Add(btnSync);
+
             int W = 50, H = 28;
             _connectionTogglePanel = new Panel { Width = W, Height = H, Location = new Point(card.Width - 70, 36), Cursor = Cursors.Hand, BackColor = Color.Transparent };
             _connectionTogglePanel.Paint += (s, e) =>
@@ -1130,6 +1146,46 @@ namespace WindowsFormsApp1.forms.settings
                 int tx = cur ? W - H + 2 : 2;
                 e.Graphics.FillEllipse(Brushes.White, tx, 2, H - 4, H - 4);
             };
+
+            Action<Label, Button, Panel> updateUi = (lbl, btn, toggle) =>
+            {
+                lbl.Text      = Session.IsOnline ? "Onlayn — serverga ulangan" : "Oflayn — mahalliy bazada";
+                lbl.ForeColor = Session.IsOnline ? colorOn : TextM;
+                btn.Enabled   = Session.IsOnline;
+                toggle.Invalidate();
+                card.Invalidate();
+            };
+
+            // Sinxronlash natijasini ko'rsatish
+            Action runSyncAndReport = delegate
+            {
+                _lblConnStatus.Text      = "Sinxronlanmoqda...";
+                _lblConnStatus.ForeColor = Color.FromArgb(37, 99, 235);
+                btnSync.Enabled = false;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    var r = SyncEngine.SyncAll();
+                    _connectionTogglePanel.BeginInvoke(new Action(delegate
+                    {
+                        updateUi(_lblConnStatus, btnSync, _connectionTogglePanel);
+                        if (r.Errors == 0 && r.Synced == 0)
+                            MessageBox.Show(
+                                "Barcha ma'lumotlar allaqachon sinxronlangan.\n\nYangi yozuv topilmadi.",
+                                "Sinxronlash", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        else if (r.Errors == 0)
+                            MessageBox.Show(
+                                r.Synced + " ta yozuv markaziy serverga yuklandi!",
+                                "Sinxronlash muvaffaqiyatli", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        else
+                            MessageBox.Show(
+                                r.Synced + " ta yuklandi.\n" + r.Errors + " ta xato:\n\n" + r.LastError,
+                                "Sinxronlash xatosi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }));
+                });
+            };
+
+            btnSync.Click += delegate { runSyncAndReport(); };
+
             _connectionTogglePanel.Click += delegate
             {
                 if (!Session.IsOnline)
@@ -1143,10 +1199,11 @@ namespace WindowsFormsApp1.forms.settings
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
-                    Session.IsOnline    = true;
+                    Session.IsOnline     = true;
                     Session.ForceOffline = false;
                     PrintService.SetSetting("connection_mode", "online");
-                    System.Threading.ThreadPool.QueueUserWorkItem(delegate { SyncEngine.SyncAll(); });
+                    updateUi(_lblConnStatus, btnSync, _connectionTogglePanel);
+                    runSyncAndReport();
                 }
                 else
                 {
@@ -1161,26 +1218,20 @@ namespace WindowsFormsApp1.forms.settings
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
-                    // Offline o'tishdan oldin centraldan so'nggi ma'lumotlarni yuklab olamiz
                     SyncEngine.DownloadAll();
                     Session.IsOnline     = false;
                     Session.ForceOffline = true;
                     PrintService.SetSetting("connection_mode", "offline");
-                }
-                _connectionTogglePanel.Invalidate();
-                card.Invalidate();
-                if (_lblConnStatus != null)
-                {
-                    _lblConnStatus.Text      = Session.IsOnline ? "Onlayn — serverga ulangan" : "Oflayn — mahalliy bazada";
-                    _lblConnStatus.ForeColor = Session.IsOnline ? colorOn : TextM;
+                    updateUi(_lblConnStatus, btnSync, _connectionTogglePanel);
                 }
             };
             card.Controls.Add(_connectionTogglePanel);
 
             card.Resize += (s, e) =>
             {
-                _connectionTogglePanel.Location = new Point(card.Width - 70, (card.Height - H) / 2);
+                _connectionTogglePanel.Location = new Point(card.Width - 70, (card.Height / 2) - H);
                 if (_lblConnStatus != null) _lblConnStatus.Width = card.Width - 200;
+                btnSync.Width = Math.Min(210, card.Width - 100);
             };
 
             return card;
