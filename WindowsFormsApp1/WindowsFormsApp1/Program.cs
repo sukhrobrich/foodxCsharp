@@ -64,8 +64,11 @@ namespace WindowsFormsApp1
             Session.TenantId = tenantId;
             Session.IsOnline = !isOffline && dbconnect.CheckCentral();
 
-            // 3a. Foydalanuvchi oldin qo'lda "Oflayn" qo'ygan bo'lsa — tiklaymiz
-            ApplySavedConnectionMode();
+            // 3a. Faqat oflayn holatda (server yetib bo'lmaganda) saqlangan rejimni tiklaymiz.
+            // Agar server bilan bog'liq bo'lsak (IsOnline=true), foydalanuvchi
+            // ilovadan ichida Sozlamalar orqali oflayn rejimga o'tishi mumkin.
+            if (!Session.IsOnline)
+                ApplySavedConnectionMode();
 
             // 4. Watchdog — har 30 daqiqada litsenziyani qayta tekshiradi
             _licLogin = login;
