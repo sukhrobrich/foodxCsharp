@@ -31,8 +31,45 @@ namespace WindowsFormsApp1.services
                 string s = File.ReadAllText(cfg).Trim();
                 if (!string.IsNullOrEmpty(s)) return s;
             }
-            return ConfigurationManager.ConnectionStrings["FoodXLocal"]?.ConnectionString
-                ?? @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=FoodX;Integrated Security=True;TrustServerCertificate=True";
+            string fromAppConfig = ConfigurationManager.ConnectionStrings["FoodXLocal"]?.ConnectionString;
+            if (!string.IsNullOrEmpty(fromAppConfig)) return fromAppConfig;
+
+            return DetectLocalServer();
+        }
+
+        // Mavjud SQL Server instansini avtomatik topadi (master ga ulanib tekshiradi)
+        private static string DetectLocalServer()
+        {
+            string[] candidates = {
+                @"(LocalDB)\MSSQLLocalDB",
+                @".\SQLEXPRESS",
+                @".\MSSQLSERVER",
+                @".",
+                @"localhost",
+                System.Environment.MachineName,
+            };
+
+            foreach (string ds in candidates)
+            {
+                try
+                {
+                    string test = string.Format(
+                        "Data Source={0};Initial Catalog=master;Integrated Security=True;" +
+                        "TrustServerCertificate=True;Connect Timeout=2", ds);
+                    using (var c = new SqlConnection(test))
+                    {
+                        c.Open();
+                        return string.Format(
+                            "Data Source={0};Initial Catalog=FoodX;Integrated Security=True;" +
+                            "TrustServerCertificate=True", ds);
+                    }
+                }
+                catch { }
+            }
+
+            // Hech narsa topilmasa — LocalDB ni default qilib qaytaramiz
+            return @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=FoodX;" +
+                   @"Integrated Security=True;TrustServerCertificate=True";
         }
 
         private SqlConnection _conn;
@@ -93,6 +130,53 @@ namespace WindowsFormsApp1.services
                     c.Open();
                     return true;
                 }
+            }
+            catch { return false; }
+        }
+
+        // Mahalliy bazani tekshiradi; yo'q bo'lsa install_local_db.sql dan yaratadi.
+        public static bool EnsureLocalDatabase()
+        {
+            if (CheckLocal()) return true;
+
+            try
+            {
+                // _local dagi server manziliga master orqali ulanamiz
+                var builder = new SqlConnectionStringBuilder(_local);
+                builder.InitialCatalog = "master";
+                builder.ConnectTimeout = 5;
+
+                string sqlFile = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "install_local_db.sql");
+                if (!File.Exists(sqlFile)) return false;
+
+                string script = File.ReadAllText(sqlFile, System.Text.Encoding.UTF8);
+
+                string[] batches = System.Text.RegularExpressions.Regex.Split(
+                    script, @"^\s*GO\s*$",
+                    System.Text.RegularExpressions.RegexOptions.Multiline |
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                using (var c = new SqlConnection(builder.ConnectionString))
+                {
+                    c.Open();
+                    foreach (string batch in batches)
+                    {
+                        string b = batch.Trim();
+                        if (string.IsNullOrEmpty(b)) continue;
+                        using (var cmd = new SqlCommand(b, c))
+                        {
+                            cmd.CommandTimeout = 30;
+                            try { cmd.ExecuteNonQuery(); }
+                            catch (SqlException ex)
+                            {
+                                if (ex.Number != 1801) throw; // 1801 = baza allaqachon bor
+                            }
+                        }
+                    }
+                }
+
+                return CheckLocal();
             }
             catch { return false; }
         }

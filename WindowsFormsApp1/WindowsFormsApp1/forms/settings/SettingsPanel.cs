@@ -1158,13 +1158,13 @@ namespace WindowsFormsApp1.forms.settings
                 }
                 else
                 {
-                    if (!dbconnect.CheckLocal())
+                    bool localOk = dbconnect.EnsureLocalDatabase();
+                    if (!localOk)
                     {
                         MessageBox.Show(
-                            "Mahalliy baza topilmadi yoki ochib bo'lmadi!\n\n" +
-                            "Avval quyidagi buyruqni ishga tushiring:\n" +
-                            "sqlcmd -S .\\SQLEXPRESS -E -i install_local_db.sql\n\n" +
-                            "Yoki local_connection.cfg faylida to'g'ri ulanish manzilini ko'rsating.",
+                            "Mahalliy baza ochib bo'lmadi!\n\n" +
+                            "SQL Server (LocalDB yoki Express) o'rnatilganligini\n" +
+                            "va local_connection.cfg to'g'ri sozlanganligini tekshiring.",
                             "Mahalliy baza xatosi",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
