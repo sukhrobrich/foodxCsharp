@@ -22,6 +22,8 @@ namespace WindowsFormsApp1.services
 
         private static void Tick(object state)
         {
+            if (Session.ForceOffline) return;
+
             bool wasOnline = Session.IsOnline;
             bool nowOnline = dbconnect.CheckCentral();
 

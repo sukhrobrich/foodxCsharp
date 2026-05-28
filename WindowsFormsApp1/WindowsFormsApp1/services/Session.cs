@@ -6,8 +6,9 @@ public static class Session
     public static string UserCategory { get; set; }
 
     // Litsenziya / tenant
-    public static int    TenantId   { get; set; }
-    public static bool   IsOnline   { get; set; }
+    public static int    TenantId    { get; set; }
+    public static bool   IsOnline    { get; set; }
+    public static bool   ForceOffline { get; set; }
 
     public static bool IsAdmin => UserCategory == "admin";
     public static bool IsKassir => UserCategory == "kassir";

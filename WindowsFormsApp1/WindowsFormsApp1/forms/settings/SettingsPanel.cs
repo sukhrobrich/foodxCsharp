@@ -62,6 +62,11 @@ namespace WindowsFormsApp1.forms.settings
         private Dictionary<string, Panel> _togglePanels = new Dictionary<string, Panel>();
         private TextBox txtMaxDiscount;
 
+        // Ulanish rejimi
+        private Panel _connectionTogglePanel;
+        private Label _lblConnStatus;
+        private Panel _cardConn;
+
         // Chek shrift sozlamalari
         private Panel chekFontView;
         private TextBox txtKNorm, txtKBold;
@@ -195,12 +200,16 @@ namespace WindowsFormsApp1.forms.settings
             foreach (Control c in cardFont.Controls) c.Click += (s, e) => OpenChekFontView();
             wrap.Controls.Add(cardFont);
 
+            _cardConn = MakeConnectionCard(new Point(24, 388));
+            wrap.Controls.Add(_cardConn);
+
             wrap.Resize += (s, e) =>
             {
                 int cw = Math.Max(300, wrap.ClientSize.Width - 48);
                 cardPrinter.Width = cw;
                 cardOrder.Width   = cw;
                 cardFont.Width    = cw;
+                if (_cardConn != null) _cardConn.Width = cw;
                 foreach (Control c in cardPrinter.Controls)
                     if (c is Label lbl && !lbl.AutoSize) lbl.Width = cw - 80;
                 foreach (Control c in cardOrder.Controls)
@@ -792,6 +801,30 @@ namespace WindowsFormsApp1.forms.settings
             LoadKitchenSettings();
             LoadOrderSettings();
             LoadChekFontSettings();
+            LoadConnectionSetting();
+        }
+
+        void LoadConnectionSetting()
+        {
+            string mode = PrintService.GetSetting("connection_mode", "");
+            if (mode == "offline")
+            {
+                Session.IsOnline     = false;
+                Session.ForceOffline = true;
+            }
+            else if (mode == "online")
+            {
+                Session.ForceOffline = false;
+            }
+
+            Color colorOn = Color.FromArgb(22, 163, 74);
+            if (_connectionTogglePanel != null) _connectionTogglePanel.Invalidate();
+            if (_cardConn             != null) _cardConn.Invalidate();
+            if (_lblConnStatus        != null)
+            {
+                _lblConnStatus.Text      = Session.IsOnline ? "Onlayn — serverga ulangan" : "Oflayn — mahalliy bazada";
+                _lblConnStatus.ForeColor = Session.IsOnline ? colorOn : TextM;
+            }
         }
 
         void SaveAll(object sender, EventArgs e)
@@ -1056,6 +1089,96 @@ namespace WindowsFormsApp1.forms.settings
                 tbs[i].Text = val;
             }
             MessageBox.Show("Chek shrift sozlamalari saqlandi!", "Muvaffaqiyat", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // ── Ulanish rejimi kartasi ────────────────────────────────────────────
+        Panel MakeConnectionCard(Point loc)
+        {
+            Color colorOn  = Color.FromArgb(22, 163, 74);
+            Color colorOff = Color.FromArgb(107, 114, 128);
+
+            Panel card = new Panel { Width = 480, Height = 100, Location = loc, BackColor = BgCard };
+            card.Paint += (s, e) =>
+            {
+                Color accent = Session.IsOnline ? colorOn : colorOff;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var path = RoundRect(card.ClientRectangle, 10))
+                {
+                    e.Graphics.FillPath(new SolidBrush(BgCard), path);
+                    e.Graphics.DrawPath(new Pen(Border), path);
+                }
+                e.Graphics.FillRectangle(new SolidBrush(accent), 0, 0, 5, card.Height);
+            };
+
+            card.Controls.Add(new Label { Text = "🌐", Font = new Font("Segoe UI", 24), ForeColor = TextM, Location = new Point(18, 14), AutoSize = true });
+            card.Controls.Add(new Label { Text = "Ulanish rejimi", Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = TextD, Location = new Point(82, 22), AutoSize = true });
+
+            _lblConnStatus = new Label
+            {
+                Text      = Session.IsOnline ? "Onlayn — serverga ulangan" : "Oflayn — mahalliy bazada",
+                Font      = new Font("Segoe UI", 8.5f),
+                ForeColor = Session.IsOnline ? colorOn : TextM,
+                Location  = new Point(82, 48),
+                Width = 280, Height = 20, AutoSize = false
+            };
+            card.Controls.Add(_lblConnStatus);
+
+            int W = 50, H = 28;
+            _connectionTogglePanel = new Panel { Width = W, Height = H, Location = new Point(card.Width - 70, 36), Cursor = Cursors.Hand, BackColor = Color.Transparent };
+            _connectionTogglePanel.Paint += (s, e) =>
+            {
+                bool cur = Session.IsOnline;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var b = new SolidBrush(cur ? colorOn : Color.FromArgb(209, 213, 219)))
+                {
+                    e.Graphics.FillEllipse(b, 0, 0, H, H);
+                    e.Graphics.FillEllipse(b, W - H, 0, H, H);
+                    e.Graphics.FillRectangle(b, H / 2, 0, W - H, H);
+                }
+                int tx = cur ? W - H + 2 : 2;
+                e.Graphics.FillEllipse(Brushes.White, tx, 2, H - 4, H - 4);
+            };
+            _connectionTogglePanel.Click += delegate
+            {
+                if (!Session.IsOnline)
+                {
+                    bool canConnect = dbconnect.CheckCentral();
+                    if (!canConnect)
+                    {
+                        MessageBox.Show(
+                            "Server bilan ulanib bo'lmadi.\nInternet aloqasini tekshiring.",
+                            "Ulanish xatosi",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    Session.IsOnline    = true;
+                    Session.ForceOffline = false;
+                    PrintService.SetSetting("connection_mode", "online");
+                    System.Threading.ThreadPool.QueueUserWorkItem(delegate { SyncEngine.SyncAll(); });
+                }
+                else
+                {
+                    Session.IsOnline    = false;
+                    Session.ForceOffline = true;
+                    PrintService.SetSetting("connection_mode", "offline");
+                }
+                _connectionTogglePanel.Invalidate();
+                card.Invalidate();
+                if (_lblConnStatus != null)
+                {
+                    _lblConnStatus.Text      = Session.IsOnline ? "Onlayn — serverga ulangan" : "Oflayn — mahalliy bazada";
+                    _lblConnStatus.ForeColor = Session.IsOnline ? colorOn : TextM;
+                }
+            };
+            card.Controls.Add(_connectionTogglePanel);
+
+            card.Resize += (s, e) =>
+            {
+                _connectionTogglePanel.Location = new Point(card.Width - 70, (card.Height - H) / 2);
+                if (_lblConnStatus != null) _lblConnStatus.Width = card.Width - 200;
+            };
+
+            return card;
         }
 
         // ── Nav / back bar factories ──────────────────────────────────────────
