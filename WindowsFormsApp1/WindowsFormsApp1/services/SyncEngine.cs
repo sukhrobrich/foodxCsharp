@@ -89,6 +89,8 @@ namespace WindowsFormsApp1.services
                 TryUl(() => SyncOrderDebts(local, central),           result);
                 TryUl(() => SyncCancellationLogs(local, central),     result);
                 TryUl(() => SyncCashTransactions(local, central),     result);
+                // Ingredient miqdorlarini markaziy serverga yuklash
+                TryUl(() => SyncIngredientQuantities(local, central), result);
             }
             catch (Exception ex)
             {
@@ -502,10 +504,12 @@ namespace WindowsFormsApp1.services
             return count;
         }
 
-        // ── 5. Qarzlar ──────────────────────────────────────────────────────
+        // ── 5. Qarzlar — yangi va to'langan ────────────────────────────────
         private static int SyncOrderDebts(SqlConnection local, SqlConnection central)
         {
             int count = 0;
+
+            // 5a. Yangi qarzlar (is_synced=0)
             DataTable rows = ReadAll(local,
                 "SELECT d.*, o.central_id AS order_central_id " +
                 "FROM order_debt d " +
@@ -528,10 +532,41 @@ namespace WindowsFormsApp1.services
                         P("@amt",  r["amount"]),             P("@cat",  r["created_at"]),
                         P("@paid", r["is_paid"]),            P("@pat",  r["paid_at"]),
                         P("@tok",  tok));
+                else
+                    // Mavjud bo'lsa to'lov holatini yangilash
+                    Exec(central,
+                        "UPDATE order_debt SET is_paid=@paid, paid_at=@pat WHERE sync_token=@tok",
+                        P("@paid", r["is_paid"]), P("@pat", r["paid_at"]), P("@tok", tok));
 
                 Exec(local, "UPDATE order_debt SET is_synced = 1 WHERE id = @id", P("@id", r["id"]));
                 count++;
             }
+
+            // 5b. To'langan qarzlarni yangilash (is_synced=1, lekin to'lov holati o'zgardi)
+            DataTable paid = ReadAll(local,
+                "SELECT d.sync_token, d.paid_at " +
+                "FROM order_debt d " +
+                "WHERE d.is_synced=1 AND d.is_paid=1 AND d.paid_at IS NOT NULL " +
+                "  AND NOT EXISTS (SELECT 1 FROM order_debt_paid_sync WHERE debt_sync_token=d.sync_token)");
+
+            foreach (DataRow r in paid.Rows)
+            {
+                Guid tok = (Guid)r["sync_token"];
+                Exec(central,
+                    "UPDATE order_debt SET is_paid=1, paid_at=@pat WHERE sync_token=@tok AND is_paid=0",
+                    P("@pat", r["paid_at"]), P("@tok", tok));
+                // Qayta yuborilmasligi uchun lokal jadvalga yozamiz
+                try
+                {
+                    Exec(local,
+                        "IF NOT EXISTS(SELECT 1 FROM order_debt_paid_sync WHERE debt_sync_token=@tok) " +
+                        "  INSERT INTO order_debt_paid_sync(debt_sync_token) VALUES(@tok)",
+                        P("@tok", tok));
+                }
+                catch { /* jadval yo'q bo'lsa o'tkazib yuboramiz */ }
+                count++;
+            }
+
             return count;
         }
 
@@ -881,6 +916,36 @@ namespace WindowsFormsApp1.services
                     P("@id",r["id"]),P("@fid",r["food_id"]),
                     P("@iid",r["ingredient_id"]),P("@qpp",r["quantity_per_portion"]));
                 count++;
+            }
+            return count;
+        }
+
+        // ── Ingredient miqdorlarini markaziy serverga yozish ────────────────
+        // Bu faqat lokal miqdor o'zgargan bo'lsa ishlaydi (is_qty_synced=0 yoki ustun yo'q).
+        // Markaziyda ham ombor bo'ladi, shuning uchun lokal qiymat ustun bo'ladi.
+        private static int SyncIngredientQuantities(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(local,
+                "SELECT id, quantity, price_per_unit, min_quantity FROM ingredient");
+
+            foreach (DataRow r in rows.Rows)
+            {
+                int ingId = Convert.ToInt32(r["id"]);
+                // Markaziyda shu id bo'lsa, miqdorini yangilash
+                int? exists = ScalarOrNull(central,
+                    "SELECT id FROM ingredient WHERE id=@id", "@id", ingId);
+
+                if (exists != null)
+                {
+                    Exec(central,
+                        "UPDATE ingredient SET quantity=@q, price_per_unit=@pp, min_quantity=@mq WHERE id=@id",
+                        P("@q",  r["quantity"]),
+                        P("@pp", r["price_per_unit"]),
+                        P("@mq", r["min_quantity"]),
+                        P("@id", ingId));
+                    count++;
+                }
             }
             return count;
         }
