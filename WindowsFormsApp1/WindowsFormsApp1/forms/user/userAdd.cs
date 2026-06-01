@@ -25,7 +25,7 @@ namespace WindowsFormsApp1.forms.user
         private Panel   usersListPanel;
         private Panel   userEditPanel;
         private Button  userFab;
-        private TextBox txtName, txtLogin, txtPin, txtPhone;
+        private TextBox txtName, txtLogin, txtPin, txtPhone, txtAppPassword;
         private ComboBox cmbRole;
         private Label   lblUserFormTitle;
         private Button  btnUserSave, btnUserDelete;
@@ -70,7 +70,10 @@ namespace WindowsFormsApp1.forms.user
                         UPDATE user_category SET role_type = LOWER(name);
                         UPDATE user_category SET role_type = 'ofitsiant'
                             WHERE role_type NOT IN ('admin','kassir','ofitsiant') OR role_type IS NULL;
-                    END", db.GetCon()))
+                    END;
+                    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_NAME='user' AND COLUMN_NAME='app_password')
+                        ALTER TABLE [user] ADD app_password NVARCHAR(64) NULL;", db.GetCon()))
                     cmd.ExecuteNonQuery();
                 db.CloseCon();
             }
@@ -235,10 +238,19 @@ namespace WindowsFormsApp1.forms.user
             userEditPanel.Controls.Add(new Panel { Left = 24, Top = y, Width = 332, Height = 2, BackColor = Gold });
             y += 14;
 
-            txtName  = AddFieldTo(userEditPanel, "To'liq ism",           ref y, false);
-            txtLogin = AddFieldTo(userEditPanel, "Login",                 ref y, false);
-            txtPin   = AddFieldTo(userEditPanel, "PIN kod (4 ta raqam)",  ref y, true);
-            txtPhone = AddFieldTo(userEditPanel, "Telefon raqam",         ref y, false);
+            txtName        = AddFieldTo(userEditPanel, "To'liq ism",                      ref y, false);
+            txtLogin       = AddFieldTo(userEditPanel, "Login",                          ref y, false);
+            txtPin         = AddFieldTo(userEditPanel, "PIN kod (4 ta raqam, WinForms)", ref y, true);
+            txtPhone       = AddFieldTo(userEditPanel, "Telefon raqam",                  ref y, false);
+            txtAppPassword = AddFieldTo(userEditPanel, "Mobil/Web paroli (ixtiyoriy)",   ref y, true);
+
+            // Mobil parol haqida izoh
+            userEditPanel.Controls.Add(new Label
+            {
+                Text = "📱 Mobil parol — ofitsiant telefonidan kira olishi uchun",
+                Font = new Font("Segoe UI", 8), ForeColor = TextMuted,
+                Location = new Point(24, y - 28), AutoSize = true
+            });
 
             userEditPanel.Controls.Add(new Label
             {
@@ -637,29 +649,39 @@ namespace WindowsFormsApp1.forms.user
                 dbconnect db = new dbconnect();
                 db.OpenCon();
                 object phoneVal = string.IsNullOrEmpty(phone) ? (object)DBNull.Value : phone;
+                string appPw = txtAppPassword?.Text.Trim() ?? "";
+
                 if (editingUserId == -1)
                 {
                     using (SqlCommand cmd = new SqlCommand(
-                        "INSERT INTO [user](name,login,password,phone_number,user_category_id) VALUES(@n,@l,@p,@ph,@c)", db.GetCon()))
+                        "INSERT INTO [user](name,login,password,phone_number,user_category_id,app_password) VALUES(@n,@l,@p,@ph,@c,@ap)",
+                        db.GetCon()))
                     {
-                        cmd.Parameters.AddWithValue("@n", name); cmd.Parameters.AddWithValue("@l", login);
-                        cmd.Parameters.AddWithValue("@p", Session.HashPin(pin));
+                        cmd.Parameters.AddWithValue("@n",  name);
+                        cmd.Parameters.AddWithValue("@l",  login);
+                        cmd.Parameters.AddWithValue("@p",  Session.HashPin(pin));
                         cmd.Parameters.AddWithValue("@ph", phoneVal);
-                        cmd.Parameters.AddWithValue("@c", catId);
+                        cmd.Parameters.AddWithValue("@c",  catId);
+                        cmd.Parameters.AddWithValue("@ap", string.IsNullOrEmpty(appPw) ? (object)DBNull.Value : Session.HashPin(appPw));
                         cmd.ExecuteNonQuery();
                     }
                 }
                 else
                 {
-                    string sql = string.IsNullOrEmpty(pin)
-                        ? "UPDATE [user] SET name=@n,login=@l,phone_number=@ph,user_category_id=@c WHERE id=@id"
-                        : "UPDATE [user] SET name=@n,login=@l,password=@p,phone_number=@ph,user_category_id=@c WHERE id=@id";
+                    var setParts = new System.Collections.Generic.List<string>
+                        { "name=@n","login=@l","phone_number=@ph","user_category_id=@c" };
+                    if (!string.IsNullOrEmpty(pin))   setParts.Add("password=@p");
+                    if (!string.IsNullOrEmpty(appPw)) setParts.Add("app_password=@ap");
+                    string sql = "UPDATE [user] SET " + string.Join(",", setParts) + " WHERE id=@id";
                     using (SqlCommand cmd = new SqlCommand(sql, db.GetCon()))
                     {
-                        cmd.Parameters.AddWithValue("@n", name); cmd.Parameters.AddWithValue("@l", login);
-                        if (!string.IsNullOrEmpty(pin)) cmd.Parameters.AddWithValue("@p", Session.HashPin(pin));
-                        cmd.Parameters.AddWithValue("@ph", phoneVal); cmd.Parameters.AddWithValue("@c", catId);
+                        cmd.Parameters.AddWithValue("@n",  name);
+                        cmd.Parameters.AddWithValue("@l",  login);
+                        cmd.Parameters.AddWithValue("@ph", phoneVal);
+                        cmd.Parameters.AddWithValue("@c",  catId);
                         cmd.Parameters.AddWithValue("@id", editingUserId);
+                        if (!string.IsNullOrEmpty(pin))   cmd.Parameters.AddWithValue("@p",  Session.HashPin(pin));
+                        if (!string.IsNullOrEmpty(appPw)) cmd.Parameters.AddWithValue("@ap", Session.HashPin(appPw));
                         cmd.ExecuteNonQuery();
                     }
                 }
@@ -705,6 +727,7 @@ namespace WindowsFormsApp1.forms.user
             editingUserId = -1;
             lblUserFormTitle.Text = "Yangi xodim";
             txtName.Text = txtLogin.Text = txtPin.Text = txtPhone.Text = "";
+            if (txtAppPassword != null) txtAppPassword.Text = "";
             btnUserDelete.Visible = false;
             if (cmbRole.Items.Count > 0) cmbRole.SelectedIndex = 0;
         }
