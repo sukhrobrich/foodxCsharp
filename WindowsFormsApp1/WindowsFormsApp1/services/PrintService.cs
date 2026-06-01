@@ -111,8 +111,8 @@ public class PrintService
                         case "kt_items":
                             foreach (KitchenItem item in groupItems)
                             {
-                                // "3 por  Osh                    " — qty(6) + name fills rest
-                                string qtyPart  = Trunc(item.Quantity.ToString(), 3).PadLeft(3) + " por  ";
+                                string unitStr  = string.IsNullOrEmpty(item.Unit) ? "ta" : item.Unit;
+                                string qtyPart  = Trunc(item.Quantity.ToString(), 3).PadLeft(3) + " " + Trunc(unitStr, 4).PadRight(4) + " ";
                                 string namePart = Trunc(item.FoodName, COLS - qtyPart.Length);
                                 L(qtyPart + namePart, fBold);
                                 if (!string.IsNullOrEmpty(item.Note))
@@ -126,7 +126,7 @@ public class PrintService
                             y += 2; L(sep); y += 2;
                             break;
                         case "kt_admin":
-                            L(TwoCol("Admin:", Trunc(wn, 20)));
+                            L(TwoCol("Ofitsiant:", Trunc(wn, 20)));
                             break;
                         case "kt_order_num":
                             L(TwoCol("Buyurtma:", "#" + oid));
@@ -427,8 +427,8 @@ public class PrintService
 
                 L(sep);
 
-                // Admin / joy / vaqt
-                L(TwoCol("Admin:",     Trunc(waiter, 14)));
+                // Ofitsiant / joy / vaqt
+                L(TwoCol("Ofitsiant:", Trunc(waiter, 14)));
                 L(TwoCol("Joy:",       Trunc(zone + " " + tbl, 18)));
                 L(TwoCol("Sana:",      created.ToString("dd.MM HH:mm")));
                 if (!string.IsNullOrEmpty(customerName))
@@ -468,8 +468,10 @@ public class PrintService
 
                 L(sep);
 
-                // Jami (grand total)
-                L(TwoCol("JAMI:", RFmt(total) + " UZS"), fBig);
+                // Jami (grand total) — big font orqali TwoCol kengligi sahifadan oshib ketadi,
+                // shuning uchun label va summani alohida markazlashtirib chop etamiz
+                C("JAMI:", fBig);
+                C(RFmt(total) + " UZS", fBig);
                 L(sep);
 
                 // To'lov turi
@@ -559,7 +561,8 @@ public class PrintService
 
                 foreach (KitchenItem item in groupItems)
                 {
-                    string qtyPart  = "-" + Trunc(item.Quantity.ToString(), 3).PadLeft(3) + " ta  ";
+                    string cUnit    = string.IsNullOrEmpty(item.Unit) ? "ta" : item.Unit;
+                    string qtyPart  = "-" + Trunc(item.Quantity.ToString(), 3).PadLeft(3) + " " + Trunc(cUnit, 4).PadRight(4) + " ";
                     string namePart = Trunc(item.FoodName, COLS - qtyPart.Length);
                     L(qtyPart + namePart, fBold);
                 }
@@ -587,7 +590,7 @@ public class PrintService
             // foodIds contains only int values from our own DB — safe to inline
             string ids = string.Join(",", foodIds);
             dbconnect db = new dbconnect();
-            string sql = "SELECT f.id, ISNULL(fc.printer_name, '') AS printer, ISNULL(fc.name, '') AS cat_name " +
+            string sql = "SELECT f.id, ISNULL(f.unit,'ta') AS unit, ISNULL(fc.printer_name, '') AS printer, ISNULL(fc.name, '') AS cat_name " +
                          "FROM food f JOIN food_category fc ON fc.id = f.food_category_id WHERE f.id IN (" + ids + ")";
             SqlCommand cmd = new SqlCommand(sql, db.GetCon());
             db.OpenCon();
@@ -601,6 +604,7 @@ public class PrintService
                     FoodId = fid,
                     FoodName = names.ContainsKey(fid) ? names[fid] : "",
                     Quantity = quantities.ContainsKey(fid) ? quantities[fid] : 1,
+                    Unit = dr["unit"].ToString(),
                     PrinterName = printer,
                     CategoryName = dr["cat_name"].ToString(),
                     Note = notes != null && notes.ContainsKey(fid) ? notes[fid] : ""
@@ -709,6 +713,7 @@ public struct KitchenItem
     public int FoodId;
     public string FoodName;
     public int Quantity;
+    public string Unit;
     public string PrinterName;
     public string CategoryName;
     public string Note;
