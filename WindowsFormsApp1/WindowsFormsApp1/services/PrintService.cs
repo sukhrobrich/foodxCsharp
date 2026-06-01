@@ -666,10 +666,12 @@ public class PrintService
         {
             EnsureSettingsTable();
             dbconnect db = new dbconnect();
+            // tenant_id ni SESSION_CONTEXT dan oladi (RLS uchun)
             string sql = @"IF EXISTS(SELECT 1 FROM settings WHERE [key]=@k)
                                UPDATE settings SET [value]=@v WHERE [key]=@k
                            ELSE
-                               INSERT INTO settings([key],[value]) VALUES(@k,@v)";
+                               INSERT INTO settings([key],[value],tenant_id)
+                               VALUES(@k,@v,CAST(SESSION_CONTEXT(N'tenant_id') AS INT))";
             SqlCommand cmd = new SqlCommand(sql, db.GetCon());
             cmd.Parameters.AddWithValue("@k", key);
             cmd.Parameters.AddWithValue("@v", (object)value ?? DBNull.Value);

@@ -61,6 +61,7 @@ namespace WindowsFormsApp1.forms.settings
         private Dictionary<string, bool>  _orderToggles = new Dictionary<string, bool>();
         private Dictionary<string, Panel> _togglePanels = new Dictionary<string, Panel>();
         private TextBox txtMaxDiscount;
+        private TextBox _txtServiceCharge;
 
         // Ulanish rejimi
         private Panel  _connectionTogglePanel;
@@ -885,6 +886,7 @@ namespace WindowsFormsApp1.forms.settings
             };
             foreach (var r in rows) { if (!_orderToggles.ContainsKey(r.key)) _orderToggles[r.key] = r.def; flow.Controls.Add(MakeOrderSettingRow(r.key, r.label)); }
             flow.Controls.Add(MakeDiscountRow());
+            flow.Controls.Add(MakeServiceChargeRow());
             flow.Resize += (s, e) => { int fw = Math.Max(200, flow.ClientSize.Width - flow.Padding.Horizontal); foreach (Control c in flow.Controls) if (c is Panel) c.Width = fw; };
         }
 
@@ -931,12 +933,60 @@ namespace WindowsFormsApp1.forms.settings
             return row;
         }
 
+        Panel MakeServiceChargeRow()
+        {
+            Panel row = new Panel { Width = 600, Height = 88, BackColor = BgCard, Margin = new Padding(0, 8, 0, 0) };
+            row.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var path = RoundRect(row.ClientRectangle, 10))
+                {
+                    e.Graphics.FillPath(new SolidBrush(BgCard), path);
+                    e.Graphics.DrawPath(new Pen(Border), path);
+                }
+            };
+            row.Controls.Add(new Label
+            {
+                Text = "Xizmat haqqi (service charge)",
+                Font = new Font("Segoe UI", 10), ForeColor = TextD,
+                Location = new Point(20, 14), AutoSize = true
+            });
+            row.Controls.Add(new Label
+            {
+                Text = "Buyurtma jami summasiga qo'shiladigan foiz (0 = o'chirilgan).",
+                Font = new Font("Segoe UI", 8), ForeColor = TextM,
+                Location = new Point(20, 42), Width = 450, Height = 18, AutoSize = false
+            });
+            _txtServiceCharge = new TextBox
+            {
+                Width = 72, Height = 28,
+                Font = new Font("Segoe UI", 11),
+                TextAlign = HorizontalAlignment.Center,
+                Text = "0",
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            Label lblPct = new Label
+            {
+                Text = "%", Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = TextD, AutoSize = true
+            };
+            row.Controls.Add(_txtServiceCharge);
+            row.Controls.Add(lblPct);
+            row.Resize += (s, e) =>
+            {
+                _txtServiceCharge.Location = new Point(row.Width - 112, (row.Height - _txtServiceCharge.Height) / 2);
+                lblPct.Location = new Point(row.Width - 36, (row.Height - lblPct.PreferredHeight) / 2);
+            };
+            return row;
+        }
+
         void LoadOrderSettings()
         {
             string[] keys = { "order_remove_items", "order_anyone_close", "kassir_delete", "waiter_delete", "virtual_keyboard" };
             foreach (string key in keys) { string v = PrintService.GetSetting(key, ""); if (!string.IsNullOrEmpty(v)) _orderToggles[key] = v == "1"; }
             string disc = PrintService.GetSetting("max_discount", "50");
-            if (txtMaxDiscount != null) txtMaxDiscount.Text = disc;
+            if (txtMaxDiscount     != null) txtMaxDiscount.Text     = disc;
+            if (_txtServiceCharge  != null) _txtServiceCharge.Text  = PrintService.GetSetting("service_charge", "0");
             foreach (var kv in _togglePanels) kv.Value.Invalidate();
         }
 
@@ -944,7 +994,26 @@ namespace WindowsFormsApp1.forms.settings
         {
             string[] keys = { "order_remove_items", "order_anyone_close", "kassir_delete", "waiter_delete", "virtual_keyboard" };
             foreach (string key in keys) PrintService.SetSetting(key, (_orderToggles.ContainsKey(key) && _orderToggles[key]) ? "1" : "0");
-            if (txtMaxDiscount != null) { int v; string val = (int.TryParse(txtMaxDiscount.Text, out v) && v >= 0 && v <= 100) ? v.ToString() : "50"; PrintService.SetSetting("max_discount", val); txtMaxDiscount.Text = val; }
+
+            // Maksimum chegirma
+            if (txtMaxDiscount != null)
+            {
+                int v;
+                string val = (int.TryParse(txtMaxDiscount.Text, out v) && v >= 0 && v <= 100) ? v.ToString() : "50";
+                PrintService.SetSetting("max_discount", val);
+                txtMaxDiscount.Text = val;
+            }
+
+            // Xizmat haqqi foizi
+            if (_txtServiceCharge != null)
+            {
+                decimal sv;
+                string sval = (decimal.TryParse(_txtServiceCharge.Text, out sv) && sv >= 0 && sv <= 100)
+                    ? sv.ToString("0.##") : "0";
+                PrintService.SetSetting("service_charge", sval);
+                _txtServiceCharge.Text = sval;
+            }
+
             MessageBox.Show("Buyurtma sozlamalari saqlandi!", "Muvaffaqiyat", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
