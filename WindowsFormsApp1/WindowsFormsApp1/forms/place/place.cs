@@ -48,7 +48,9 @@ namespace WindowsFormsApp1.forms.place
                 db.OpenCon();
                 new SqlCommand(
                     @"IF NOT EXISTS(SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('place_out') AND name='price')
-                      ALTER TABLE place_out ADD price DECIMAL(18,2) NULL",
+                          ALTER TABLE place_out ADD price DECIMAL(18,2) NULL;
+                      IF NOT EXISTS(SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('place_out') AND name='price_type')
+                          ALTER TABLE place_out ADD price_type NVARCHAR(3) NULL DEFAULT 'UZS'",
                     db.GetCon()).ExecuteNonQuery();
                 db.CloseCon();
             }
@@ -195,42 +197,63 @@ namespace WindowsFormsApp1.forms.place
         }
 
         // ── ZONE FORM (qo'shish / tahrirlash) ────────────────────────────────
-        private void ShowZoneForm(int id, string name, decimal price = 0, bool svcFee = true)
+        private void ShowZoneForm(int id, string name, decimal price = 0, bool svcFee = true, string priceType = "UZS")
         {
-            using (Form dlg = MakeDlg(id == 0 ? "Yangi zona qo'shish" : "Zonani tahrirlash", 380, 310))
+            using (Form dlg = MakeDlg(id == 0 ? "Yangi zona qo'shish" : "Zonani tahrirlash", 380, 330))
             {
                 TextBox txtName  = DlgField(dlg, "Zona nomi:", name, 16);
-                TextBox txtPrice = DlgField(dlg, "Joy narxi (so'm, 0 = bepul):",
-                    price > 0 ? ((long)price).ToString() : "0", 88);
+                TextBox txtPrice = DlgField(dlg, "Joy narxi (0 = bepul):",
+                    price > 0 ? price.ToString("G29", System.Globalization.CultureInfo.InvariantCulture) : "0", 88);
                 txtPrice.KeyPress += (s, e) =>
-                { if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar)) e.Handled = true; };
+                { if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar) && e.KeyChar != '.') e.Handled = true; };
+
+                // Narx turi: UZS yoki %
+                var rbUzs = new RadioButton
+                {
+                    Text = "So'm (UZS)", Checked = priceType != "%",
+                    Location = new Point(16, 148), AutoSize = true,
+                    Font = new Font("Segoe UI", 10), ForeColor = TextDark
+                };
+                var rbPct = new RadioButton
+                {
+                    Text = "Foiz (%)", Checked = priceType == "%",
+                    Location = new Point(160, 148), AutoSize = true,
+                    Font = new Font("Segoe UI", 10), ForeColor = TextDark
+                };
+                dlg.Controls.Add(rbUzs);
+                dlg.Controls.Add(rbPct);
 
                 dlg.Controls.Add(new Label
                 {
                     Text = "Xizmat haqqi:",
                     Font = new Font("Segoe UI", 9, FontStyle.Bold),
                     ForeColor = TextMuted,
-                    Location = new Point(16, 162),
+                    Location = new Point(16, 184),
                     AutoSize = true
                 });
                 CheckBox chkSvc = new CheckBox
                 {
                     Text = "Ushbu zonaga xizmat haqqi qo'llanadi",
                     Checked = svcFee,
-                    Location = new Point(16, 180),
+                    Location = new Point(16, 202),
                     AutoSize = true,
                     Font = new Font("Segoe UI", 10),
                     ForeColor = TextDark
                 };
                 dlg.Controls.Add(chkSvc);
 
-                Button btnSave = DlgBtn(dlg, id == 0 ? "Qo'shish" : "Saqlash", Success, Color.White, 16, 224);
+                Button btnSave = DlgBtn(dlg, id == 0 ? "Qo'shish" : "Saqlash", Success, Color.White, 16, 248);
                 btnSave.Click += (s, e) =>
                 {
                     string n = txtName.Text.Trim();
                     if (string.IsNullOrEmpty(n)) { MessageBox.Show("Zona nomini kiriting!"); return; }
-                    if (!decimal.TryParse(txtPrice.Text, out decimal pr)) pr = 0;
-                    string sf = chkSvc.Checked ? "YES" : "NO";
+                    string raw = txtPrice.Text.Replace(',', '.');
+                    if (!decimal.TryParse(raw, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out decimal pr)) pr = 0;
+                    if (pr < 0) pr = 0;
+                    if (rbPct.Checked && pr > 100) { MessageBox.Show("Foiz 0–100 oralig'ida bo'lishi kerak!"); return; }
+                    string sf  = chkSvc.Checked ? "YES" : "NO";
+                    string pt  = rbPct.Checked ? "%" : "UZS";
                     try
                     {
                         dbconnect db = new dbconnect();
@@ -239,25 +262,27 @@ namespace WindowsFormsApp1.forms.place
                         {
                             int cat = EnsureDefaultCategory(db);
                             using (SqlCommand cmd = new SqlCommand(
-                                "INSERT INTO place_out(place_category_id,name,place_count,serviceFee,price) VALUES(@c,@n,0,@sf,@pr)",
+                                "INSERT INTO place_out(place_category_id,name,place_count,serviceFee,price,price_type) VALUES(@c,@n,0,@sf,@pr,@pt)",
                                 db.GetCon()))
                             {
-                                cmd.Parameters.AddWithValue("@c", cat);
-                                cmd.Parameters.AddWithValue("@n", n);
+                                cmd.Parameters.AddWithValue("@c",  cat);
+                                cmd.Parameters.AddWithValue("@n",  n);
                                 cmd.Parameters.AddWithValue("@sf", sf);
                                 cmd.Parameters.AddWithValue("@pr", pr);
+                                cmd.Parameters.AddWithValue("@pt", pt);
                                 cmd.ExecuteNonQuery();
                             }
                         }
                         else
                         {
                             using (SqlCommand cmd = new SqlCommand(
-                                "UPDATE place_out SET name=@n, serviceFee=@sf, price=@pr WHERE id=@id",
+                                "UPDATE place_out SET name=@n, serviceFee=@sf, price=@pr, price_type=@pt WHERE id=@id",
                                 db.GetCon()))
                             {
-                                cmd.Parameters.AddWithValue("@n", n);
+                                cmd.Parameters.AddWithValue("@n",  n);
                                 cmd.Parameters.AddWithValue("@sf", sf);
                                 cmd.Parameters.AddWithValue("@pr", pr);
+                                cmd.Parameters.AddWithValue("@pt", pt);
                                 cmd.Parameters.AddWithValue("@id", id);
                                 cmd.ExecuteNonQuery();
                             }
@@ -390,8 +415,9 @@ namespace WindowsFormsApp1.forms.place
                 using (SqlDataAdapter da = new SqlDataAdapter(
                     @"SELECT po.id, po.name,
                              (SELECT COUNT(*) FROM place_in WHERE place_out_id=po.id) AS seat_count,
-                             ISNULL(po.price, 0)        AS price,
-                             ISNULL(po.serviceFee,'YES') AS svc_fee
+                             ISNULL(po.price, 0)          AS price,
+                             ISNULL(po.price_type,'UZS')  AS price_type,
+                             ISNULL(po.serviceFee,'YES')   AS svc_fee
                       FROM place_out po
                       JOIN place_category pc ON pc.id = po.place_category_id
                       ORDER BY ISNULL(po.sort_order,9999), pc.name, po.name", db.GetCon()))
@@ -400,12 +426,13 @@ namespace WindowsFormsApp1.forms.place
                 int y = 0;
                 foreach (DataRow row in dt.Rows)
                 {
-                    int zid      = Convert.ToInt32(row["id"]);
-                    string zname = row["name"].ToString();
-                    int sc       = Convert.ToInt32(row["seat_count"]);
-                    decimal zp   = Convert.ToDecimal(row["price"]);
-                    bool zsvc    = row["svc_fee"].ToString().ToUpper() == "YES";
-                    Panel card   = CreateZoneCard(zid, zname, sc, zp, zsvc);
+                    int zid       = Convert.ToInt32(row["id"]);
+                    string zname  = row["name"].ToString();
+                    int sc        = Convert.ToInt32(row["seat_count"]);
+                    decimal zp    = Convert.ToDecimal(row["price"]);
+                    string zpt    = row["price_type"].ToString();
+                    bool zsvc     = row["svc_fee"].ToString().ToUpper() == "YES";
+                    Panel card    = CreateZoneCard(zid, zname, sc, zp, zsvc, zpt);
                     card.Location = new Point(0, y);
                     card.Width = zonesScrollPanel.ClientSize.Width;
                     zonesScrollPanel.Controls.Add(card);
@@ -466,7 +493,7 @@ namespace WindowsFormsApp1.forms.place
         }
 
         // ── CARD BUILDERS ─────────────────────────────────────────────────────
-        private Panel CreateZoneCard(int id, string name, int seatCount, decimal price, bool svcFee)
+        private Panel CreateZoneCard(int id, string name, int seatCount, decimal price, bool svcFee, string priceType = "UZS")
         {
             bool sel = id == selectedZoneId;
             Panel card = new Panel { Height = 80, BackColor = sel ? GoldBg : CardBg, Cursor = Cursors.Hand };
@@ -504,7 +531,9 @@ namespace WindowsFormsApp1.forms.place
             };
             card.Controls.Add(lblCount);
 
-            string priceText = price > 0 ? $"+{price:N0} so'm" : "Bepul";
+            string priceText = price > 0
+                ? (priceType == "%" ? $"+{price:G29}%" : $"+{price:N0} so'm")
+                : "Bepul";
             string svcText   = svcFee ? "✓ xizmat" : "✗ xizmat yo'q";
             Label lblInfo = new Label
             {
@@ -518,7 +547,7 @@ namespace WindowsFormsApp1.forms.place
             Button btnEdit = IconBtn("✏", TextMuted);
             Button btnDel  = IconBtn("🗑", Danger);
 
-            btnEdit.Click += (s, e) => ShowZoneForm(id, name, price, svcFee);
+            btnEdit.Click += (s, e) => ShowZoneForm(id, name, price, svcFee, priceType);
             btnDel.Click  += (s, e) => DeleteZone(id, name);
 
             card.Controls.Add(btnDel);

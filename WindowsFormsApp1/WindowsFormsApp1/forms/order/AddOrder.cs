@@ -27,6 +27,7 @@ namespace WindowsFormsApp1.forms.order
         private bool    _canEditItems;
         private bool    _canClose;
         private decimal _placePrice;
+        private string  _placePriceType = "UZS";
         private bool    _hasServiceFee;
         private Label   lblPlaceInfo;
         private bool    _photoMode = false;
@@ -1732,6 +1733,14 @@ namespace WindowsFormsApp1.forms.order
             return total;
         }
 
+        private decimal CalcPlaceAmount(decimal food)
+        {
+            if (_placePrice <= 0) return 0;
+            return _placePriceType == "%"
+                ? Math.Round(food * _placePrice / 100, 0)
+                : _placePrice;
+        }
+
         private decimal GetServiceChargePct()
         {
             string s = PrintService.GetSetting("service_charge", "0");
@@ -1750,18 +1759,19 @@ namespace WindowsFormsApp1.forms.order
         {
             decimal food    = GetFoodTotal();
             decimal svc     = CalcServiceFee(food);
-            decimal grand   = food + _placePrice + svc;
+            decimal grand   = food + CalcPlaceAmount(food) + svc;
             decimal discAmt = Math.Round(grand * _discountPct / 100, 0);
             return grand - discAmt;
         }
 
         private void RecalcTotal()
         {
-            decimal food    = GetFoodTotal();
-            decimal svcAmt  = CalcServiceFee(food);
-            decimal grand   = food + _placePrice + svcAmt;
-            decimal discAmt = Math.Round(grand * _discountPct / 100, 0);
-            decimal final   = grand - discAmt;
+            decimal food      = GetFoodTotal();
+            decimal svcAmt    = CalcServiceFee(food);
+            decimal placeAmt  = CalcPlaceAmount(food);
+            decimal grand     = food + placeAmt + svcAmt;
+            decimal discAmt   = Math.Round(grand * _discountPct / 100, 0);
+            decimal final     = grand - discAmt;
 
             lblTotal.Text = final.ToString("N0") + " so'm";
             if (lblTotal.Parent != null)
@@ -1770,7 +1780,11 @@ namespace WindowsFormsApp1.forms.order
             if (lblPlaceInfo != null)
             {
                 var parts = new List<string>();
-                if (_placePrice > 0) parts.Add($"Joy: {_placePrice:N0}");
+                if (placeAmt > 0)
+                {
+                    string placeLabel = _placePriceType == "%" ? $"Joy: {_placePrice:G29}%" : $"Joy: {placeAmt:N0}";
+                    parts.Add(placeLabel);
+                }
                 if (svcAmt > 0)     parts.Add($"Xizmat: {svcAmt:N0}");
                 if (discAmt > 0)    parts.Add($"Chegirma: −{discAmt:N0}");
                 lblPlaceInfo.Text    = string.Join("   ", parts);
@@ -1799,7 +1813,9 @@ namespace WindowsFormsApp1.forms.order
 
                 db.OpenCon();
                 using (SqlCommand cmd = new SqlCommand(
-                    @"SELECT ISNULL(po.price,0) AS price, ISNULL(po.serviceFee,'YES') AS svc_fee
+                    @"SELECT ISNULL(po.price,0) AS price,
+                             ISNULL(po.price_type,'UZS') AS price_type,
+                             ISNULL(po.serviceFee,'YES') AS svc_fee
                       FROM place_in pi JOIN place_out po ON po.id=pi.place_out_id
                       WHERE pi.id=@pid", db.GetCon()))
                 {
@@ -1808,8 +1824,10 @@ namespace WindowsFormsApp1.forms.order
                     {
                         if (dr.Read())
                         {
-                            _placePrice    = Convert.ToDecimal(dr["price"]);
-                            _hasServiceFee = dr["svc_fee"].ToString().ToUpper() == "YES";
+                            _placePrice     = Convert.ToDecimal(dr["price"]);
+                            _placePriceType = dr["price_type"].ToString();
+                            if (string.IsNullOrEmpty(_placePriceType)) _placePriceType = "UZS";
+                            _hasServiceFee  = dr["svc_fee"].ToString().ToUpper() == "YES";
                         }
                     }
                 }
@@ -1942,6 +1960,30 @@ namespace WindowsFormsApp1.forms.order
                     _btnPayment.Text = $"◈\n{_paymentEntries[0].name}+{_paymentEntries.Count - 1}";
                 if (_paymentEntries.Count > 0)
                     _btnPayment.BackColor = GoldBg;
+
+                // Load debt info from order_debt (agar to'lanmagan qarz bo'lsa)
+                try
+                {
+                    using (SqlCommand dLoad = new SqlCommand(
+                        "SELECT TOP 1 debtor_name, ISNULL(debtor_phone,'') AS debtor_phone, ISNULL(debt_note,'') AS debt_note " +
+                        "FROM order_debt WHERE order_id=@oid AND ISNULL(is_paid,0)=0",
+                        db.GetCon()))
+                    {
+                        dLoad.Parameters.AddWithValue("@oid", orderId);
+                        using (var dDr = dLoad.ExecuteReader())
+                        {
+                            if (dDr.Read())
+                            {
+                                _debtName  = dDr["debtor_name"].ToString();
+                                _debtPhone = dDr["debtor_phone"].ToString();
+                                _debtNote  = dDr["debt_note"].ToString();
+                                if (!string.IsNullOrEmpty(_debtName))
+                                    _btnBoshqalar.BackColor = GoldBg;
+                            }
+                        }
+                    }
+                }
+                catch { }
 
                 string sql = @"SELECT f.id, f.name, f.selling_price, ofd.quantity,
                                ISNULL(f.[count],0) AS food_count,
@@ -2191,6 +2233,28 @@ namespace WindowsFormsApp1.forms.order
                     }
                 }
 
+                // Qarz ma'lumotlarini saqlash (hali yopilmagan order uchun vaqtinchalik)
+                if (!string.IsNullOrEmpty(_debtName))
+                {
+                    SqlCommand dSave = new SqlCommand(@"
+                        DELETE FROM order_debt WHERE order_id=@oid AND ISNULL(is_paid,0)=0;
+                        INSERT INTO order_debt(order_id,debtor_name,debtor_phone,debt_note,amount,created_at,is_paid)
+                        VALUES(@oid,@name,@phone,@note,0,GETDATE(),0)", db.GetCon(), tr);
+                    dSave.Parameters.AddWithValue("@oid",   orderId);
+                    dSave.Parameters.AddWithValue("@name",  _debtName);
+                    dSave.Parameters.AddWithValue("@phone", string.IsNullOrEmpty(_debtPhone) ? (object)DBNull.Value : _debtPhone);
+                    dSave.Parameters.AddWithValue("@note",  string.IsNullOrEmpty(_debtNote)  ? (object)DBNull.Value : _debtNote);
+                    dSave.ExecuteNonQuery();
+                }
+                else
+                {
+                    SqlCommand dDel = new SqlCommand(
+                        "DELETE FROM order_debt WHERE order_id=@oid AND ISNULL(is_paid,0)=0",
+                        db.GetCon(), tr);
+                    dDel.Parameters.AddWithValue("@oid", orderId);
+                    dDel.ExecuteNonQuery();
+                }
+
                 tr.Commit();
                 db.CloseCon();
 
@@ -2317,7 +2381,7 @@ namespace WindowsFormsApp1.forms.order
 
                 decimal food     = GetFoodTotal();
                 decimal svcAmt   = CalcServiceFee(food);
-                decimal grand    = food + _placePrice + svcAmt;
+                decimal grand    = food + CalcPlaceAmount(food) + svcAmt;
                 decimal discAmt  = Math.Round(grand * _discountPct / 100, 0);
                 decimal finalTotal = grand - discAmt;
 
