@@ -1617,8 +1617,27 @@ namespace WindowsFormsApp1.forms.order
             btnOk.Click += (s, e) =>
             {
                 string raw = txt.Text.Replace(',', '.');
-                decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _discountPct);
-                _discountPct = Math.Max(0, Math.Min(100, _discountPct));
+                decimal newPct;
+                decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out newPct);
+                newPct = Math.Max(0, Math.Min(100, newPct));
+
+                // Chegirma o'zgarsa — eski to'lov summalari yangi jami bilan mos kelmaydi,
+                // shuning uchun ularni tozalaymiz (foydalanuvchi qayta kiritadi).
+                if (newPct != _discountPct)
+                {
+                    _discountPct = newPct;
+                    if (_paymentEntries.Count > 0)
+                    {
+                        _paymentEntries.Clear();
+                        _btnPayment.Text      = "◈\nTo'lov turi";
+                        _btnPayment.BackColor = Color.FromArgb(243, 244, 246);
+                    }
+                }
+                else
+                {
+                    _discountPct = newPct;
+                }
+
                 RecalcTotal();
                 dlg.DialogResult = DialogResult.OK;
             };
@@ -2299,6 +2318,23 @@ namespace WindowsFormsApp1.forms.order
                 decimal grand    = food + _placePrice + svcAmt;
                 decimal discAmt  = Math.Round(grand * _discountPct / 100, 0);
                 decimal finalTotal = grand - discAmt;
+
+                // To'lov yozuvlari mavjud bo'lsa, ularning jami buyurtma summasiga teng ekanligini tekshiramiz.
+                // Agar mos kelmasa (masalan, chegirma qo'shilgandan keyin to'lov yangilanmagan bo'lsa),
+                // foydalanuvchini ogohlantirish kerak.
+                if (_paymentEntries.Count > 0)
+                {
+                    decimal paySum = 0;
+                    foreach (var pe in _paymentEntries) paySum += pe.amount;
+                    if (paySum != finalTotal)
+                    {
+                        db.CloseCon();
+                        MessageBox.Show(
+                            $"To'lov summasi ({paySum:N0} UZS) buyurtma summasiga ({finalTotal:N0} UZS) mos kelmaydi.\n\nChegirma o'zgartirilgandan keyin to'lov ma'lumotlarini qayta kiriting.",
+                            "To'lov xatosi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                }
 
                 using (SqlCommand cmd = new SqlCommand(@"
                     UPDATE [order] SET paid='YES', total=@total, payment_id=@pay,
