@@ -626,8 +626,17 @@ public class PrintService
         try
         {
             dbconnect db = new dbconnect();
-            string ddl = @"IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'settings') AND type = N'U')
-                           CREATE TABLE settings ([key] NVARCHAR(100) NOT NULL PRIMARY KEY, [value] NVARCHAR(MAX) NULL)";
+            // Jadval yo'q bo'lsa yaratish (tenant_id bilan composite PK)
+            string ddl = @"
+                IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id=OBJECT_ID(N'settings') AND type=N'U')
+                BEGIN
+                    CREATE TABLE settings (
+                        [key]      NVARCHAR(100) NOT NULL,
+                        [value]    NVARCHAR(MAX) NULL,
+                        tenant_id  INT           NOT NULL DEFAULT 0,
+                        CONSTRAINT PK_settings PRIMARY KEY ([key], tenant_id)
+                    )
+                END";
             SqlCommand cmd = new SqlCommand(ddl, db.GetCon());
             db.OpenCon();
             cmd.ExecuteNonQuery();
@@ -636,14 +645,25 @@ public class PrintService
         catch { }
     }
 
+    // Online holatda tenant_id bilan, oflayn holatda 0 bilan ishlaydi
+    private static int EffectiveTenantId()
+    {
+        return Session.IsOnline && Session.TenantId > 0 ? Session.TenantId : 0;
+    }
+
     public static string GetSetting(string key, string defaultValue = "")
     {
         try
         {
             EnsureSettingsTable();
+            int tid = EffectiveTenantId();
             dbconnect db = new dbconnect();
-            SqlCommand cmd = new SqlCommand("SELECT [value] FROM settings WHERE [key]=@k", db.GetCon());
-            cmd.Parameters.AddWithValue("@k", key);
+            // tenant_id bo'yicha aniq filter — RLS ga ishonmaymiz
+            SqlCommand cmd = new SqlCommand(
+                "SELECT [value] FROM settings WHERE [key]=@k AND tenant_id=@tid",
+                db.GetCon());
+            cmd.Parameters.AddWithValue("@k",   key);
+            cmd.Parameters.AddWithValue("@tid", tid);
             db.OpenCon();
             object result = cmd.ExecuteScalar();
             db.CloseCon();
@@ -665,16 +685,17 @@ public class PrintService
         try
         {
             EnsureSettingsTable();
+            int tid = EffectiveTenantId();
             dbconnect db = new dbconnect();
-            // tenant_id ni SESSION_CONTEXT dan oladi (RLS uchun)
-            string sql = @"IF EXISTS(SELECT 1 FROM settings WHERE [key]=@k)
-                               UPDATE settings SET [value]=@v WHERE [key]=@k
-                           ELSE
-                               INSERT INTO settings([key],[value],tenant_id)
-                               VALUES(@k,@v,CAST(SESSION_CONTEXT(N'tenant_id') AS INT))";
+            string sql = @"
+                IF EXISTS(SELECT 1 FROM settings WHERE [key]=@k AND tenant_id=@tid)
+                    UPDATE settings SET [value]=@v WHERE [key]=@k AND tenant_id=@tid
+                ELSE
+                    INSERT INTO settings([key],[value],tenant_id) VALUES(@k,@v,@tid)";
             SqlCommand cmd = new SqlCommand(sql, db.GetCon());
-            cmd.Parameters.AddWithValue("@k", key);
-            cmd.Parameters.AddWithValue("@v", (object)value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@k",   key);
+            cmd.Parameters.AddWithValue("@v",   (object)value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@tid", tid);
             db.OpenCon();
             cmd.ExecuteNonQuery();
             db.CloseCon();

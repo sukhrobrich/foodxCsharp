@@ -23,9 +23,22 @@ GO
 
 IF OBJECT_ID('dbo.settings','U') IS NULL
 CREATE TABLE settings (
-    [key]  NVARCHAR(100) NOT NULL PRIMARY KEY,
-    value  NVARCHAR(500) NULL
+    [key]      NVARCHAR(100) NOT NULL,
+    value      NVARCHAR(MAX) NULL,
+    tenant_id  INT           NOT NULL DEFAULT 0,
+    CONSTRAINT PK_settings PRIMARY KEY ([key], tenant_id)
 );
+-- Eski jadvalga tenant_id qo'shish (mavjud bazalar uchun)
+IF EXISTS(SELECT 1 FROM sys.objects WHERE object_id=OBJECT_ID(N'settings') AND type=N'U')
+   AND NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='settings' AND COLUMN_NAME='tenant_id')
+BEGIN
+    ALTER TABLE settings ADD tenant_id INT NOT NULL DEFAULT 0;
+    -- Eski PRIMARY KEY ni olib tashlab composite qo'yamiz
+    DECLARE @pk NVARCHAR(200) = (SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+        WHERE TABLE_NAME='settings' AND CONSTRAINT_TYPE='PRIMARY KEY');
+    IF @pk IS NOT NULL EXEC('ALTER TABLE settings DROP CONSTRAINT ['+@pk+']');
+    ALTER TABLE settings ADD CONSTRAINT PK_settings PRIMARY KEY ([key], tenant_id);
+END
 
 IF OBJECT_ID('dbo.user_category','U') IS NULL
 CREATE TABLE user_category (

@@ -227,6 +227,23 @@ namespace WindowsFormsApp1.services
                 using (var c = new SqlConnection(_local + ";Connect Timeout=3"))
                 {
                     c.Open();
+
+                    // settings jadvaliga tenant_id qo'shish (eski bazalar uchun)
+                    using (var cmd = new SqlCommand(@"
+                        IF EXISTS(SELECT 1 FROM sys.objects WHERE object_id=OBJECT_ID(N'settings') AND type=N'U')
+                        AND NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME='settings' AND COLUMN_NAME='tenant_id')
+                        BEGIN
+                            ALTER TABLE settings ADD tenant_id INT NOT NULL DEFAULT 0;
+                            DECLARE @pk NVARCHAR(200)=(SELECT TOP 1 CONSTRAINT_NAME
+                                FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                                WHERE TABLE_NAME='settings' AND CONSTRAINT_TYPE='PRIMARY KEY');
+                            IF @pk IS NOT NULL EXEC('ALTER TABLE settings DROP CONSTRAINT ['+@pk+']');
+                            IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE name='PK_settings')
+                                ALTER TABLE settings ADD CONSTRAINT PK_settings PRIMARY KEY ([key],tenant_id);
+                        END", c))
+                    { try { cmd.ExecuteNonQuery(); } catch { } }
+
                     string[] fixes = {
                         // [order].is_synced default 1 → 0
                         "IF EXISTS (SELECT 1 FROM sys.default_constraints dc " +

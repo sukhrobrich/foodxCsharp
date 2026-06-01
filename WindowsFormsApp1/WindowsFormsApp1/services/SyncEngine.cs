@@ -681,13 +681,15 @@ namespace WindowsFormsApp1.services
         private static int DlSettings(SqlConnection local, SqlConnection central)
         {
             int count = 0;
-            DataTable rows = ReadAll(central, "SELECT [key], value FROM settings");
+            // Tenant kontekst allaqachon central ulanishda o'rnatilgan
+            DataTable rows = ReadAll(central,
+                "SELECT [key], value FROM settings WHERE tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)");
             foreach (DataRow r in rows.Rows)
             {
                 Exec(local,
-                    "IF EXISTS (SELECT 1 FROM settings WHERE [key]=@k) " +
-                    "  UPDATE settings SET value=@v WHERE [key]=@k " +
-                    "ELSE INSERT INTO settings([key],value) VALUES(@k,@v)",
+                    "IF EXISTS (SELECT 1 FROM settings WHERE [key]=@k AND tenant_id=0) " +
+                    "  UPDATE settings SET value=@v WHERE [key]=@k AND tenant_id=0 " +
+                    "ELSE INSERT INTO settings([key],value,tenant_id) VALUES(@k,@v,0)",
                     P("@k", r["key"]), P("@v", r["value"]));
                 count++;
             }
