@@ -145,7 +145,7 @@ namespace WindowsFormsApp1.forms.user
             // Title
             Label lblTitle = new Label
             {
-                Text      = isLoginMode ? "Xush kelibsiz!" : "Admin yaratish",
+                Text      = isLoginMode ? "Xush kelibsiz!" : "Admin paroli o'rnatish",
                 Font      = new Font("Segoe UI", 18, FontStyle.Bold),
                 ForeColor = TextDark,
                 Width     = RIGHT_W,
@@ -159,7 +159,7 @@ namespace WindowsFormsApp1.forms.user
             // Login name
             Label lblLogin = new Label
             {
-                Text      = login.ToUpper(),
+                Text      = isLoginMode ? login.ToUpper() : "ADMIN",
                 Font      = new Font("Segoe UI", 11, FontStyle.Bold),
                 ForeColor = Gold,
                 Width     = RIGHT_W,
@@ -173,7 +173,9 @@ namespace WindowsFormsApp1.forms.user
             // Subtitle
             Label lblSub = new Label
             {
-                Text      = "4-raqamli PIN ni kiriting",
+                Text      = isLoginMode
+                    ? "4-raqamli PIN ni kiriting"
+                    : "Ilk o'rnatish: admin uchun PIN kiriting",
                 Font      = new Font("Segoe UI", 9),
                 ForeColor = TextMuted,
                 Width     = RIGHT_W,
@@ -184,12 +186,35 @@ namespace WindowsFormsApp1.forms.user
             };
             right.Controls.Add(lblSub);
 
+            // Ilk o'rnatish uchun qo'shimcha izoh
+            if (!isLoginMode)
+            {
+                Panel setupNote = new Panel
+                {
+                    Location  = new Point(60, 132),
+                    Size      = new Size(RIGHT_W - 120, 40),
+                    BackColor = Color.FromArgb(254, 243, 199)
+                };
+                setupNote.Paint += (s, e) =>
+                    e.Graphics.DrawRectangle(new Pen(Color.FromArgb(253, 230, 138)), 0, 0, setupNote.Width-1, setupNote.Height-1);
+                setupNote.Controls.Add(new Label
+                {
+                    Text = "⚠️  Ushbu PIN keyingi barcha kirish uchun ishlatiladi",
+                    Font = new Font("Segoe UI", 8),
+                    ForeColor = Color.FromArgb(146, 64, 14),
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter
+                });
+                right.Controls.Add(setupNote);
+            }
+
             // PIN display box
             int pinBoxW = 280;
             int pinBoxX = cx - pinBoxW / 2;  // 140
+            int pinBoxY = isLoginMode ? 138 : 180;
             Panel pinBox = new Panel
             {
-                Location  = new Point(pinBoxX, 138),
+                Location  = new Point(pinBoxX, pinBoxY),
                 Size      = new Size(pinBoxW, 52),
                 BackColor = BgPage
             };
@@ -213,7 +238,7 @@ namespace WindowsFormsApp1.forms.user
             // Gold underline
             Panel pinLine = new Panel
             {
-                Location  = new Point(pinBoxX, 192),
+                Location  = new Point(pinBoxX, pinBoxY + 54),
                 Size      = new Size(pinBoxW, 3),
                 BackColor = Gold
             };
@@ -225,7 +250,7 @@ namespace WindowsFormsApp1.forms.user
             int keypadX = cx - keypadW / 2;  // 130
             keypad = new TableLayoutPanel
             {
-                Location        = new Point(keypadX, 208),
+                Location        = new Point(keypadX, pinBoxY + 70),
                 Size            = new Size(keypadW, keypadH),
                 RowCount        = 4,
                 ColumnCount     = 3,
@@ -414,25 +439,51 @@ namespace WindowsFormsApp1.forms.user
                 try
                 {
                     db.OpenCon();
-                    int adminCatId = ExecScalarInt(db, "INSERT INTO user_category(name) VALUES('admin'); SELECT SCOPE_IDENTITY();");
-                    ExecScalarInt(db, "INSERT INTO user_category(name) VALUES('kassir'); SELECT SCOPE_IDENTITY();");
-                    ExecScalarInt(db, "INSERT INTO user_category(name) VALUES('ofitsiant'); SELECT SCOPE_IDENTITY();");
-                    ExecNonQuery(db, "IF NOT EXISTS(SELECT 1 FROM payment WHERE name='Naqd') INSERT INTO payment(name) VALUES('Naqd')");
-                    ExecNonQuery(db, "IF NOT EXISTS(SELECT 1 FROM payment WHERE name='Plastik') INSERT INTO payment(name) VALUES('Plastik')");
+
+                    // Kategoriyalarni role_type BILAN yaratish (JWT auth uchun muhim)
+                    int adminCatId = ExecScalarOrExisting(db,
+                        "IF NOT EXISTS(SELECT 1 FROM user_category WHERE LOWER(name)='admin') " +
+                        "  INSERT INTO user_category(name,role_type,color) VALUES('admin','admin','#DC2626');" +
+                        "SELECT id FROM user_category WHERE LOWER(name)='admin'");
+                    ExecNonQuerySafe(db,
+                        "IF NOT EXISTS(SELECT 1 FROM user_category WHERE LOWER(name)='kassir') " +
+                        "  INSERT INTO user_category(name,role_type,color) VALUES('kassir','kassir','#2563EB')");
+                    ExecNonQuerySafe(db,
+                        "IF NOT EXISTS(SELECT 1 FROM user_category WHERE LOWER(name)='ofitsiant') " +
+                        "  INSERT INTO user_category(name,role_type,color) VALUES('ofitsiant','ofitsiant','#D97706')");
+
+                    // Default to'lov usullari
+                    ExecNonQuerySafe(db, "IF NOT EXISTS(SELECT 1 FROM payment WHERE name='Naqd') INSERT INTO payment(name,sort_order) VALUES('Naqd',1)");
+                    ExecNonQuerySafe(db, "IF NOT EXISTS(SELECT 1 FROM payment WHERE name='Plastik') INSERT INTO payment(name,sort_order) VALUES('Plastik',2)");
+                    ExecNonQuerySafe(db, "IF NOT EXISTS(SELECT 1 FROM payment WHERE name='Payme') INSERT INTO payment(name,sort_order) VALUES('Payme',3)");
+
+                    // Admin foydalanuvchi
                     int newUID = 0;
                     using (SqlCommand ins = new SqlCommand(
-                        "INSERT INTO [user](name,user_category_id,login,password,phone_number) VALUES('admin',@cid,'admin',@pw,''); SELECT SCOPE_IDENTITY();",
+                        "IF NOT EXISTS(SELECT 1 FROM [user] WHERE LOWER(login)='admin') " +
+                        "  INSERT INTO [user](name,user_category_id,login,password,phone_number,created_at) " +
+                        "  VALUES('Admin',@cid,'admin',@pw,'',GETDATE());" +
+                        "SELECT id FROM [user] WHERE LOWER(login)='admin'",
                         db.GetCon()))
                     {
                         ins.Parameters.AddWithValue("@cid", adminCatId);
                         ins.Parameters.AddWithValue("@pw", hashedPin);
                         newUID = Convert.ToInt32(ins.ExecuteScalar());
-                    };
+                    }
+
+                    // Parolni yangilash (agar user allaqachon mavjud bo'lsa)
+                    using (SqlCommand upd = new SqlCommand(
+                        "UPDATE [user] SET password=@pw WHERE LOWER(login)='admin'", db.GetCon()))
+                    {
+                        upd.Parameters.AddWithValue("@pw", hashedPin);
+                        upd.ExecuteNonQuery();
+                    }
+
                     db.CloseCon();
 
                     Session.UserId = newUID; Session.Login = "admin";
-                    Session.UserName = "admin"; Session.UserCategory = "admin";
-                    MessageBox.Show("Admin muvaffaqiyatli yaratildi!");
+                    Session.UserName = "Admin"; Session.UserCategory = "admin";
+
                     this.Hide();
                     new MainPage(newUID).Show();
                 }
@@ -446,10 +497,31 @@ namespace WindowsFormsApp1.forms.user
                 return Convert.ToInt32(cmd.ExecuteScalar());
         }
 
+        // Mavjud bo'lsa ID sini, yo'q bo'lsa yangi qo'shib ID sini qaytaradi
+        private int ExecScalarOrExisting(dbconnect db, string sql)
+        {
+            using (SqlCommand cmd = new SqlCommand(sql, db.GetCon()))
+            {
+                object result = cmd.ExecuteScalar();
+                return result == null || result == DBNull.Value ? 0 : Convert.ToInt32(result);
+            }
+        }
+
         private void ExecNonQuery(dbconnect db, string sql)
         {
             using (SqlCommand cmd = new SqlCommand(sql, db.GetCon()))
                 cmd.ExecuteNonQuery();
+        }
+
+        // Xatoni e'tiborsiz qoldirib bajaradi
+        private void ExecNonQuerySafe(dbconnect db, string sql)
+        {
+            try
+            {
+                using (SqlCommand cmd = new SqlCommand(sql, db.GetCon()))
+                    cmd.ExecuteNonQuery();
+            }
+            catch { }
         }
 
         private void InitializeComponent()

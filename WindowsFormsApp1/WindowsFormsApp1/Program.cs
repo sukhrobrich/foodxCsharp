@@ -81,22 +81,7 @@ namespace WindowsFormsApp1
             SyncService.Start();
 
             // 6. Asosiy forma
-            bool adminExists = IsAdminExists();
-            // VAQTINCHALIK DIAGNOSTIKA — muammo hal bo'lgach o'chiriladi
-            MessageBox.Show(
-                $"Ulanish holati:\n\n" +
-                $"IsOnline:     {Session.IsOnline}\n" +
-                $"TenantId:     {Session.TenantId}\n" +
-                $"ForceOffline: {Session.ForceOffline}\n" +
-                $"AdminExists:  {adminExists}\n\n" +
-                (Session.IsOnline
-                    ? "✓ Markaziy server bilan ulangan"
-                    : "✗ Oflayn — mahalliy baza ishlatilmoqda"),
-                "FoodX — Diagnostika",
-                MessageBoxButtons.OK,
-                Session.IsOnline ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-
-            if (adminExists)
+            if (IsAdminExists())
                 Application.Run(new Form1());
             else
                 Application.Run(new Password("admin", false));
@@ -179,12 +164,25 @@ namespace WindowsFormsApp1
 
         static bool IsAdminExists()
         {
-            var db  = new dbconnect();
-            var cmd = new SqlCommand("SELECT COUNT(*) FROM [user] WHERE Name = 'admin'", db.GetCon());
-            db.OpenCon();
-            int n = (int)cmd.ExecuteScalar();
-            db.CloseCon();
-            return n > 0;
+            try
+            {
+                var db = new dbconnect();
+                db.OpenCon();
+                // Admin mavjudligini login='admin' YOKI role_type='admin' bo'yicha tekshirish
+                int n = 0;
+                using (var cmd = new SqlCommand(
+                    @"SELECT COUNT(*) FROM [user] u
+                      LEFT JOIN user_category uc ON uc.id = u.user_category_id
+                      WHERE LOWER(u.login) = 'admin'
+                         OR LOWER(ISNULL(uc.role_type, LOWER(uc.name))) = 'admin'",
+                    db.GetCon()))
+                {
+                    n = (int)cmd.ExecuteScalar();
+                }
+                db.CloseCon();
+                return n > 0;
+            }
+            catch { return false; }
         }
     }
 }
