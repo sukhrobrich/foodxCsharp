@@ -134,19 +134,19 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,name,user_category_id,login,password,phone_number,created_at,updated_at,sort_order FROM [user]").Rows)
+                "SELECT id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order FROM [user]").Rows)
             {
                 Exec(central,
                     "IF EXISTS(SELECT 1 FROM [user] WHERE id=@id)" +
-                    " UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw," +
+                    " UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
                     "   phone_number=@ph,updated_at=@ua,sort_order=@so WHERE id=@id" +
                     " ELSE BEGIN SET IDENTITY_INSERT [user] ON;" +
-                    " INSERT INTO [user](id,name,user_category_id,login,password,phone_number,created_at,updated_at,sort_order)" +
-                    " VALUES(@id,@n,@uc,@l,@pw,@ph,@ca,@ua,@so);" +
+                    " INSERT INTO [user](id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order)" +
+                    " VALUES(@id,@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so);" +
                     " SET IDENTITY_INSERT [user] OFF END",
                     P("@id",r["id"]),P("@n",r["name"]),P("@uc",r["user_category_id"]),
-                    P("@l",r["login"]),P("@pw",r["password"]),P("@ph",r["phone_number"]),
-                    P("@ca",r["created_at"]),P("@ua",r["updated_at"]),P("@so",r["sort_order"]));
+                    P("@l",r["login"]),P("@pw",r["password"]),P("@ap",r["app_password"]),
+                    P("@ph",r["phone_number"]),P("@ca",r["created_at"]),P("@ua",r["updated_at"]),P("@so",r["sort_order"]));
                 count++;
             }
             return count;
@@ -721,22 +721,23 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             DataTable rows = ReadAll(central,
-                "SELECT id,name,user_category_id,login,password,phone_number,created_at,updated_at,sort_order FROM [user]");
+                "SELECT id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order FROM [user]");
             foreach (DataRow r in rows.Rows)
             {
                 Exec(local,
                     "IF EXISTS (SELECT 1 FROM [user] WHERE id=@id) " +
-                    "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw," +
+                    "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
                     "    phone_number=@ph,updated_at=@ua,sort_order=@so WHERE id=@id " +
                     "ELSE BEGIN " +
                     "  SET IDENTITY_INSERT [user] ON; " +
-                    "  INSERT INTO [user](id,name,user_category_id,login,password,phone_number,created_at,updated_at,sort_order) " +
-                    "  VALUES(@id,@n,@uc,@l,@pw,@ph,@ca,@ua,@so); " +
+                    "  INSERT INTO [user](id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order) " +
+                    "  VALUES(@id,@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so); " +
                     "  SET IDENTITY_INSERT [user] OFF " +
                     "END",
                     P("@id", r["id"]), P("@n", r["name"]), P("@uc", r["user_category_id"]),
-                    P("@l", r["login"]), P("@pw", r["password"]), P("@ph", r["phone_number"]),
-                    P("@ca", r["created_at"]), P("@ua", r["updated_at"]), P("@so", r["sort_order"]));
+                    P("@l", r["login"]), P("@pw", r["password"]), P("@ap", r["app_password"]),
+                    P("@ph", r["phone_number"]), P("@ca", r["created_at"]),
+                    P("@ua", r["updated_at"]), P("@so", r["sort_order"]));
                 count++;
             }
             return count;
