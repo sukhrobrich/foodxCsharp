@@ -2365,16 +2365,22 @@ namespace WindowsFormsApp1.forms.report
                 for (int i = 0; i < n; i += step) { float fx = n == 1 ? pL + cW / 2f : pL + cW * i / (n - 1f); g.DrawString(dates[i].ToString("dd-MMM"), af, ab, new RectangleF(fx - 28, pT + cH + 5, 56, 16), cf); }
             }
             var pts = new PointF[n];
-            for (int i = 0; i < n; i++) { decimal v = _chartPts.ContainsKey(dates[i]) ? _chartPts[dates[i]] : 0; float fx = n == 1 ? pL + cW / 2f : pL + cW * i / (n - 1f); pts[i] = new PointF(fx, pT + cH * (1f - (float)(v / maxV))); }
+            for (int i = 0; i < n; i++)
+            {
+                decimal v  = _chartPts.ContainsKey(dates[i]) ? _chartPts[dates[i]] : 0;
+                float   fx = n == 1 ? pL + cW / 2f : pL + cW * i / (n - 1f);
+                // Clamp ratio to [0,1] so extreme DB values can't push Y outside GDI+ safe range
+                float ratio = (float)Math.Max(0m, Math.Min(1m, v / maxV));
+                pts[i] = new PointF(fx, pT + cH * (1f - ratio));
+            }
             if (n > 1)
             {
                 var poly = new PointF[n + 2]; poly[0] = new PointF(pts[0].X, pT + cH); for (int i = 0; i < n; i++) poly[i + 1] = pts[i]; poly[n + 1] = new PointF(pts[n - 1].X, pT + cH);
-                // FillPolygon with LinearGradientBrush throws OverflowException when all Y values
-                // are identical (zero-area polygon — e.g. no data in range). Guard against it.
+                // FillPolygon with LinearGradientBrush throws OverflowException for zero-area polygons
                 float minPtY = float.MaxValue; foreach (var pt in pts) if (pt.Y < minPtY) minPtY = pt.Y;
                 if (minPtY < pT + cH - 1f)
-                    using (var gb = new LinearGradientBrush(new PointF(0, pT), new PointF(0, pT + cH), Color.FromArgb(130, C_GREEN), Color.FromArgb(12, C_GREEN))) g.FillPolygon(gb, poly);
-                using (var lp = new Pen(C_GREEN, 2.5f)) g.DrawLines(lp, pts);
+                    try { using (var gb = new LinearGradientBrush(new PointF(0, pT), new PointF(0, pT + cH), Color.FromArgb(130, C_GREEN), Color.FromArgb(12, C_GREEN))) g.FillPolygon(gb, poly); } catch (OverflowException) { }
+                try { using (var lp = new Pen(C_GREEN, 2.5f)) g.DrawLines(lp, pts); } catch (OverflowException) { }
                 foreach (var pt in pts) { g.FillEllipse(new SolidBrush(C_CARD), pt.X - 4.5f, pt.Y - 4.5f, 9, 9); g.FillEllipse(new SolidBrush(C_GREEN), pt.X - 3f, pt.Y - 3f, 6, 6); }
             }
         }
