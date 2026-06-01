@@ -452,10 +452,20 @@ namespace WindowsFormsApp1.forms.user
                         "IF NOT EXISTS(SELECT 1 FROM user_category WHERE LOWER(name)='ofitsiant') " +
                         "  INSERT INTO user_category(name,role_type,color) VALUES('ofitsiant','ofitsiant','#D97706')");
 
-                    // Default to'lov usullari
-                    ExecNonQuerySafe(db, "IF NOT EXISTS(SELECT 1 FROM payment WHERE name='Naqd') INSERT INTO payment(name,sort_order) VALUES('Naqd',1)");
-                    ExecNonQuerySafe(db, "IF NOT EXISTS(SELECT 1 FROM payment WHERE name='Plastik') INSERT INTO payment(name,sort_order) VALUES('Plastik',2)");
-                    ExecNonQuerySafe(db, "IF NOT EXISTS(SELECT 1 FROM payment WHERE name='Payme') INSERT INTO payment(name,sort_order) VALUES('Payme',3)");
+                    // Default to'lov usullari (birinchi = DEFAULT)
+                    string[] payments = {
+                        "Naqd pul", "Karta", "UzCard", "Humo", "Visa", "Mastercard",
+                        "Qarz", "Online", "Click", "Payme", "Oson", "Uzum",
+                        "Yandex", "Wolt", "Alif", "Boshqa"
+                    };
+                    for (int pi = 0; pi < payments.Length; pi++)
+                    {
+                        string pname = payments[pi];
+                        int    psord = pi + 1;
+                        ExecNonQuerySafe(db,
+                            $"IF NOT EXISTS(SELECT 1 FROM payment WHERE name='{pname}') " +
+                            $"  INSERT INTO payment(name,sort_order) VALUES('{pname}',{psord})");
+                    }
 
                     // Admin foydalanuvchi
                     int newUID = 0;
