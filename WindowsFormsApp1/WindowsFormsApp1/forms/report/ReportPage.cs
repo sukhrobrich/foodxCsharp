@@ -2280,7 +2280,19 @@ namespace WindowsFormsApp1.forms.report
             }
             _lblFeeProfit.Text = Fmt(fee);
 
-            try { plP = Q<decimal>(db, "SELECT ISNULL(SUM(pi.price),0) FROM [order] o JOIN place_in pi ON pi.id=o.place_id WHERE o.paid='YES' AND CAST(o.created_at AS DATE) BETWEEN @d1 AND @d2"); } catch { }
+            try { plP = Q<decimal>(db, @"
+                SELECT ISNULL(SUM(
+                  CASE WHEN ISNULL(po.price_type,'UZS')='UZS' THEN ISNULL(po.price,0)
+                       ELSE ISNULL(fo.food_total,0)*ISNULL(po.price,0)/100.0
+                  END),0)
+                FROM [order] o
+                JOIN place_in pi ON pi.id=o.place_id
+                JOIN place_out po ON po.id=pi.place_out_id
+                LEFT JOIN (
+                  SELECT ofd.order_id, SUM(ofd.quantity*f.selling_price) AS food_total
+                  FROM order_food ofd JOIN food f ON f.id=ofd.food_id GROUP BY ofd.order_id
+                ) fo ON fo.order_id=o.id
+                WHERE o.paid='YES' AND CAST(o.created_at AS DATE) BETWEEN @d1 AND @d2"); } catch { }
             _lblPlaceProfit.Text = Fmt(plP);
 
             try { pur = Q<decimal>(db, "SELECT ISNULL((SELECT SUM(total_price) FROM ingredient_purchase WHERE CAST(purchased_at AS DATE) BETWEEN @d1 AND @d2),0) + ISNULL((SELECT SUM(total_price) FROM food_purchase WHERE CAST(purchased_at AS DATE) BETWEEN @d1 AND @d2),0)"); } catch { }
