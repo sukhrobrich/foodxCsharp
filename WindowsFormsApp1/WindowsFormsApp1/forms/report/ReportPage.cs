@@ -2369,7 +2369,11 @@ namespace WindowsFormsApp1.forms.report
             if (n > 1)
             {
                 var poly = new PointF[n + 2]; poly[0] = new PointF(pts[0].X, pT + cH); for (int i = 0; i < n; i++) poly[i + 1] = pts[i]; poly[n + 1] = new PointF(pts[n - 1].X, pT + cH);
-                using (var gb = new LinearGradientBrush(new PointF(0, pT), new PointF(0, pT + cH), Color.FromArgb(130, C_GREEN), Color.FromArgb(12, C_GREEN))) g.FillPolygon(gb, poly);
+                // FillPolygon with LinearGradientBrush throws OverflowException when all Y values
+                // are identical (zero-area polygon — e.g. no data in range). Guard against it.
+                float minPtY = float.MaxValue; foreach (var pt in pts) if (pt.Y < minPtY) minPtY = pt.Y;
+                if (minPtY < pT + cH - 1f)
+                    using (var gb = new LinearGradientBrush(new PointF(0, pT), new PointF(0, pT + cH), Color.FromArgb(130, C_GREEN), Color.FromArgb(12, C_GREEN))) g.FillPolygon(gb, poly);
                 using (var lp = new Pen(C_GREEN, 2.5f)) g.DrawLines(lp, pts);
                 foreach (var pt in pts) { g.FillEllipse(new SolidBrush(C_CARD), pt.X - 4.5f, pt.Y - 4.5f, 9, 9); g.FillEllipse(new SolidBrush(C_GREEN), pt.X - 3f, pt.Y - 3f, 6, 6); }
             }
