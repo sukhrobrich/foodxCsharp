@@ -99,6 +99,16 @@ namespace WindowsFormsApp1.services
         public dbconnect()
         {
             _conn = new SqlConnection(Session.IsOnline ? _central : _local);
+
+            // SqlDataAdapter.Fill() ham ishlatganda tenant context avtomatik o'rnatilsin
+            _conn.StateChange += (sender, args) =>
+            {
+                if (args.CurrentState == System.Data.ConnectionState.Open
+                    && Session.IsOnline && Session.TenantId > 0)
+                {
+                    try { SetTenantContext(); } catch { }
+                }
+            };
         }
 
         public SqlConnection GetCon() { return _conn; }
