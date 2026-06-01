@@ -1902,11 +1902,13 @@ namespace WindowsFormsApp1.forms.order
                                 _orderNote = dr2["order_note"].ToString();
                                 if (_orderNote.Length > 0) _btnBoshqalar.BackColor = GoldBg;
 
-                                decimal.TryParse(dr2["custom_svc_fee"].ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _customSvcFee);
+                                // Bevosita decimal ga o'giramiz — .ToString() orqali o'tkazsa
+                                // rus/o'zbek lokali "10,00" ni InvariantCulture 1000 deb o'qiydi.
+                                _customSvcFee  = dr2["custom_svc_fee"]  == DBNull.Value ? 0m : Convert.ToDecimal(dr2["custom_svc_fee"]);
                                 _customSvcType = dr2["custom_svc_type"].ToString();
                                 if (string.IsNullOrEmpty(_customSvcType)) _customSvcType = "%";
 
-                                decimal.TryParse(dr2["discount_pct"].ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _discountPct);
+                                _discountPct   = dr2["discount_pct"] == DBNull.Value ? 0m : Convert.ToDecimal(dr2["discount_pct"]);
                             }
                         }
                     }
