@@ -1093,9 +1093,9 @@ namespace WindowsFormsApp1.services
         private static int DlCustomers(SqlConnection local, SqlConnection central)
         {
             int count = 0;
+            // Central API: name, phone, notes — email/address yo'q
             DataTable rows = ReadAll(central,
                 "SELECT id, ISNULL(name,'') AS name, ISNULL(phone,'') AS phone, " +
-                "  ISNULL(email,'') AS email, ISNULL(address,'') AS address, " +
                 "  ISNULL(notes,'') AS notes, ISNULL(created_at,GETDATE()) AS created_at, sync_token " +
                 "FROM customer");
             foreach (DataRow r in rows.Rows)
@@ -1105,19 +1105,17 @@ namespace WindowsFormsApp1.services
                         ?? ScalarOrNull(local, "SELECT id FROM customer WHERE id=@c", "@c", cid);
                 if (lid != null)
                     Exec(local,
-                        "UPDATE customer SET name=@n,phone=@ph,email=@em,address=@adr," +
-                        "  notes=@nt,central_id=@cid,is_synced=1 WHERE id=@id",
-                        P("@n",r["name"]),P("@ph",r["phone"]),P("@em",r["email"]),
-                        P("@adr",r["address"]),P("@nt",r["notes"]),P("@cid",cid),P("@id",lid.Value));
+                        "UPDATE customer SET name=@n,phone=@ph,notes=@nt,central_id=@cid,is_synced=1 WHERE id=@id",
+                        P("@n",r["name"]),P("@ph",r["phone"]),P("@nt",r["notes"]),
+                        P("@cid",cid),P("@id",lid.Value));
                 else
                     Exec(local,
                         "SET IDENTITY_INSERT customer ON;" +
-                        "INSERT INTO customer(id,name,phone,email,address,notes,created_at,sync_token,is_synced,central_id)" +
-                        " VALUES(@id,@n,@ph,@em,@adr,@nt,@cat,@tok,1,@id);" +
+                        "INSERT INTO customer(id,name,phone,notes,created_at,sync_token,is_synced,central_id)" +
+                        " VALUES(@id,@n,@ph,@nt,@cat,@tok,1,@id);" +
                         "SET IDENTITY_INSERT customer OFF",
-                        P("@id",cid),P("@n",r["name"]),P("@ph",r["phone"]),P("@em",r["email"]),
-                        P("@adr",r["address"]),P("@nt",r["notes"]),P("@cat",r["created_at"]),
-                        P("@tok",r["sync_token"]));
+                        P("@id",cid),P("@n",r["name"]),P("@ph",r["phone"]),P("@nt",r["notes"]),
+                        P("@cat",r["created_at"]),P("@tok",r["sync_token"]));
                 count++;
             }
             return count;
@@ -1332,10 +1330,11 @@ namespace WindowsFormsApp1.services
         private static int DlCashTransactions(SqlConnection local, SqlConnection central)
         {
             int count = 0;
+            // Local schema: type, category, amount, description, created_by, created_at, sync_token
             DataTable rows = ReadAll(central,
-                "SELECT id, ISNULL(type,'') AS type, ISNULL(amount,0) AS amount," +
-                "  ISNULL(note,'') AS note, ISNULL(created_at,GETDATE()) AS created_at," +
-                "  user_id, sync_token" +
+                "SELECT id, ISNULL(type,'') AS type, ISNULL(category,'') AS category," +
+                "  ISNULL(amount,0) AS amount, ISNULL(description,'') AS description," +
+                "  created_by, ISNULL(created_at,GETDATE()) AS created_at, sync_token" +
                 " FROM cash_transaction" +
                 " WHERE created_at >= DATEADD(YEAR,-1,GETDATE())");
             foreach (DataRow r in rows.Rows)
@@ -1344,16 +1343,19 @@ namespace WindowsFormsApp1.services
                 int? lid = ScalarOrNull(local, "SELECT id FROM cash_transaction WHERE id=@c", "@c", cid);
                 if (lid != null)
                     Exec(local,
-                        "UPDATE cash_transaction SET type=@t,amount=@amt,note=@nt,is_synced=1 WHERE id=@id",
-                        P("@t",r["type"]),P("@amt",r["amount"]),P("@nt",r["note"]),P("@id",lid.Value));
+                        "UPDATE cash_transaction SET type=@t,category=@cat2,amount=@amt," +
+                        "  description=@desc,created_by=@cb,is_synced=1 WHERE id=@id",
+                        P("@t",r["type"]),P("@cat2",r["category"]),P("@amt",r["amount"]),
+                        P("@desc",r["description"]),P("@cb",r["created_by"]),P("@id",lid.Value));
                 else
                     Exec(local,
                         "SET IDENTITY_INSERT cash_transaction ON;" +
-                        "INSERT INTO cash_transaction(id,type,amount,note,created_at,user_id,sync_token,is_synced)" +
-                        " VALUES(@id,@t,@amt,@nt,@cat,@uid,@tok,1);" +
+                        "INSERT INTO cash_transaction(id,type,category,amount,description,created_by,created_at,sync_token,is_synced)" +
+                        " VALUES(@id,@t,@cat2,@amt,@desc,@cb,@cat,@tok,1);" +
                         "SET IDENTITY_INSERT cash_transaction OFF",
-                        P("@id",cid),P("@t",r["type"]),P("@amt",r["amount"]),P("@nt",r["note"]),
-                        P("@cat",r["created_at"]),P("@uid",r["user_id"]),P("@tok",r["sync_token"]));
+                        P("@id",cid),P("@t",r["type"]),P("@cat2",r["category"]),P("@amt",r["amount"]),
+                        P("@desc",r["description"]),P("@cb",r["created_by"]),
+                        P("@cat",r["created_at"]),P("@tok",r["sync_token"]));
                 count++;
             }
             return count;

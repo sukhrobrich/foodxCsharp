@@ -55,6 +55,7 @@ CREATE TABLE [user] (
     user_category_id INT NOT NULL REFERENCES user_category(id),
     login            NVARCHAR(50)  NOT NULL,
     password         NVARCHAR(255) NOT NULL,
+    app_password     NVARCHAR(64)  NULL,
     phone_number     NVARCHAR(20)  NULL,
     created_at       DATETIME      NOT NULL DEFAULT GETDATE(),
     updated_at       DATETIME      NULL,
