@@ -56,19 +56,36 @@ namespace WindowsFormsApp1.services
             {
                 ThreadPool.QueueUserWorkItem(delegate
                 {
-                    SyncEngine.SyncResult upload = SyncEngine.SyncAll();
+                    SyncEngine.SyncResult upload   = SyncEngine.SyncAll();
                     SyncEngine.SyncResult download = SyncEngine.DownloadAll();
 
                     form.BeginInvoke(new Action(delegate
                     {
+                        var msgs = new System.Text.StringBuilder();
+                        bool hasError = false;
+
                         if (upload.Errors > 0)
-                            MessageBox.Show(
-                                "Server bilan ulanish tiklandi, lekin sinxronizatsiyada xatolik:\n" + upload.LastError,
+                        {
+                            msgs.AppendLine("⬆ Yuklashda xatolik: " + upload.LastError);
+                            hasError = true;
+                        }
+                        else if (upload.Synced > 0)
+                            msgs.AppendLine("⬆ " + upload.Synced + " ta oflayn yozuv yuklandi.");
+
+                        if (download.Errors > 0)
+                        {
+                            msgs.AppendLine("⬇ Yuklab olishda xatolik: " + download.LastError);
+                            hasError = true;
+                        }
+                        else if (download.Synced > 0)
+                            msgs.AppendLine("⬇ " + download.Synced + " ta yozuv local bazaga tushdi.");
+
+                        if (hasError)
+                            MessageBox.Show(msgs.ToString().Trim(),
                                 "FoodX — Sinxronizatsiya xatosi",
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        else if (upload.Synced > 0)
-                            MessageBox.Show(
-                                "Ulanish tiklandi!\n" + upload.Synced + " ta oflayn yozuv markaziy serverga yuklandi.",
+                        else if (msgs.Length > 0)
+                            MessageBox.Show("Ulanish tiklandi!\n" + msgs.ToString().Trim(),
                                 "FoodX — Sinxronizatsiya tugadi",
                                 MessageBoxButtons.OK, MessageBoxIcon.Information);
                         else

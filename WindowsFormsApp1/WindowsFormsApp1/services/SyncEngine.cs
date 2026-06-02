@@ -687,17 +687,28 @@ namespace WindowsFormsApp1.services
                 central = dbconnect.OpenCentralForSync(Session.TenantId);
 
                 // Har bir jadval mustaqil — biri xato bo'lsa qolganlari davom etadi
-                TryDl(() => DlSettings(local, central),          result);
-                TryDl(() => DlUserCategories(local, central),   result);
-                TryDl(() => DlUsers(local, central),            result);
-                TryDl(() => DlFoodCategories(local, central),   result);
-                TryDl(() => DlFoods(local, central),            result);
-                TryDl(() => DlPlaceCategories(local, central),  result);
-                TryDl(() => DlPlaceOuts(local, central),        result);
-                TryDl(() => DlPlaceIns(local, central),         result);
-                TryDl(() => DlPayments(local, central),         result);
-                TryDl(() => DlIngredients(local, central),      result);
-                TryDl(() => DlRecipeIngredients(local, central),result);
+                // ── Referens ma'lumotlar ──────────────────────────────────────
+                TryDl(() => DlSettings(local, central),             result);
+                TryDl(() => DlUserCategories(local, central),       result);
+                TryDl(() => DlUsers(local, central),                result);
+                TryDl(() => DlFoodCategories(local, central),       result);
+                TryDl(() => DlFoods(local, central),                result);
+                TryDl(() => DlPlaceCategories(local, central),      result);
+                TryDl(() => DlPlaceOuts(local, central),            result);
+                TryDl(() => DlPlaceIns(local, central),             result);
+                TryDl(() => DlPayments(local, central),             result);
+                TryDl(() => DlIngredients(local, central),          result);
+                TryDl(() => DlRecipeIngredients(local, central),    result);
+                // ── Tranzaksiya ma'lumotlari (so'nggi 1 yil) ─────────────────
+                TryDl(() => DlCustomers(local, central),            result);
+                TryDl(() => DlOrders(local, central),               result);
+                TryDl(() => DlOrderFoods(local, central),           result);
+                TryDl(() => DlOrderPayments(local, central),        result);
+                TryDl(() => DlOrderDebts(local, central),           result);
+                TryDl(() => DlCancellationLogs(local, central),     result);
+                TryDl(() => DlCashTransactions(local, central),     result);
+                TryDl(() => DlIngredientPurchases(local, central),  result);
+                TryDl(() => DlFoodPurchases(local, central),        result);
             }
             catch (Exception ex)
             {
@@ -1027,6 +1038,349 @@ namespace WindowsFormsApp1.services
                     "ELSE INSERT INTO settings([key],value,tenant_id) " +
                     "  VALUES(@k,@v,CAST(SESSION_CONTEXT(N'tenant_id') AS INT))",
                     P("@k", r["key"]), P("@v", r["value"]));
+                count++;
+            }
+            return count;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // YANGI DL METODLAR — tranzaksiya ma'lumotlari
+        // ═══════════════════════════════════════════════════════════════════
+
+        private static int DlCustomers(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id, ISNULL(name,'') AS name, ISNULL(phone,'') AS phone, " +
+                "  ISNULL(email,'') AS email, ISNULL(address,'') AS address, " +
+                "  ISNULL(notes,'') AS notes, ISNULL(created_at,GETDATE()) AS created_at, sync_token " +
+                "FROM customer");
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                int? lid = ScalarOrNull(local, "SELECT id FROM customer WHERE central_id=@c", "@c", cid)
+                        ?? ScalarOrNull(local, "SELECT id FROM customer WHERE id=@c", "@c", cid);
+                if (lid != null)
+                    Exec(local,
+                        "UPDATE customer SET name=@n,phone=@ph,email=@em,address=@adr," +
+                        "  notes=@nt,central_id=@cid,is_synced=1 WHERE id=@id",
+                        P("@n",r["name"]),P("@ph",r["phone"]),P("@em",r["email"]),
+                        P("@adr",r["address"]),P("@nt",r["notes"]),P("@cid",cid),P("@id",lid.Value));
+                else
+                    Exec(local,
+                        "SET IDENTITY_INSERT customer ON;" +
+                        "INSERT INTO customer(id,name,phone,email,address,notes,created_at,sync_token,is_synced,central_id)" +
+                        " VALUES(@id,@n,@ph,@em,@adr,@nt,@cat,@tok,1,@id);" +
+                        "SET IDENTITY_INSERT customer OFF",
+                        P("@id",cid),P("@n",r["name"]),P("@ph",r["phone"]),P("@em",r["email"]),
+                        P("@adr",r["address"]),P("@nt",r["notes"]),P("@cat",r["created_at"]),
+                        P("@tok",r["sync_token"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlOrders(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id, user_id, place_id, payment_id, created_at, paid," +
+                "  ISNULL(total,0) AS total," +
+                "  ISNULL(discount_amount,0) AS discount_amount," +
+                "  ISNULL(discount_pct,0) AS discount_pct," +
+                "  customer_id, ISNULL(customer_name,'') AS customer_name," +
+                "  ISNULL(delivery_phone,'') AS delivery_phone," +
+                "  ISNULL(delivery_address,'') AS delivery_address," +
+                "  ISNULL(is_delivery,0) AS is_delivery," +
+                "  ISNULL(order_note,'') AS order_note," +
+                "  ISNULL(custom_svc_fee,0) AS custom_svc_fee," +
+                "  ISNULL(custom_svc_type,'pct') AS custom_svc_type," +
+                "  payment2_id, ISNULL(payment2_amount,0) AS payment2_amount, sync_token" +
+                " FROM [order]" +
+                " WHERE created_at >= DATEADD(YEAR,-1,GETDATE())");
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                int? lid = ScalarOrNull(local, "SELECT id FROM [order] WHERE central_id=@c", "@c", cid)
+                        ?? ScalarOrNull(local, "SELECT id FROM [order] WHERE id=@c", "@c", cid);
+                if (lid != null)
+                    Exec(local,
+                        "UPDATE [order] SET paid=@paid,total=@tot,discount_amount=@disc," +
+                        "  discount_pct=@discp,payment_id=@pay,custom_svc_fee=@svf," +
+                        "  custom_svc_type=@svt,payment2_id=@p2,payment2_amount=@p2a," +
+                        "  order_note=@note,central_id=@cid,is_synced=1 WHERE id=@id",
+                        P("@paid",r["paid"]),P("@tot",r["total"]),P("@disc",r["discount_amount"]),
+                        P("@discp",r["discount_pct"]),P("@pay",r["payment_id"]),
+                        P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
+                        P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
+                        P("@note",r["order_note"]),P("@cid",cid),P("@id",lid.Value));
+                else
+                    Exec(local,
+                        "SET IDENTITY_INSERT [order] ON;" +
+                        "INSERT INTO [order](id,user_id,place_id,payment_id,created_at,paid,total," +
+                        "  discount_amount,discount_pct,customer_id,customer_name,delivery_phone," +
+                        "  delivery_address,is_delivery,order_note,custom_svc_fee,custom_svc_type," +
+                        "  payment2_id,payment2_amount,sync_token,is_synced,central_id)" +
+                        " VALUES(@id,@uid,@plid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
+                        "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@tok,1,@id);" +
+                        "SET IDENTITY_INSERT [order] OFF",
+                        P("@id",cid),P("@uid",r["user_id"]),P("@plid",r["place_id"]),
+                        P("@pay",r["payment_id"]),P("@cat",r["created_at"]),
+                        P("@paid",r["paid"]),P("@tot",r["total"]),
+                        P("@disc",r["discount_amount"]),P("@discp",r["discount_pct"]),
+                        P("@cust",r["customer_id"]),P("@custn",r["customer_name"]),
+                        P("@dph",r["delivery_phone"]),P("@dadr",r["delivery_address"]),
+                        P("@isdel",r["is_delivery"]),P("@note",r["order_note"]),
+                        P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
+                        P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
+                        P("@tok",r["sync_token"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlOrderFoods(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT f.id, f.order_id, f.food_id, f.quantity," +
+                "  ISNULL(f.note,'') AS note, f.sync_token" +
+                " FROM order_food f" +
+                " JOIN [order] o ON o.id=f.order_id" +
+                " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())");
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                int? lid = ScalarOrNull(local, "SELECT id FROM order_food WHERE id=@c", "@c", cid);
+                int orderId = Convert.ToInt32(r["order_id"]);
+                // FK: order local da bo'lishi kerak
+                int? orderLid = ScalarOrNull(local, "SELECT id FROM [order] WHERE id=@c", "@c", orderId);
+                if (orderLid == null) continue;
+
+                if (lid != null)
+                    Exec(local,
+                        "UPDATE order_food SET food_id=@fid,quantity=@qty,note=@note,is_synced=1 WHERE id=@id",
+                        P("@fid",r["food_id"]),P("@qty",r["quantity"]),
+                        P("@note",r["note"]),P("@id",lid.Value));
+                else
+                    Exec(local,
+                        "SET IDENTITY_INSERT order_food ON;" +
+                        "INSERT INTO order_food(id,order_id,food_id,quantity,note,sync_token,is_synced)" +
+                        " VALUES(@id,@oid,@fid,@qty,@note,@tok,1);" +
+                        "SET IDENTITY_INSERT order_food OFF",
+                        P("@id",cid),P("@oid",orderId),P("@fid",r["food_id"]),
+                        P("@qty",r["quantity"]),P("@note",r["note"]),P("@tok",r["sync_token"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlOrderPayments(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT op.id, op.order_id, op.payment_id, op.amount, op.sync_token" +
+                " FROM order_payments op" +
+                " JOIN [order] o ON o.id=op.order_id" +
+                " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())");
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                int orderId = Convert.ToInt32(r["order_id"]);
+                int? orderLid = ScalarOrNull(local, "SELECT id FROM [order] WHERE id=@c", "@c", orderId);
+                if (orderLid == null) continue;
+
+                int? lid = ScalarOrNull(local, "SELECT id FROM order_payments WHERE id=@c", "@c", cid);
+                if (lid != null)
+                    Exec(local,
+                        "UPDATE order_payments SET payment_id=@pid,amount=@amt,is_synced=1 WHERE id=@id",
+                        P("@pid",r["payment_id"]),P("@amt",r["amount"]),P("@id",lid.Value));
+                else
+                    Exec(local,
+                        "SET IDENTITY_INSERT order_payments ON;" +
+                        "INSERT INTO order_payments(id,order_id,payment_id,amount,sync_token,is_synced)" +
+                        " VALUES(@id,@oid,@pid,@amt,@tok,1);" +
+                        "SET IDENTITY_INSERT order_payments OFF",
+                        P("@id",cid),P("@oid",orderId),P("@pid",r["payment_id"]),
+                        P("@amt",r["amount"]),P("@tok",r["sync_token"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlOrderDebts(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT d.id, d.order_id," +
+                "  ISNULL(d.debtor_name,'') AS debtor_name, ISNULL(d.debtor_phone,'') AS debtor_phone," +
+                "  ISNULL(d.amount,0) AS amount, ISNULL(d.is_paid,0) AS is_paid," +
+                "  d.paid_at, ISNULL(d.debt_note,'') AS debt_note," +
+                "  ISNULL(d.created_at,GETDATE()) AS created_at, d.sync_token" +
+                " FROM order_debt d" +
+                " JOIN [order] o ON o.id=d.order_id" +
+                " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())");
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                int orderId = Convert.ToInt32(r["order_id"]);
+                int? orderLid = ScalarOrNull(local, "SELECT id FROM [order] WHERE id=@c", "@c", orderId);
+                if (orderLid == null) continue;
+
+                int? lid = ScalarOrNull(local, "SELECT id FROM order_debt WHERE id=@c", "@c", cid);
+                if (lid != null)
+                    Exec(local,
+                        "UPDATE order_debt SET debtor_name=@dn,debtor_phone=@dph,amount=@amt," +
+                        "  is_paid=@ip,paid_at=@pat,debt_note=@nt,is_synced=1 WHERE id=@id",
+                        P("@dn",r["debtor_name"]),P("@dph",r["debtor_phone"]),
+                        P("@amt",r["amount"]),P("@ip",r["is_paid"]),P("@pat",r["paid_at"]),
+                        P("@nt",r["debt_note"]),P("@id",lid.Value));
+                else
+                    Exec(local,
+                        "SET IDENTITY_INSERT order_debt ON;" +
+                        "INSERT INTO order_debt(id,order_id,debtor_name,debtor_phone,amount,is_paid," +
+                        "  paid_at,debt_note,created_at,sync_token,is_synced)" +
+                        " VALUES(@id,@oid,@dn,@dph,@amt,@ip,@pat,@nt,@cat,@tok,1);" +
+                        "SET IDENTITY_INSERT order_debt OFF",
+                        P("@id",cid),P("@oid",orderId),P("@dn",r["debtor_name"]),
+                        P("@dph",r["debtor_phone"]),P("@amt",r["amount"]),P("@ip",r["is_paid"]),
+                        P("@pat",r["paid_at"]),P("@nt",r["debt_note"]),P("@cat",r["created_at"]),
+                        P("@tok",r["sync_token"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlCancellationLogs(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT l.id, l.order_id, l.food_id, ISNULL(l.food_name,'') AS food_name," +
+                "  ISNULL(l.food_category,'') AS food_category, ISNULL(l.cancelled_qty,0) AS cancelled_qty," +
+                "  ISNULL(l.cancelled_by,'') AS cancelled_by," +
+                "  ISNULL(l.cancelled_at,GETDATE()) AS cancelled_at, l.sync_token" +
+                " FROM order_cancellation_log l" +
+                " JOIN [order] o ON o.id=l.order_id" +
+                " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())");
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                int orderId = Convert.ToInt32(r["order_id"]);
+                int? orderLid = ScalarOrNull(local, "SELECT id FROM [order] WHERE id=@c", "@c", orderId);
+                if (orderLid == null) continue;
+
+                int? lid = ScalarOrNull(local, "SELECT id FROM order_cancellation_log WHERE id=@c", "@c", cid);
+                if (lid == null)
+                    Exec(local,
+                        "SET IDENTITY_INSERT order_cancellation_log ON;" +
+                        "INSERT INTO order_cancellation_log(id,order_id,food_id,food_name,food_category," +
+                        "  cancelled_qty,cancelled_by,cancelled_at,sync_token,is_synced)" +
+                        " VALUES(@id,@oid,@fid,@fn,@fc,@qty,@by,@at,@tok,1);" +
+                        "SET IDENTITY_INSERT order_cancellation_log OFF",
+                        P("@id",cid),P("@oid",orderId),P("@fid",r["food_id"]),
+                        P("@fn",r["food_name"]),P("@fc",r["food_category"]),
+                        P("@qty",r["cancelled_qty"]),P("@by",r["cancelled_by"]),
+                        P("@at",r["cancelled_at"]),P("@tok",r["sync_token"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlCashTransactions(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id, ISNULL(type,'') AS type, ISNULL(amount,0) AS amount," +
+                "  ISNULL(note,'') AS note, ISNULL(created_at,GETDATE()) AS created_at," +
+                "  user_id, sync_token" +
+                " FROM cash_transaction" +
+                " WHERE created_at >= DATEADD(YEAR,-1,GETDATE())");
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                int? lid = ScalarOrNull(local, "SELECT id FROM cash_transaction WHERE id=@c", "@c", cid);
+                if (lid != null)
+                    Exec(local,
+                        "UPDATE cash_transaction SET type=@t,amount=@amt,note=@nt,is_synced=1 WHERE id=@id",
+                        P("@t",r["type"]),P("@amt",r["amount"]),P("@nt",r["note"]),P("@id",lid.Value));
+                else
+                    Exec(local,
+                        "SET IDENTITY_INSERT cash_transaction ON;" +
+                        "INSERT INTO cash_transaction(id,type,amount,note,created_at,user_id,sync_token,is_synced)" +
+                        " VALUES(@id,@t,@amt,@nt,@cat,@uid,@tok,1);" +
+                        "SET IDENTITY_INSERT cash_transaction OFF",
+                        P("@id",cid),P("@t",r["type"]),P("@amt",r["amount"]),P("@nt",r["note"]),
+                        P("@cat",r["created_at"]),P("@uid",r["user_id"]),P("@tok",r["sync_token"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlIngredientPurchases(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id, ingredient_id, ISNULL(quantity,0) AS quantity," +
+                "  ISNULL(price_per_unit,0) AS price_per_unit, ISNULL(total_price,0) AS total_price," +
+                "  ISNULL(purchased_at,GETDATE()) AS purchased_at," +
+                "  ISNULL(notes,'') AS notes, sync_token" +
+                " FROM ingredient_purchase" +
+                " WHERE purchased_at >= DATEADD(YEAR,-1,GETDATE())");
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                int? lid = ScalarOrNull(local, "SELECT id FROM ingredient_purchase WHERE id=@c", "@c", cid);
+                if (lid != null)
+                    Exec(local,
+                        "UPDATE ingredient_purchase SET quantity=@qty,price_per_unit=@pp," +
+                        "  total_price=@tp,notes=@nt,is_synced=1 WHERE id=@id",
+                        P("@qty",r["quantity"]),P("@pp",r["price_per_unit"]),
+                        P("@tp",r["total_price"]),P("@nt",r["notes"]),P("@id",lid.Value));
+                else
+                    Exec(local,
+                        "SET IDENTITY_INSERT ingredient_purchase ON;" +
+                        "INSERT INTO ingredient_purchase(id,ingredient_id,quantity,price_per_unit," +
+                        "  total_price,purchased_at,notes,sync_token,is_synced)" +
+                        " VALUES(@id,@iid,@qty,@pp,@tp,@pat,@nt,@tok,1);" +
+                        "SET IDENTITY_INSERT ingredient_purchase OFF",
+                        P("@id",cid),P("@iid",r["ingredient_id"]),P("@qty",r["quantity"]),
+                        P("@pp",r["price_per_unit"]),P("@tp",r["total_price"]),
+                        P("@pat",r["purchased_at"]),P("@nt",r["notes"]),P("@tok",r["sync_token"]));
+                count++;
+            }
+            return count;
+        }
+
+        private static int DlFoodPurchases(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id, food_id, ISNULL(quantity,0) AS quantity," +
+                "  ISNULL(price_per_unit,0) AS price_per_unit, ISNULL(total_price,0) AS total_price," +
+                "  ISNULL(purchased_at,GETDATE()) AS purchased_at," +
+                "  ISNULL(notes,'') AS notes, sync_token" +
+                " FROM food_purchase" +
+                " WHERE purchased_at >= DATEADD(YEAR,-1,GETDATE())");
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                int? lid = ScalarOrNull(local, "SELECT id FROM food_purchase WHERE id=@c", "@c", cid);
+                if (lid != null)
+                    Exec(local,
+                        "UPDATE food_purchase SET quantity=@qty,price_per_unit=@pp," +
+                        "  total_price=@tp,notes=@nt,is_synced=1 WHERE id=@id",
+                        P("@qty",r["quantity"]),P("@pp",r["price_per_unit"]),
+                        P("@tp",r["total_price"]),P("@nt",r["notes"]),P("@id",lid.Value));
+                else
+                    Exec(local,
+                        "SET IDENTITY_INSERT food_purchase ON;" +
+                        "INSERT INTO food_purchase(id,food_id,quantity,price_per_unit," +
+                        "  total_price,purchased_at,notes,sync_token,is_synced)" +
+                        " VALUES(@id,@fid,@qty,@pp,@tp,@pat,@nt,@tok,1);" +
+                        "SET IDENTITY_INSERT food_purchase OFF",
+                        P("@id",cid),P("@fid",r["food_id"]),P("@qty",r["quantity"]),
+                        P("@pp",r["price_per_unit"]),P("@tp",r["total_price"]),
+                        P("@pat",r["purchased_at"]),P("@nt",r["notes"]),P("@tok",r["sync_token"]));
                 count++;
             }
             return count;

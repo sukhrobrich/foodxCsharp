@@ -1314,7 +1314,16 @@ namespace WindowsFormsApp1.forms.settings
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
-                    SyncEngine.DownloadAll();
+                    var dlResult = SyncEngine.DownloadAll();
+                    if (dlResult.Errors > 0)
+                        MessageBox.Show(
+                            "Ma'lumotlar yuklab olinayotganda xatolik:\n" + dlResult.LastError +
+                            "\n\nYuklab olinganlar: " + dlResult.Synced + " ta",
+                            "Yuklab olish xatosi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    else
+                        MessageBox.Show(
+                            "Muvaffaqiyatli! " + dlResult.Synced + " ta yozuv local bazaga tushdi.",
+                            "Yuklab olindi", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     Session.IsOnline     = false;
                     Session.ForceOffline = true;
                     PrintService.SetSetting("connection_mode", "offline");
