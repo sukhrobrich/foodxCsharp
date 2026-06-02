@@ -1566,6 +1566,35 @@ namespace WindowsFormsApp1.forms.order
 
         private void ShowServiceFeeDialog()
         {
+            decimal food = GetFoodTotal();
+
+            // Saqlangan qiymat UZS mi yoki foiz mi?
+            bool savedAsUzs = (_customSvcType == "UZS" || _customSvcType == "pct");
+
+            // Boshlang'ich radio holati: UZS saqlangan bo'lsa → So'm, aks holda Foiz
+            bool startPct = !savedAsUzs;
+
+            var rbPct = new RadioButton { Text = "Foiz (%)",   Location = new Point(14, 14),  Checked = startPct,  Font = new Font("Segoe UI", 10), AutoSize = true };
+            var rbSum = new RadioButton { Text = "So'm (UZS)", Location = new Point(130, 14), Checked = !startPct, Font = new Font("Segoe UI", 10), AutoSize = true };
+
+            // Boshlang'ich qiymat: hozirgi rejimga to'g'ri keluvchi format
+            string InitialText()
+            {
+                if (_customSvcFee <= 0) return "";
+                if (savedAsUzs)
+                    // DB da UZS → So'm rejimida: shu qiymat; Foiz rejimida: %ga aylantir
+                    return startPct && food > 0
+                        ? Math.Round(_customSvcFee / food * 100, 2)
+                              .ToString("G29", System.Globalization.CultureInfo.InvariantCulture)
+                        : _customSvcFee.ToString("G29", System.Globalization.CultureInfo.InvariantCulture);
+                else
+                    // DB da foiz → Foiz rejimida: shu qiymat; So'm rejimida: UZS ga aylantir
+                    return !startPct && food > 0
+                        ? Math.Round(food * _customSvcFee / 100, 0)
+                              .ToString("G29", System.Globalization.CultureInfo.InvariantCulture)
+                        : _customSvcFee.ToString("G29", System.Globalization.CultureInfo.InvariantCulture);
+            }
+
             Form dlg = new Form
             {
                 Text = "Xizmat haqi", Width = 320, Height = 220,
@@ -1573,16 +1602,43 @@ namespace WindowsFormsApp1.forms.order
                 FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
                 BackColor = Color.FromArgb(249, 249, 251)
             };
-            var rbPct = new RadioButton { Text = "Foiz (%)",   Location = new Point(14, 14),  Checked = _customSvcType != "UZS", Font = new Font("Segoe UI", 10), AutoSize = true };
-            var rbSum = new RadioButton { Text = "So'm (UZS)", Location = new Point(130, 14), Checked = _customSvcType == "UZS", Font = new Font("Segoe UI", 10), AutoSize = true };
+
             dlg.Controls.Add(new Label { Text = "Miqdor:", Location = new Point(14, 46), AutoSize = true, Font = new Font("Segoe UI", 9), ForeColor = TextMuted });
+
             var txtAmt = new TextBox
             {
-                Text = _customSvcFee > 0 ? _customSvcFee.ToString("G29", System.Globalization.CultureInfo.InvariantCulture) : "",
+                Text = InitialText(),
                 Location = new Point(14, 63), Width = 272, Height = 30,
                 Font = new Font("Segoe UI", 10), BorderStyle = BorderStyle.FixedSingle
             };
+
             dlg.Controls.Add(new Label { Text = "Bo'sh qoldirsa, sozlamalardagi standart xizmat haqi ishlatiladi.", Location = new Point(14, 100), Width = 272, Height = 32, Font = new Font("Segoe UI", 8), ForeColor = TextMuted, AutoSize = false });
+
+            // Rejim almashganda qiymatni avtomatik konvertatsiya qilish
+            // (CheckedChanged handlerlar Checked=true bo'lganda ishga tushadi)
+            rbPct.CheckedChanged += (s, e) =>
+            {
+                if (!rbPct.Checked) return; // Unchecked eventini o'tkazib yuboramiz
+                // So'm → Foiz: kiritilgan UZS ni foizga aylantir
+                string raw = txtAmt.Text.Trim().Replace(',', '.');
+                if (food > 0 && decimal.TryParse(raw,
+                        System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out decimal uzs) && uzs > 0)
+                    txtAmt.Text = Math.Round(uzs / food * 100, 2)
+                        .ToString("G29", System.Globalization.CultureInfo.InvariantCulture);
+            };
+            rbSum.CheckedChanged += (s, e) =>
+            {
+                if (!rbSum.Checked) return; // Unchecked eventini o'tkazib yuboramiz
+                // Foiz → So'm: kiritilgan foizni UZS ga aylantir
+                string raw = txtAmt.Text.Trim().Replace(',', '.');
+                if (food > 0 && decimal.TryParse(raw,
+                        System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out decimal pct) && pct > 0)
+                    txtAmt.Text = Math.Round(food * pct / 100, 0)
+                        .ToString("G29", System.Globalization.CultureInfo.InvariantCulture);
+            };
+
             var btnOk = new Button { Text = "Qo'llash", Location = new Point(14, 138), Width = 272, Height = 42, FlatStyle = FlatStyle.Flat, BackColor = Gold, ForeColor = Color.White, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
             btnOk.FlatAppearance.BorderSize = 0;
             btnOk.Click += (s, e) =>
@@ -1602,6 +1658,7 @@ namespace WindowsFormsApp1.forms.order
                 RecalcTotal();
                 dlg.DialogResult = DialogResult.OK;
             };
+
             dlg.Controls.AddRange(new Control[] { rbPct, rbSum, txtAmt, btnOk });
             dlg.ShowDialog(this);
         }
