@@ -942,22 +942,52 @@ namespace WindowsFormsApp1.services
 
         private static int DlIngredients(SqlConnection local, SqlConnection central)
         {
+            // synced_qty ustunini yaratish (agar mavjud bo'lmasa) — EXEC orqali runtime compile
+            try
+            {
+                using (var cmd = new SqlCommand(
+                    "IF NOT EXISTS(SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('ingredient') AND name='synced_qty')" +
+                    " ALTER TABLE ingredient ADD synced_qty DECIMAL(18,4) NULL", local))
+                    cmd.ExecuteNonQuery();
+                using (var cmd = new SqlCommand(
+                    "UPDATE ingredient SET synced_qty=quantity WHERE synced_qty IS NULL", local))
+                    cmd.ExecuteNonQuery();
+            }
+            catch { }
+
+            // synced_qty ustuni hozir mavjudmi?
+            bool hasSyncedQty;
+            using (var chk = new SqlCommand(
+                "SELECT COUNT(1) FROM sys.columns WHERE object_id=OBJECT_ID('ingredient') AND name='synced_qty'", local))
+                hasSyncedQty = Convert.ToInt32(chk.ExecuteScalar()) > 0;
+
             int count = 0;
             DataTable rows = ReadAll(central,
                 "SELECT id,name,unit,quantity,price_per_unit,min_quantity FROM ingredient");
             foreach (DataRow r in rows.Rows)
             {
-                // FIX: synced_qty = yuklab olingan miqdor (delta hisoblash uchun asos)
-                Exec(local,
-                    "IF EXISTS(SELECT 1 FROM ingredient WHERE id=@id)" +
-                    " UPDATE ingredient SET name=@n,unit=@u,quantity=@q,synced_qty=@q," +
-                    "   price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT ingredient ON;" +
-                    " INSERT INTO ingredient(id,name,unit,quantity,synced_qty,price_per_unit,min_quantity)" +
-                    "   VALUES(@id,@n,@u,@q,@q,@pp,@mq);" +
-                    " SET IDENTITY_INSERT ingredient OFF END",
-                    P("@id",r["id"]),P("@n",r["name"]),P("@u",r["unit"]),
-                    P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]));
+                if (hasSyncedQty)
+                    Exec(local,
+                        "IF EXISTS(SELECT 1 FROM ingredient WHERE id=@id)" +
+                        " UPDATE ingredient SET name=@n,unit=@u,quantity=@q,synced_qty=@q," +
+                        "   price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
+                        " ELSE BEGIN SET IDENTITY_INSERT ingredient ON;" +
+                        " INSERT INTO ingredient(id,name,unit,quantity,synced_qty,price_per_unit,min_quantity)" +
+                        "   VALUES(@id,@n,@u,@q,@q,@pp,@mq);" +
+                        " SET IDENTITY_INSERT ingredient OFF END",
+                        P("@id",r["id"]),P("@n",r["name"]),P("@u",r["unit"]),
+                        P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]));
+                else
+                    Exec(local,
+                        "IF EXISTS(SELECT 1 FROM ingredient WHERE id=@id)" +
+                        " UPDATE ingredient SET name=@n,unit=@u,quantity=@q," +
+                        "   price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
+                        " ELSE BEGIN SET IDENTITY_INSERT ingredient ON;" +
+                        " INSERT INTO ingredient(id,name,unit,quantity,price_per_unit,min_quantity)" +
+                        "   VALUES(@id,@n,@u,@q,@pp,@mq);" +
+                        " SET IDENTITY_INSERT ingredient OFF END",
+                        P("@id",r["id"]),P("@n",r["name"]),P("@u",r["unit"]),
+                        P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]));
                 count++;
             }
             return count;
@@ -989,6 +1019,13 @@ namespace WindowsFormsApp1.services
         // delta = joriy_qty - synced_qty → central ga qo'shiladi/ayiriladi.
         private static int SyncIngredientQuantities(SqlConnection local, SqlConnection central)
         {
+            // synced_qty yo'q bo'lsa delta 0 — xavfsiz skip
+            bool hasSyncedQty;
+            using (var chk = new SqlCommand(
+                "SELECT COUNT(1) FROM sys.columns WHERE object_id=OBJECT_ID('ingredient') AND name='synced_qty'", local))
+                hasSyncedQty = Convert.ToInt32(chk.ExecuteScalar()) > 0;
+            if (!hasSyncedQty) return 0;
+
             int count = 0;
             DataTable rows = ReadAll(local,
                 "SELECT id, quantity, ISNULL(synced_qty, quantity) AS synced_qty, " +

@@ -59,7 +59,7 @@ namespace WindowsFormsApp1.services
             return DetectLocalServer();
         }
 
-        // Mavjud SQL Server instansini avtomatik topadi (master ga ulanib tekshiradi)
+        // Mavjud SQL Server instansini avtomatik topadi
         private static string DetectLocalServer()
         {
             string[] candidates = {
@@ -68,28 +68,42 @@ namespace WindowsFormsApp1.services
                 @".",
                 @"localhost",
                 System.Environment.MachineName,
-                @"(LocalDB)\MSSQLLocalDB",   // oxirgi — faqat developer mashinasida
+                @"(LocalDB)\MSSQLLocalDB",
             };
+
+            // Avval Integrated Security bilan, keyin sa login bilan urinib ko'ramiz
+            string saPassword = "Ac0323301";
 
             foreach (string ds in candidates)
             {
+                // Integrated Security
                 try
                 {
                     string test = string.Format(
                         "Data Source={0};Initial Catalog=master;Integrated Security=True;" +
-                        "TrustServerCertificate=True;Connect Timeout=2", ds);
-                    using (var c = new SqlConnection(test))
-                    {
-                        c.Open();
-                        return string.Format(
-                            "Data Source={0};Initial Catalog=FoodX;Integrated Security=True;" +
-                            "TrustServerCertificate=True", ds);
-                    }
+                        "TrustServerCertificate=True;Connect Timeout=3", ds);
+                    using (var c = new SqlConnection(test)) { c.Open(); }
+                    return string.Format(
+                        "Data Source={0};Initial Catalog=FoodX;Integrated Security=True;" +
+                        "TrustServerCertificate=True", ds);
+                }
+                catch { }
+
+                // SQL Auth (sa) — Express/Developer serverlar uchun
+                try
+                {
+                    string test = string.Format(
+                        "Data Source={0};Initial Catalog=master;User ID=sa;Password={1};" +
+                        "TrustServerCertificate=True;Encrypt=False;Connect Timeout=3", ds, saPassword);
+                    using (var c = new SqlConnection(test)) { c.Open(); }
+                    return string.Format(
+                        "Data Source={0};Initial Catalog=FoodX;User ID=sa;Password={1};" +
+                        "TrustServerCertificate=True;Encrypt=False", ds, saPassword);
                 }
                 catch { }
             }
 
-            // Hech narsa topilmasa — LocalDB ni default qilib qaytaramiz
+            // Default — LocalDB
             return @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=FoodX;" +
                    @"Integrated Security=True;TrustServerCertificate=True";
         }
@@ -155,15 +169,23 @@ namespace WindowsFormsApp1.services
 
         public static bool CheckLocal()
         {
-            try
+            // LocalDB ishga tushishi uchun 2 ta urinish (birinchi ulanishda sekin bo'lishi mumkin)
+            for (int attempt = 0; attempt < 2; attempt++)
             {
-                using (var c = new SqlConnection(_local + ";Connect Timeout=3"))
+                try
                 {
-                    c.Open();
-                    return true;
+                    using (var c = new SqlConnection(_local + ";Connect Timeout=8"))
+                    {
+                        c.Open();
+                        return true;
+                    }
+                }
+                catch
+                {
+                    if (attempt == 0) System.Threading.Thread.Sleep(1500);
                 }
             }
-            catch { return false; }
+            return false;
         }
 
         // Mahalliy bazani tekshiradi; yo'q bo'lsa install_local_db.sql dan yaratadi.
@@ -267,8 +289,9 @@ namespace WindowsFormsApp1.services
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='payment2_id') ALTER TABLE [order] ADD payment2_id INT NULL",
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='payment2_amount') ALTER TABLE [order] ADD payment2_amount DECIMAL(18,2) NULL",
 
-                        // ingredient — delta sync uchun
-                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='synced_qty') BEGIN ALTER TABLE ingredient ADD synced_qty DECIMAL(18,4) NULL; UPDATE ingredient SET synced_qty=quantity WHERE synced_qty IS NULL; END",
+                        // ingredient — delta sync uchun (EXEC ishlatamiz — runtime kompilatsiya)
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='synced_qty') ALTER TABLE ingredient ADD synced_qty DECIMAL(18,4) NULL",
+                        "EXEC('UPDATE ingredient SET synced_qty = quantity WHERE synced_qty IS NULL')",
                     };
                     foreach (string sql in schemaMigrations)
                         using (var cmd = new SqlCommand(sql, c))
