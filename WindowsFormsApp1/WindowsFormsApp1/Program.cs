@@ -145,31 +145,55 @@ namespace WindowsFormsApp1
             Form dlg = new Form
             {
                 Text            = "FoodX — Tiklash",
-                Size            = new Size(380, 120),
+                Size            = new Size(400, 140),
                 StartPosition   = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 ControlBox      = false,
                 BackColor       = Color.White
             };
+
             Label lbl = new Label
             {
-                Text      = "Markaziy serverdan ma'lumotlar yuklanmoqda...\nIltimos kuting.",
-                Dock      = DockStyle.Fill,
+                Text      = "⏳  Markaziy serverdan ma'lumotlar yuklanmoqda...",
+                AutoSize  = false,
+                Dock      = DockStyle.Top,
+                Height    = 56,
                 TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
                 Font      = new Font("Segoe UI", 10)
             };
+            Label lbl2 = new Label
+            {
+                Text      = "Iltimos kuting. Bu bir necha soniya oladi.",
+                AutoSize  = false,
+                Dock      = DockStyle.Top,
+                Height    = 28,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Font      = new Font("Segoe UI", 8.5f),
+                ForeColor = Color.FromArgb(100, 116, 139)
+            };
             dlg.Controls.Add(lbl);
+            dlg.Controls.Add(lbl2);
             dlg.Show();
             Application.DoEvents();
 
             try
             {
-                // Avval reference jadvallar va tranzaksiyalarni yuklaymiz
-                SyncEngine.DownloadAll();
+                var result = SyncEngine.DownloadAll();
 
-                lbl.Text = "Tiklash yakunlandi. Ishga tushirilmoqda...";
-                Application.DoEvents();
-                System.Threading.Thread.Sleep(800);
+                if (result.Errors > 0 && result.Synced == 0)
+                {
+                    // Hech narsa yuklanmadi — xatolikni ko'rsatamiz
+                    lbl.Text = "⚠  Yuklanishda xatolik: " + result.LastError;
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(2000);
+                }
+                else
+                {
+                    lbl.Text  = "✓  Tiklash yakunlandi!";
+                    lbl2.Text = result.Synced + " ta yozuv yuklandi.";
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(600);
+                }
             }
             catch (Exception ex)
             {
@@ -224,27 +248,24 @@ namespace WindowsFormsApp1
             catch { return false; }
         }
 
+        // Lokal bazada kamida bitta foydalanuvchi borligini tekshiradi.
+        // Session.IsOnline vaqtincha false — local DB dan to'g'ri o'qish uchun.
         static bool IsAdminExists()
         {
+            bool prevOnline = Session.IsOnline;
+            Session.IsOnline = false;
             try
             {
                 var db = new dbconnect();
                 db.OpenCon();
-                // Admin mavjudligini login='admin' YOKI role_type='admin' bo'yicha tekshirish
                 int n = 0;
-                using (var cmd = new SqlCommand(
-                    @"SELECT COUNT(*) FROM [user] u
-                      LEFT JOIN user_category uc ON uc.id = u.user_category_id
-                      WHERE LOWER(u.login) = 'admin'
-                         OR LOWER(ISNULL(uc.role_type, LOWER(uc.name))) = 'admin'",
-                    db.GetCon()))
-                {
+                using (var cmd = new SqlCommand("SELECT COUNT(*) FROM [user]", db.GetCon()))
                     n = (int)cmd.ExecuteScalar();
-                }
                 db.CloseCon();
                 return n > 0;
             }
             catch { return false; }
+            finally { Session.IsOnline = prevOnline; }
         }
     }
 }
