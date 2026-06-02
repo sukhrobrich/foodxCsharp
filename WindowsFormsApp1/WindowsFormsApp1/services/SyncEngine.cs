@@ -62,6 +62,9 @@ namespace WindowsFormsApp1.services
                 return result;
             }
 
+            // Har sync/download oldidan lokal sxemani yangilash
+            dbconnect.FixLocalDefaults();
+
             SqlConnection local   = null;
             SqlConnection central = null;
             try
@@ -678,6 +681,9 @@ namespace WindowsFormsApp1.services
         {
             var result = new SyncResult();
             if (!Session.IsOnline || Session.TenantId == 0) return result;
+
+            // Har sync/download oldidan lokal sxemani yangilash
+            dbconnect.FixLocalDefaults();
 
             SqlConnection local   = null;
             SqlConnection central = null;
