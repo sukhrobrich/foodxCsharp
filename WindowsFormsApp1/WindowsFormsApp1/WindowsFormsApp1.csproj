@@ -150,7 +150,6 @@
     <Compile Include="services\PrintService.cs" />
     <Compile Include="services\LicenseService.cs" />
     <Compile Include="services\SyncEngine.cs" />
-    <Compile Include="services\SyncQueueHelper.cs" />
     <Compile Include="services\SyncService.cs" />
     <Compile Include="forms\license\LicenseLoginForm.cs" />
     <Compile Include="forms\order\OrdersPanel.cs">

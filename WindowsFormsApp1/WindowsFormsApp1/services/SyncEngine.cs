@@ -1755,4 +1755,65 @@ namespace WindowsFormsApp1.services
             return new SqlParameter(name, value ?? (object)DBNull.Value);
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SyncQueueHelper — har bir write operatsiyasidan keyin chaqiriladi
+    // ═══════════════════════════════════════════════════════════════════════
+    public static class SyncQueueHelper
+    {
+        public const string Orders              = "Orders";
+        public const string OrderFood           = "OrderFood";
+        public const string OrderPayments       = "OrderPayments";
+        public const string OrderDebts          = "OrderDebts";
+        public const string CancellationLogs    = "CancellationLogs";
+        public const string CashTransactions    = "CashTransactions";
+        public const string Customers           = "Customers";
+        public const string IngredientPurchases = "IngredientPurchases";
+        public const string FoodPurchases       = "FoodPurchases";
+
+        public static void Add(string entityName, int entityId,
+                               string actionType = "Insert")
+        {
+            try
+            {
+                using (var conn = dbconnect.OpenLocalForSync())
+                using (var cmd = new System.Data.SqlClient.SqlCommand(
+                    "INSERT INTO SyncQueue(EntityName,EntityId,ActionType,IsSynced,CreatedAt)" +
+                    " VALUES(@en,@eid,@at,0,GETDATE())", conn))
+                {
+                    cmd.Parameters.AddWithValue("@en",  entityName);
+                    cmd.Parameters.AddWithValue("@eid", entityId);
+                    cmd.Parameters.AddWithValue("@at",  actionType);
+                    cmd.ExecuteNonQuery();
+                }
+                if (Session.IsOnline && Session.TenantId > 0)
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.ProcessSyncQueue());
+            }
+            catch { }
+        }
+
+        public static void AddBatch(
+            params (string entity, int id, string action)[] items)
+        {
+            try
+            {
+                using (var conn = dbconnect.OpenLocalForSync())
+                {
+                    foreach (var (entity, id, action) in items)
+                    using (var cmd = new System.Data.SqlClient.SqlCommand(
+                        "INSERT INTO SyncQueue(EntityName,EntityId,ActionType,IsSynced,CreatedAt)" +
+                        " VALUES(@en,@eid,@at,0,GETDATE())", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@en",  entity);
+                        cmd.Parameters.AddWithValue("@eid", id);
+                        cmd.Parameters.AddWithValue("@at",  action);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+                if (Session.IsOnline && Session.TenantId > 0)
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.ProcessSyncQueue());
+            }
+            catch { }
+        }
+    }
 }
