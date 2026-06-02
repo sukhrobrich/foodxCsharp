@@ -244,6 +244,17 @@ namespace WindowsFormsApp1.services
                         END", c))
                     { try { cmd.ExecuteNonQuery(); } catch { } }
 
+                    // FIX: ingredient.synced_qty ustunini qo'shish (delta sync uchun)
+                    using (var cmd = new SqlCommand(@"
+                        IF EXISTS(SELECT 1 FROM sys.objects WHERE object_id=OBJECT_ID(N'ingredient') AND type=N'U')
+                        AND NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='synced_qty')
+                        BEGIN
+                            ALTER TABLE ingredient ADD synced_qty DECIMAL(18,4) NULL;
+                            UPDATE ingredient SET synced_qty = quantity WHERE synced_qty IS NULL;
+                        END", c))
+                    { try { cmd.ExecuteNonQuery(); } catch { } }
+
                     string[] fixes = {
                         // [order].is_synced default 1 → 0
                         "IF EXISTS (SELECT 1 FROM sys.default_constraints dc " +

@@ -34,6 +34,8 @@ namespace WindowsFormsApp1.services
                     "UPDATE cash_transaction        SET is_synced=0",
                     "UPDATE ingredient_purchase     SET is_synced=0",
                     "UPDATE food_purchase           SET is_synced=0",
+                    // FIX: synced_qty ni 0 ga reset — to'liq qayta yuklash uchun
+                    "UPDATE ingredient SET synced_qty=0 WHERE synced_qty IS NOT NULL",
                 };
                 foreach (string sql in resets)
                     using (var cmd = new SqlCommand(sql, local)) cmd.ExecuteNonQuery();
@@ -89,8 +91,9 @@ namespace WindowsFormsApp1.services
                 TryUl(() => SyncOrderDebts(local, central),           result);
                 TryUl(() => SyncCancellationLogs(local, central),     result);
                 TryUl(() => SyncCashTransactions(local, central),     result);
-                // Ingredient miqdorlarini markaziy serverga yuklash
                 TryUl(() => SyncIngredientQuantities(local, central), result);
+                // FIX: Oflayn o'zgartirilgan sozlamalarni central ga yuklash
+                TryUl(() => SyncSettings(local, central),             result);
             }
             catch (Exception ex)
             {
@@ -238,18 +241,21 @@ namespace WindowsFormsApp1.services
         private static int SyncRefPlaceIns(SqlConnection local, SqlConnection central)
         {
             int count = 0;
+            // FIX: empty va user_id ni sync qilmaymiz — ular real-vaqt holati,
+            // mobil yoki online rejim tomonidan boshqariladi. Overwrite qilish
+            // faol buyurtmalarni o'chirishi mumkin edi.
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,place_out_id,room_name,empty,created_at,user_id,price FROM place_in").Rows)
+                "SELECT id,place_out_id,room_name,created_at,price FROM place_in").Rows)
             {
                 Exec(central,
                     "IF EXISTS(SELECT 1 FROM place_in WHERE id=@id)" +
-                    " UPDATE place_in SET place_out_id=@po,room_name=@rn,empty=@e,user_id=@uid,price=@pr WHERE id=@id" +
+                    " UPDATE place_in SET place_out_id=@po,room_name=@rn,price=@pr WHERE id=@id" +
                     " ELSE BEGIN SET IDENTITY_INSERT place_in ON;" +
-                    " INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,user_id,price)" +
-                    " VALUES(@id,@po,@rn,@e,@ca,@uid,@pr);" +
+                    " INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,price)" +
+                    " VALUES(@id,@po,@rn,'YES',@ca,@pr);" +
                     " SET IDENTITY_INSERT place_in OFF END",
                     P("@id",r["id"]),P("@po",r["place_out_id"]),P("@rn",r["room_name"]),
-                    P("@e",r["empty"]),P("@ca",r["created_at"]),P("@uid",r["user_id"]),P("@pr",r["price"]));
+                    P("@ca",r["created_at"]),P("@pr",r["price"]));
                 count++;
             }
             return count;
@@ -436,6 +442,22 @@ namespace WindowsFormsApp1.services
                         P("@tok",   tok));
                     centralId = Convert.ToInt32(inserted);
                 }
+                else
+                {
+                    // FIX: Mavjud buyurtmani yangilash (avval bu blok yo'q edi)
+                    Exec(central,
+                        "UPDATE [order] SET " +
+                        "  paid=@paid, total=@tot, discount_amount=@disc, discount_pct=@discp, " +
+                        "  payment_id=@pay, custom_svc_fee=@svf, custom_svc_type=@svt, " +
+                        "  order_note=@note, payment2_id=@p2, payment2_amount=@p2a " +
+                        "WHERE id=@cid",
+                        P("@paid",  r["paid"]),              P("@tot",   r["total"]),
+                        P("@disc",  r["discount_amount"]),   P("@discp", r["discount_pct"]),
+                        P("@pay",   r["payment_id"]),         P("@svf",   r["custom_svc_fee"]),
+                        P("@svt",   r["custom_svc_type"]),   P("@note",  r["order_note"]),
+                        P("@p2",    r["payment2_id"]),        P("@p2a",   r["payment2_amount"]),
+                        P("@cid",   centralId.Value));
+                }
 
                 Exec(local,
                     "UPDATE [order] SET is_synced = 1, central_id = @cid WHERE id = @id",
@@ -446,31 +468,44 @@ namespace WindowsFormsApp1.services
         }
 
         // ── 3. Buyurtma tarkibi ──────────────────────────────────────────────
+        // FIX: Delete+reinsert strategiyasi — o'chirilgan taomlar ham sinxronlanadi
         private static int SyncOrderFoods(SqlConnection local, SqlConnection central)
         {
             int count = 0;
-            DataTable rows = ReadAll(local,
-                "SELECT f.*, o.central_id AS order_central_id " +
-                "FROM order_food f " +
-                "JOIN [order] o ON o.id = f.order_id " +
-                "WHERE f.is_synced = 0 AND o.central_id IS NOT NULL");
 
-            foreach (DataRow r in rows.Rows)
+            // is_synced=0 bo'lgan order_food larni o'z ichiga olgan buyurtmalar
+            DataTable orders = ReadAll(local,
+                @"SELECT DISTINCT o.id AS local_id, o.central_id
+                  FROM order_food f
+                  JOIN [order] o ON o.id = f.order_id
+                  WHERE f.is_synced = 0 AND o.central_id IS NOT NULL");
+
+            foreach (DataRow ord in orders.Rows)
             {
-                Guid tok = (Guid)r["sync_token"];
-                int? exists = ScalarOrNull(central,
-                    "SELECT id FROM order_food WHERE sync_token = @t", "@t", tok);
+                int localOrderId   = Convert.ToInt32(ord["local_id"]);
+                int centralOrderId = Convert.ToInt32(ord["central_id"]);
 
-                if (exists == null)
+                // Central dagi eski order_food larni o'chirib tashlaymiz (clean slate)
+                Exec(central, "DELETE FROM order_food WHERE order_id=@oid", P("@oid", centralOrderId));
+
+                // Lokal barcha order_food ni qayta yuboramiz (joriy holat)
+                DataTable foods = ReadAll(local,
+                    $"SELECT food_id, quantity, note, sync_token FROM order_food WHERE order_id={localOrderId}");
+
+                foreach (DataRow f in foods.Rows)
+                {
                     Exec(central,
                         "INSERT INTO order_food (order_id, food_id, quantity, note, sync_token) " +
                         "VALUES (@oid, @fid, @qty, @note, @tok)",
-                        P("@oid",  r["order_central_id"]), P("@fid",  r["food_id"]),
-                        P("@qty",  r["quantity"]),          P("@note", r["note"]),
-                        P("@tok",  tok));
+                        P("@oid",  centralOrderId), P("@fid",  f["food_id"]),
+                        P("@qty",  f["quantity"]),   P("@note", f["note"]),
+                        P("@tok",  f["sync_token"]));
+                    count++;
+                }
 
-                Exec(local, "UPDATE order_food SET is_synced = 1 WHERE id = @id", P("@id", r["id"]));
-                count++;
+                // Ushbu buyurtmaning barcha order_food larini sinxronlandi deb belgilaymiz
+                Exec(local,
+                    $"UPDATE order_food SET is_synced=1 WHERE order_id={localOrderId}");
             }
             return count;
         }
@@ -497,6 +532,11 @@ namespace WindowsFormsApp1.services
                         "VALUES (@oid, @pid, @amt, @tok)",
                         P("@oid", r["order_central_id"]), P("@pid", r["payment_id"]),
                         P("@amt", r["amount"]),            P("@tok", tok));
+                else
+                    // FIX: Mavjud to'lov yozuvini yangilash
+                    Exec(central,
+                        "UPDATE order_payments SET payment_id=@pid, amount=@amt WHERE sync_token=@tok",
+                        P("@pid", r["payment_id"]), P("@amt", r["amount"]), P("@tok", tok));
 
                 Exec(local, "UPDATE order_payments SET is_synced = 1 WHERE id = @id", P("@id", r["id"]));
                 count++;
@@ -890,11 +930,14 @@ namespace WindowsFormsApp1.services
                 "SELECT id,name,unit,quantity,price_per_unit,min_quantity FROM ingredient");
             foreach (DataRow r in rows.Rows)
             {
+                // FIX: synced_qty = yuklab olingan miqdor (delta hisoblash uchun asos)
                 Exec(local,
                     "IF EXISTS(SELECT 1 FROM ingredient WHERE id=@id)" +
-                    " UPDATE ingredient SET name=@n,unit=@u,quantity=@q,price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
+                    " UPDATE ingredient SET name=@n,unit=@u,quantity=@q,synced_qty=@q," +
+                    "   price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
                     " ELSE BEGIN SET IDENTITY_INSERT ingredient ON;" +
-                    " INSERT INTO ingredient(id,name,unit,quantity,price_per_unit,min_quantity) VALUES(@id,@n,@u,@q,@pp,@mq);" +
+                    " INSERT INTO ingredient(id,name,unit,quantity,synced_qty,price_per_unit,min_quantity)" +
+                    "   VALUES(@id,@n,@u,@q,@q,@pp,@mq);" +
                     " SET IDENTITY_INSERT ingredient OFF END",
                     P("@id",r["id"]),P("@n",r["name"]),P("@u",r["unit"]),
                     P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]));
@@ -923,32 +966,68 @@ namespace WindowsFormsApp1.services
             return count;
         }
 
-        // ── Ingredient miqdorlarini markaziy serverga yozish ────────────────
-        // Bu faqat lokal miqdor o'zgargan bo'lsa ishlaydi (is_qty_synced=0 yoki ustun yo'q).
-        // Markaziyda ham ombor bo'ladi, shuning uchun lokal qiymat ustun bo'ladi.
+        // ── Ingredient miqdorlarini markaziy serverga yozish (delta sync) ───
+        // FIX: To'liq overwrite o'rniga delta (farq) qo'llanadi.
+        // synced_qty = oxirgi sync da bo'lgan miqdor.
+        // delta = joriy_qty - synced_qty → central ga qo'shiladi/ayiriladi.
         private static int SyncIngredientQuantities(SqlConnection local, SqlConnection central)
         {
             int count = 0;
             DataTable rows = ReadAll(local,
-                "SELECT id, quantity, price_per_unit, min_quantity FROM ingredient");
+                "SELECT id, quantity, ISNULL(synced_qty, quantity) AS synced_qty, " +
+                "price_per_unit, min_quantity FROM ingredient");
 
             foreach (DataRow r in rows.Rows)
             {
-                int ingId = Convert.ToInt32(r["id"]);
-                // Markaziyda shu id bo'lsa, miqdorini yangilash
+                int     ingId     = Convert.ToInt32(r["id"]);
+                decimal localQty  = Convert.ToDecimal(r["quantity"]);
+                decimal syncedQty = Convert.ToDecimal(r["synced_qty"]);
+                decimal delta     = localQty - syncedQty;
+
                 int? exists = ScalarOrNull(central,
                     "SELECT id FROM ingredient WHERE id=@id", "@id", ingId);
 
                 if (exists != null)
                 {
+                    // Delta ni centraldagi miqdorga qo'shamiz, 0 dan past ketmasin
                     Exec(central,
-                        "UPDATE ingredient SET quantity=@q, price_per_unit=@pp, min_quantity=@mq WHERE id=@id",
-                        P("@q",  r["quantity"]),
+                        "UPDATE ingredient SET " +
+                        "  quantity = CASE WHEN quantity + @d < 0 THEN 0 ELSE quantity + @d END, " +
+                        "  price_per_unit=@pp, min_quantity=@mq " +
+                        "WHERE id=@id",
+                        P("@d",  delta),
                         P("@pp", r["price_per_unit"]),
                         P("@mq", r["min_quantity"]),
                         P("@id", ingId));
+
+                    // Lokal synced_qty ni joriy quantity ga tenglaymiz
+                    Exec(local,
+                        "UPDATE ingredient SET synced_qty=quantity WHERE id=@id",
+                        P("@id", ingId));
                     count++;
                 }
+            }
+            return count;
+        }
+
+        // ── 8. Sozlamalar (local → central) ─────────────────────────────────
+        // FIX: Oflayn saqlab qo'yilgan sozlamalar central ga yuborilmay qolardi
+        private static int SyncSettings(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(local,
+                "SELECT [key], value FROM settings WHERE tenant_id=0");
+            foreach (DataRow r in rows.Rows)
+            {
+                Exec(central,
+                    "IF EXISTS(SELECT 1 FROM settings WHERE [key]=@k " +
+                    "  AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)) " +
+                    "  UPDATE settings SET value=@v WHERE [key]=@k " +
+                    "    AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT) " +
+                    "ELSE INSERT INTO settings([key],value,tenant_id) " +
+                    "  VALUES(@k,@v,CAST(SESSION_CONTEXT(N'tenant_id') AS INT))",
+                    P("@k", r["key"]), P("@v", r["value"]));
+                count++;
             }
             return count;
         }
