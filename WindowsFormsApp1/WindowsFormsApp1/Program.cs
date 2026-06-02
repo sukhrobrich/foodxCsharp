@@ -70,7 +70,6 @@ namespace WindowsFormsApp1
                 ApplySavedConnectionMode();
 
             // 3b. Mahalliy bazani tekshirib, zarur bo'lsa yaratamiz
-            bool localWasMissing = !dbconnect.CheckLocal();
             if (!dbconnect.EnsureLocalDatabase())
             {
                 MessageBox.Show(
@@ -80,8 +79,8 @@ namespace WindowsFormsApp1
                 return;
             }
 
-            // 3c. Baza yangi yaratilgan bo'lsa — centraldan barcha ma'lumotlarni yuklaymiz
-            if (localWasMissing && Session.IsOnline && Session.TenantId > 0)
+            // 3c. Baza bo'sh bo'lsa (yangi yoki o'chirilgan) — centraldan yuklaymiz
+            if (Session.IsOnline && Session.TenantId > 0 && IsLocalDbEmpty())
             {
                 RestoreFromCentral();
             }
@@ -246,6 +245,25 @@ namespace WindowsFormsApp1
                 return true;
             }
             catch { return false; }
+        }
+
+        // Lokal [user] jadvali bo'shligini tekshiradi (baza yangi yoki o'chirilgan)
+        static bool IsLocalDbEmpty()
+        {
+            bool prev = Session.IsOnline;
+            Session.IsOnline = false;
+            try
+            {
+                var db = new dbconnect();
+                db.OpenCon();
+                int n;
+                using (var cmd = new SqlCommand("SELECT COUNT(*) FROM [user]", db.GetCon()))
+                    n = (int)cmd.ExecuteScalar();
+                db.CloseCon();
+                return n == 0;
+            }
+            catch { return true; }
+            finally { Session.IsOnline = prev; }
         }
 
         // Lokal bazada kamida bitta foydalanuvchi borligini tekshiradi.
