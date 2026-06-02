@@ -1087,6 +1087,291 @@ namespace WindowsFormsApp1.services
         }
 
         // ═══════════════════════════════════════════════════════════════════
+        // SYNC QUEUE — tez, maqsadli sync
+        // ═══════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// SyncQueue dagi kutayotgan yozuvlarni central ga yuboradi.
+        /// SyncAll dan farqi: faqat SyncQueue da ko'rsatilgan entitylarni sync qiladi.
+        /// </summary>
+        public static SyncResult ProcessSyncQueue()
+        {
+            var result = new SyncResult();
+            if (!Session.IsOnline || Session.TenantId == 0) return result;
+
+            dbconnect.FixLocalDefaults();
+
+            SqlConnection local   = null;
+            SqlConnection central = null;
+            try
+            {
+                local   = dbconnect.OpenLocalForSync();
+                central = dbconnect.OpenCentralForSync(Session.TenantId);
+
+                // Eng ko'pi 50 ta — tez bajarish uchun
+                DataTable queue = ReadAll(local,
+                    "SELECT TOP 50 Id, EntityName, EntityId, ActionType " +
+                    "FROM SyncQueue WHERE IsSynced=0 AND RetryCount < 5 " +
+                    "ORDER BY CreatedAt");
+
+                foreach (DataRow row in queue.Rows)
+                {
+                    int    qId       = Convert.ToInt32(row["Id"]);
+                    string entity    = row["EntityName"].ToString();
+                    int    entityId  = Convert.ToInt32(row["EntityId"]);
+                    string action    = row["ActionType"].ToString();
+
+                    try
+                    {
+                        switch (entity)
+                        {
+                            case SyncQueueHelper.Orders:
+                                SyncSingleOrder(local, central, entityId);
+                                break;
+                            case SyncQueueHelper.OrderFood:
+                                SyncOrderFoodsForOrder(local, central, entityId);
+                                break;
+                            case SyncQueueHelper.OrderPayments:
+                                SyncOrderPaymentsForOrder(local, central, entityId);
+                                break;
+                            case SyncQueueHelper.OrderDebts:
+                                SyncSingleOrderDebt(local, central, entityId);
+                                break;
+                            case SyncQueueHelper.CashTransactions:
+                                SyncSingleCashTransaction(local, central, entityId);
+                                break;
+                            case SyncQueueHelper.Customers:
+                                SyncSingleCustomer(local, central, entityId);
+                                break;
+                            case SyncQueueHelper.IngredientPurchases:
+                                SyncSingleIngredientPurchase(local, central, entityId);
+                                break;
+                            case SyncQueueHelper.FoodPurchases:
+                                SyncSingleFoodPurchase(local, central, entityId);
+                                break;
+                        }
+
+                        Exec(local,
+                            "UPDATE SyncQueue SET IsSynced=1, SyncedAt=GETDATE() WHERE Id=@id",
+                            P("@id", qId));
+                        result.Synced++;
+                    }
+                    catch (Exception ex)
+                    {
+                        string msg = ex.Message.Length > 450
+                            ? ex.Message.Substring(0, 450) : ex.Message;
+                        Exec(local,
+                            "UPDATE SyncQueue SET RetryCount=RetryCount+1, ErrorMsg=@e WHERE Id=@id",
+                            P("@e", msg), P("@id", qId));
+                        result.Errors++;
+                        if (result.LastError == null) result.LastError = msg;
+                    }
+                }
+            }
+            catch (Exception ex) { result.Errors++; result.LastError = ex.Message; }
+            finally
+            {
+                if (local   != null) { local.Close();   local.Dispose(); }
+                if (central != null) { central.Close(); central.Dispose(); }
+            }
+            return result;
+        }
+
+        // ── Maqsadli sync metodlar ───────────────────────────────────────────
+
+        private static void SyncSingleOrder(SqlConnection local, SqlConnection central, int localId)
+        {
+            DataTable rows = ReadAll(local,
+                $"SELECT o.*, c.central_id AS c_central_id FROM [order] o " +
+                $"LEFT JOIN customer c ON c.id=o.customer_id WHERE o.id={localId}");
+            if (rows.Rows.Count == 0) return;
+
+            DataRow r = rows.Rows[0];
+            Guid tok = (Guid)r["sync_token"];
+            int? centralId = ScalarOrNull(central, "SELECT id FROM [order] WHERE sync_token=@t", "@t", tok);
+
+            if (centralId == null)
+            {
+                object centralCustId = r["c_central_id"] == DBNull.Value
+                    ? (object)DBNull.Value : r["c_central_id"];
+                object inserted = Exec(central,
+                    "INSERT INTO [order](user_id,place_id,payment_id,created_at,paid,total," +
+                    "  discount_amount,discount_pct,customer_id,customer_name,delivery_phone," +
+                    "  delivery_address,is_delivery,order_note,custom_svc_fee,custom_svc_type," +
+                    "  payment2_id,payment2_amount,sync_token) " +
+                    "OUTPUT INSERTED.id " +
+                    "VALUES(@uid,@pid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
+                    "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@tok)",
+                    P("@uid",r["user_id"]),P("@pid",r["place_id"]),P("@pay",r["payment_id"]),
+                    P("@cat",r["created_at"]),P("@paid",r["paid"]),P("@tot",r["total"]),
+                    P("@disc",r["discount_amount"]),P("@discp",r["discount_pct"]),
+                    P("@cust",centralCustId),P("@custn",r["customer_name"]),
+                    P("@dph",r["delivery_phone"]),P("@dadr",r["delivery_address"]),
+                    P("@isdel",r["is_delivery"]),P("@note",r["order_note"]),
+                    P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
+                    P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),P("@tok",tok));
+                centralId = Convert.ToInt32(inserted);
+            }
+            else
+            {
+                Exec(central,
+                    "UPDATE [order] SET paid=@paid,total=@tot,discount_amount=@disc," +
+                    "  discount_pct=@discp,payment_id=@pay,custom_svc_fee=@svf," +
+                    "  custom_svc_type=@svt,order_note=@note,payment2_id=@p2,payment2_amount=@p2a " +
+                    "WHERE id=@cid",
+                    P("@paid",r["paid"]),P("@tot",r["total"]),P("@disc",r["discount_amount"]),
+                    P("@discp",r["discount_pct"]),P("@pay",r["payment_id"]),
+                    P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
+                    P("@note",r["order_note"]),P("@p2",r["payment2_id"]),
+                    P("@p2a",r["payment2_amount"]),P("@cid",centralId.Value));
+            }
+
+            Exec(local, $"UPDATE [order] SET is_synced=1, central_id={centralId} WHERE id={localId}");
+        }
+
+        private static void SyncOrderFoodsForOrder(SqlConnection local, SqlConnection central, int localOrderId)
+        {
+            int? centralOrderId = ScalarOrNull(local,
+                "SELECT central_id FROM [order] WHERE id=@id", "@id", localOrderId);
+            if (centralOrderId == null) return;
+
+            Exec(central, "DELETE FROM order_food WHERE order_id=@oid", P("@oid", centralOrderId.Value));
+            DataTable foods = ReadAll(local,
+                $"SELECT food_id,quantity,note,sync_token FROM order_food WHERE order_id={localOrderId}");
+            foreach (DataRow f in foods.Rows)
+                Exec(central,
+                    "INSERT INTO order_food(order_id,food_id,quantity,note,sync_token)" +
+                    " VALUES(@oid,@fid,@qty,@note,@tok)",
+                    P("@oid",centralOrderId.Value),P("@fid",f["food_id"]),
+                    P("@qty",f["quantity"]),P("@note",f["note"]),P("@tok",f["sync_token"]));
+
+            Exec(local, $"UPDATE order_food SET is_synced=1 WHERE order_id={localOrderId}");
+        }
+
+        private static void SyncOrderPaymentsForOrder(SqlConnection local, SqlConnection central, int localOrderId)
+        {
+            int? centralOrderId = ScalarOrNull(local,
+                "SELECT central_id FROM [order] WHERE id=@id", "@id", localOrderId);
+            if (centralOrderId == null) return;
+
+            DataTable payments = ReadAll(local,
+                $"SELECT * FROM order_payments WHERE order_id={localOrderId} AND is_synced=0");
+            foreach (DataRow p in payments.Rows)
+            {
+                Guid tok = (Guid)p["sync_token"];
+                int? exists = ScalarOrNull(central,
+                    "SELECT id FROM order_payments WHERE sync_token=@t", "@t", tok);
+                if (exists == null)
+                    Exec(central,
+                        "INSERT INTO order_payments(order_id,payment_id,amount,sync_token)" +
+                        " VALUES(@oid,@pid,@amt,@tok)",
+                        P("@oid",centralOrderId.Value),P("@pid",p["payment_id"]),
+                        P("@amt",p["amount"]),P("@tok",tok));
+                else
+                    Exec(central,
+                        "UPDATE order_payments SET amount=@amt WHERE sync_token=@tok",
+                        P("@amt",p["amount"]),P("@tok",tok));
+                Exec(local, "UPDATE order_payments SET is_synced=1 WHERE id=@id", P("@id",p["id"]));
+            }
+        }
+
+        private static void SyncSingleOrderDebt(SqlConnection local, SqlConnection central, int localId)
+        {
+            DataTable rows = ReadAll(local,
+                $"SELECT d.*, o.central_id AS o_cid FROM order_debt d " +
+                $"JOIN [order] o ON o.id=d.order_id WHERE d.id={localId}");
+            if (rows.Rows.Count == 0) return;
+            DataRow r = rows.Rows[0];
+            if (r["o_cid"] == DBNull.Value) return;
+
+            Guid tok = (Guid)r["sync_token"];
+            int? exists = ScalarOrNull(central, "SELECT id FROM order_debt WHERE sync_token=@t", "@t", tok);
+            if (exists == null)
+                Exec(central,
+                    "INSERT INTO order_debt(order_id,debtor_name,debtor_phone,amount,is_paid," +
+                    "  paid_at,debt_note,created_at,sync_token)" +
+                    " VALUES(@oid,@dn,@dph,@amt,@ip,@pat,@nt,@cat,@tok)",
+                    P("@oid",r["o_cid"]),P("@dn",r["debtor_name"]),P("@dph",r["debtor_phone"]),
+                    P("@amt",r["amount"]),P("@ip",r["is_paid"]),P("@pat",r["paid_at"]),
+                    P("@nt",r["debt_note"]),P("@cat",r["created_at"]),P("@tok",tok));
+            else
+                Exec(central,
+                    "UPDATE order_debt SET is_paid=@ip,paid_at=@pat WHERE sync_token=@tok",
+                    P("@ip",r["is_paid"]),P("@pat",r["paid_at"]),P("@tok",tok));
+
+            Exec(local, $"UPDATE order_debt SET is_synced=1 WHERE id={localId}");
+        }
+
+        private static void SyncSingleCashTransaction(SqlConnection local, SqlConnection central, int localId)
+        {
+            DataTable rows = ReadAll(local,
+                $"SELECT * FROM cash_transaction WHERE id={localId}");
+            if (rows.Rows.Count == 0) return;
+            DataRow r = rows.Rows[0];
+            Guid tok = (Guid)r["sync_token"];
+            if (ScalarOrNull(central, "SELECT id FROM cash_transaction WHERE sync_token=@t", "@t", tok) == null)
+                Exec(central,
+                    "INSERT INTO cash_transaction(type,category,amount,description,created_by,created_at,sync_token)" +
+                    " VALUES(@t,@cat,@amt,@desc,@cb,@crat,@tok)",
+                    P("@t",r["type"]),P("@cat",r["category"]),P("@amt",r["amount"]),
+                    P("@desc",r["description"]),P("@cb",r["created_by"]),
+                    P("@crat",r["created_at"]),P("@tok",tok));
+            Exec(local, $"UPDATE cash_transaction SET is_synced=1 WHERE id={localId}");
+        }
+
+        private static void SyncSingleCustomer(SqlConnection local, SqlConnection central, int localId)
+        {
+            DataTable rows = ReadAll(local, $"SELECT * FROM customer WHERE id={localId}");
+            if (rows.Rows.Count == 0) return;
+            DataRow r = rows.Rows[0];
+            Guid tok = (Guid)r["sync_token"];
+            int? centralId = ScalarOrNull(central, "SELECT id FROM customer WHERE sync_token=@t", "@t", tok);
+            if (centralId == null)
+            {
+                object inserted = Exec(central,
+                    "INSERT INTO customer(name,phone,notes,created_at,sync_token)" +
+                    " OUTPUT INSERTED.id VALUES(@n,@ph,@nt,@cat,@tok)",
+                    P("@n",r["name"]),P("@ph",r["phone"]),P("@nt",r["notes"]),
+                    P("@cat",r["created_at"]),P("@tok",tok));
+                centralId = Convert.ToInt32(inserted);
+            }
+            else
+                Exec(central, "UPDATE customer SET name=@n,phone=@ph,notes=@nt WHERE sync_token=@tok",
+                    P("@n",r["name"]),P("@ph",r["phone"]),P("@nt",r["notes"]),P("@tok",tok));
+            Exec(local, $"UPDATE customer SET is_synced=1, central_id={centralId} WHERE id={localId}");
+        }
+
+        private static void SyncSingleIngredientPurchase(SqlConnection local, SqlConnection central, int localId)
+        {
+            DataTable rows = ReadAll(local, $"SELECT * FROM ingredient_purchase WHERE id={localId}");
+            if (rows.Rows.Count == 0) return;
+            DataRow r = rows.Rows[0];
+            Guid tok = (Guid)r["sync_token"];
+            if (ScalarOrNull(central, "SELECT id FROM ingredient_purchase WHERE sync_token=@t", "@t", tok) == null)
+                Exec(central,
+                    "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token)" +
+                    " VALUES(@iid,@qty,@pp,@tp,@pa,@n,@tok)",
+                    P("@iid",r["ingredient_id"]),P("@qty",r["quantity"]),P("@pp",r["price_per_unit"]),
+                    P("@tp",r["total_price"]),P("@pa",r["purchased_at"]),P("@n",r["notes"]),P("@tok",tok));
+            Exec(local, $"UPDATE ingredient_purchase SET is_synced=1 WHERE id={localId}");
+        }
+
+        private static void SyncSingleFoodPurchase(SqlConnection local, SqlConnection central, int localId)
+        {
+            DataTable rows = ReadAll(local, $"SELECT * FROM food_purchase WHERE id={localId}");
+            if (rows.Rows.Count == 0) return;
+            DataRow r = rows.Rows[0];
+            Guid tok = (Guid)r["sync_token"];
+            if (ScalarOrNull(central, "SELECT id FROM food_purchase WHERE sync_token=@t", "@t", tok) == null)
+                Exec(central,
+                    "INSERT INTO food_purchase(food_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token)" +
+                    " VALUES(@fid,@qty,@pp,@tp,@pa,@n,@tok)",
+                    P("@fid",r["food_id"]),P("@qty",r["quantity"]),P("@pp",r["price_per_unit"]),
+                    P("@tp",r["total_price"]),P("@pa",r["purchased_at"]),P("@n",r["notes"]),P("@tok",tok));
+            Exec(local, $"UPDATE food_purchase SET is_synced=1 WHERE id={localId}");
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
         // YANGI DL METODLAR — tranzaksiya ma'lumotlari
         // ═══════════════════════════════════════════════════════════════════
 

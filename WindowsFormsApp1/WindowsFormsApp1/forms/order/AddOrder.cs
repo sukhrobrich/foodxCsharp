@@ -2328,6 +2328,13 @@ namespace WindowsFormsApp1.forms.order
                 tr.Commit();
                 db.CloseCon();
 
+                // SyncQueue ga qo'shish — background da central ga yuboriladi
+                SyncQueueHelper.AddBatch(
+                    (SyncQueueHelper.Orders,      orderId, isNewOrder ? "Insert" : "Update"),
+                    (SyncQueueHelper.OrderFood,   orderId, "Update"),
+                    (SyncQueueHelper.OrderPayments, orderId, "Update")
+                );
+
                 // Print kitchen tickets for newly added items
                 List<int> newlyAdded = isNewOrder ? newFoods : new List<int>(newFoods);
                 if (!isNewOrder)
@@ -2565,6 +2572,12 @@ namespace WindowsFormsApp1.forms.order
                 }
 
                 db.CloseCon();
+
+                // To'lov SyncQueue ga — orders + payments
+                SyncQueueHelper.AddBatch(
+                    (SyncQueueHelper.Orders,      orderId, "Update"),
+                    (SyncQueueHelper.OrderPayments, orderId, "Update")
+                );
             }
             catch (Exception ex)
             {

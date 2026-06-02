@@ -262,6 +262,19 @@ CREATE TABLE order_debt_paid_sync (
     debt_sync_token UNIQUEIDENTIFIER NOT NULL PRIMARY KEY
 );
 
+IF OBJECT_ID('dbo.SyncQueue','U') IS NULL
+CREATE TABLE SyncQueue (
+    Id          INT IDENTITY(1,1) PRIMARY KEY,
+    EntityName  NVARCHAR(100)    NOT NULL,
+    EntityId    INT              NOT NULL,
+    ActionType  NVARCHAR(20)     NOT NULL DEFAULT 'Insert',
+    IsSynced    BIT              NOT NULL DEFAULT 0,
+    CreatedAt   DATETIME         NOT NULL DEFAULT GETDATE(),
+    SyncedAt    DATETIME         NULL,
+    RetryCount  INT              NOT NULL DEFAULT 0,
+    ErrorMsg    NVARCHAR(500)    NULL
+);
+
 IF OBJECT_ID('dbo.order_cancellation_log','U') IS NULL
 CREATE TABLE order_cancellation_log (
     id            INT IDENTITY(1,1) PRIMARY KEY,

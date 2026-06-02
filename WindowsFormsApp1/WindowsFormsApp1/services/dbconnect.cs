@@ -112,7 +112,9 @@ namespace WindowsFormsApp1.services
 
         public dbconnect()
         {
-            _conn = new SqlConnection(Session.IsOnline ? _central : _local);
+            // LOCAL-FIRST: har doim local DB dan o'qiymiz va yozamiz
+            // Central ga yozish SyncQueue orqali background da bajariladi
+            _conn = new SqlConnection(_local);
 
             // SqlDataAdapter.Fill() ham ishlatganda tenant context avtomatik o'rnatilsin
             _conn.StateChange += (sender, args) =>
@@ -266,10 +268,26 @@ namespace WindowsFormsApp1.services
                         END", c))
                     { try { cmd.ExecuteNonQuery(); } catch { } }
 
-                    // order_debt_paid_sync jadvali (eski bazalarda yo'q bo'lishi mumkin)
+                    // order_debt_paid_sync
                     using (var cmd = new SqlCommand(
                         "IF OBJECT_ID('dbo.order_debt_paid_sync','U') IS NULL " +
                         "CREATE TABLE order_debt_paid_sync(debt_sync_token UNIQUEIDENTIFIER NOT NULL PRIMARY KEY)", c))
+                    { try { cmd.ExecuteNonQuery(); } catch { } }
+
+                    // SyncQueue jadvali
+                    using (var cmd = new SqlCommand(@"
+                        IF OBJECT_ID('dbo.SyncQueue','U') IS NULL
+                        CREATE TABLE SyncQueue (
+                            Id         INT IDENTITY(1,1) PRIMARY KEY,
+                            EntityName NVARCHAR(100) NOT NULL,
+                            EntityId   INT           NOT NULL,
+                            ActionType NVARCHAR(20)  NOT NULL DEFAULT 'Insert',
+                            IsSynced   BIT           NOT NULL DEFAULT 0,
+                            CreatedAt  DATETIME      NOT NULL DEFAULT GETDATE(),
+                            SyncedAt   DATETIME      NULL,
+                            RetryCount INT           NOT NULL DEFAULT 0,
+                            ErrorMsg   NVARCHAR(500) NULL
+                        )", c))
                     { try { cmd.ExecuteNonQuery(); } catch { } }
 
                     // Lokal DB sxemasi central bilan bir xil bo'lishi uchun etishmayotgan ustunlar
