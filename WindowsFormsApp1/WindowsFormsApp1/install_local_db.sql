@@ -257,6 +257,11 @@ CREATE TABLE order_debt (
     sync_token   UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID()
 );
 
+IF OBJECT_ID('dbo.order_debt_paid_sync','U') IS NULL
+CREATE TABLE order_debt_paid_sync (
+    debt_sync_token UNIQUEIDENTIFIER NOT NULL PRIMARY KEY
+);
+
 IF OBJECT_ID('dbo.order_cancellation_log','U') IS NULL
 CREATE TABLE order_cancellation_log (
     id            INT IDENTITY(1,1) PRIMARY KEY,
