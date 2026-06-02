@@ -187,18 +187,18 @@ namespace WindowsFormsApp1.forms.order
                 string sql = @"
                     SELECT
                         o.id AS order_id,
-                        o.total,
+                        ISNULL(o.total, 0) AS total,
                         o.created_at,
                         o.paid,
                         ISNULL(pay.name, '') AS pay_name,
-                        u.name AS waiter_name,
-                        pi.room_name AS table_name,
-                        po.name AS zone_name,
+                        ISNULL(u.name, '') AS waiter_name,
+                        ISNULL(pi.room_name, '—') AS table_name,
+                        ISNULL(po.name, '—') AS zone_name,
                         (SELECT COUNT(*) FROM order_food WHERE order_id = o.id) AS items_count
                     FROM [order] o
-                    JOIN [user] u ON u.id = o.user_id
-                    JOIN place_in pi ON pi.id = o.place_id
-                    JOIN place_out po ON po.id = pi.place_out_id
+                    LEFT JOIN [user] u ON u.id = o.user_id
+                    LEFT JOIN place_in pi ON pi.id = o.place_id
+                    LEFT JOIN place_out po ON po.id = pi.place_out_id
                     LEFT JOIN payment pay ON pay.id = o.payment_id
                     WHERE (@status = 'ALL' OR o.paid = @status)
                       AND CAST(o.created_at AS DATE) >= CAST(@dateFrom AS DATE)
@@ -453,26 +453,78 @@ namespace WindowsFormsApp1.forms.order
                 dbconnect db = new dbconnect();
                 db.OpenCon();
 
+                // Buyurtma ma'lumotlarini olish
                 int placeId = 0;
-                using (SqlCommand cmd = new SqlCommand("SELECT place_id FROM [order] WHERE id=@id", db.GetCon()))
+                decimal currentTotal = 0;
+                int? currentPayId = null;
+                using (SqlCommand cmd = new SqlCommand(
+                    "SELECT ISNULL(place_id,0), ISNULL(total,0), payment_id FROM [order] WHERE id=@id",
+                    db.GetCon()))
                 {
                     cmd.Parameters.AddWithValue("@id", orderId);
-                    placeId = Convert.ToInt32(cmd.ExecuteScalar());
+                    using (var dr = cmd.ExecuteReader())
+                    {
+                        if (dr.Read())
+                        {
+                            placeId      = dr.GetInt32(0);
+                            currentTotal = dr.GetDecimal(1);
+                            currentPayId = dr.IsDBNull(2) ? (int?)null : dr.GetInt32(2);
+                        }
+                    }
                 }
 
-                using (SqlCommand cmd = new SqlCommand("UPDATE [order] SET paid='YES' WHERE id=@id", db.GetCon()))
+                // Agar to'lov turi tanlanmagan bo'lsa — birinchisini avtomatik olamiz
+                if (!currentPayId.HasValue)
                 {
-                    cmd.Parameters.AddWithValue("@id", orderId);
+                    using (SqlCommand cmd = new SqlCommand(
+                        "SELECT TOP 1 id FROM payment WHERE LOWER(name) NOT LIKE '%qarz%' ORDER BY sort_order, id",
+                        db.GetCon()))
+                    {
+                        var val = cmd.ExecuteScalar();
+                        if (val != null && val != DBNull.Value)
+                            currentPayId = Convert.ToInt32(val);
+                    }
+                }
+
+                // Orderni yopish: paid='YES', is_synced=0
+                using (SqlCommand cmd = new SqlCommand(
+                    "UPDATE [order] SET paid='YES', is_synced=0, payment_id=@pay WHERE id=@id",
+                    db.GetCon()))
+                {
+                    cmd.Parameters.AddWithValue("@id",  orderId);
+                    cmd.Parameters.AddWithValue("@pay", currentPayId.HasValue ? (object)currentPayId.Value : DBNull.Value);
                     cmd.ExecuteNonQuery();
                 }
 
-                // Deduct ingredients from warehouse stock
+                // order_payments yozuvi yo'q bo'lsa — to'lov yozuvini qo'shamiz
+                int payCount = 0;
+                using (SqlCommand cmd = new SqlCommand(
+                    "SELECT COUNT(*) FROM order_payments WHERE order_id=@id", db.GetCon()))
+                {
+                    cmd.Parameters.AddWithValue("@id", orderId);
+                    payCount = (int)cmd.ExecuteScalar();
+                }
+                if (payCount == 0 && currentPayId.HasValue && currentTotal > 0)
+                {
+                    using (SqlCommand cmd = new SqlCommand(
+                        "INSERT INTO order_payments(order_id,payment_id,amount,sync_token,is_synced) VALUES(@oid,@pid,@amt,NEWID(),0)",
+                        db.GetCon()))
+                    {
+                        cmd.Parameters.AddWithValue("@oid", orderId);
+                        cmd.Parameters.AddWithValue("@pid", currentPayId.Value);
+                        cmd.Parameters.AddWithValue("@amt", currentTotal);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+
+                // Ombordan ingredientlarni chiqarish
                 using (SqlCommand cmd = new SqlCommand(@"
                     UPDATE ingredient
                     SET quantity = CASE WHEN quantity - d.total_deduct < 0 THEN 0 ELSE quantity - d.total_deduct END
                     FROM ingredient
                     JOIN (
-                        SELECT ri.ingredient_id, SUM(CAST(ofd.quantity AS DECIMAL(10,4)) * ri.quantity_per_portion) AS total_deduct
+                        SELECT ri.ingredient_id,
+                               SUM(CAST(ofd.quantity AS DECIMAL(10,4)) * ri.quantity_per_portion) AS total_deduct
                         FROM order_food ofd
                         JOIN recipe_ingredient ri ON ri.food_id = ofd.food_id
                         WHERE ofd.order_id = @oid
@@ -483,14 +535,31 @@ namespace WindowsFormsApp1.forms.order
                     cmd.ExecuteNonQuery();
                 }
 
+                // Stolni bo'shatish
                 if (placeId > 0)
-                    using (SqlCommand cmd = new SqlCommand("UPDATE place_in SET empty='YES', user_id=NULL WHERE id=@pid", db.GetCon()))
+                    using (SqlCommand cmd = new SqlCommand(
+                        "UPDATE place_in SET empty='YES', user_id=NULL WHERE id=@pid", db.GetCon()))
                     {
                         cmd.Parameters.AddWithValue("@pid", placeId);
                         cmd.ExecuteNonQuery();
                     }
 
                 db.CloseCon();
+
+                // Markaziy serverga sync
+                SyncQueueHelper.AddBatch(
+                    (SyncQueueHelper.Orders,       orderId, "Update"),
+                    (SyncQueueHelper.OrderPayments, orderId, "Update")
+                );
+
+                // Chek chiqarish
+                try { PrintService.PrintReceipt(orderId); }
+                catch (Exception px)
+                {
+                    MessageBox.Show("Chop etishda xatolik:\n" + px.Message,
+                        "Printer", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+
                 LoadOrders();
             }
             catch (Exception ex)

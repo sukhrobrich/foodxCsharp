@@ -9,22 +9,34 @@ namespace WindowsFormsApp1.services
     internal static class SyncService
     {
         private static System.Threading.Timer _timer;
+        private static System.Threading.Timer _orderSyncTimer;
+        private static System.Threading.Timer _fullSyncTimer;
         private static System.Threading.Timer _downloadTimer;
         private static System.Threading.Timer _printTimer;
 
         public static void Start()
         {
-            // Har 60 soniyada online/offline holatini tekshiradi va upload qiladi
+            // Online/offline holat o'zgarishini kuzatish — har 30 soniyada
             _timer = new System.Threading.Timer(Tick, null,
-                TimeSpan.FromSeconds(60),
-                TimeSpan.FromSeconds(60));
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(30));
 
-            // Har 5 daqiqada centraldan localga ma'lumot yuklab oladi (zahira)
+            // Buyurtma o'zgarishlari (SyncQueue) — har 5 soniyada
+            _orderSyncTimer = new System.Threading.Timer(OrderSyncTick, null,
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromSeconds(5));
+
+            // To'liq sinxronizatsiya (taomlar, sozlamalar va boshqalar) — har 2 daqiqada
+            _fullSyncTimer = new System.Threading.Timer(FullSyncTick, null,
+                TimeSpan.FromMinutes(2),
+                TimeSpan.FromMinutes(2));
+
+            // Markaziy serverdan localga yuklash — har 5 daqiqada
             _downloadTimer = new System.Threading.Timer(DownloadTick, null,
                 TimeSpan.FromMinutes(2),
                 TimeSpan.FromMinutes(5));
 
-            // Har 1 soniyada print queue tekshiradi (mobil chek so'rovlari)
+            // Mobil print so'rovlari — har 1 soniyada
             _printTimer = new System.Threading.Timer(PrintTick, null,
                 TimeSpan.FromSeconds(2),
                 TimeSpan.FromSeconds(1));
@@ -32,9 +44,11 @@ namespace WindowsFormsApp1.services
 
         public static void Stop()
         {
-            if (_timer        != null) _timer.Dispose();
-            if (_downloadTimer != null) _downloadTimer.Dispose();
-            if (_printTimer   != null) _printTimer.Dispose();
+            if (_timer          != null) _timer.Dispose();
+            if (_orderSyncTimer != null) _orderSyncTimer.Dispose();
+            if (_fullSyncTimer  != null) _fullSyncTimer.Dispose();
+            if (_downloadTimer  != null) _downloadTimer.Dispose();
+            if (_printTimer     != null) _printTimer.Dispose();
         }
 
         // ── Upload: local → central ───────────────────────────────────────────
@@ -124,18 +138,29 @@ namespace WindowsFormsApp1.services
                         }));
                 }
             }
-            else if (nowOnline && !_syncBusy)
+        }
+
+        // ── Buyurtmalar: har 5 soniyada SyncQueue ni tekshiradi ─────────────────
+        private static void OrderSyncTick(object state)
+        {
+            if (!Session.IsOnline || Session.ForceOffline || Session.TenantId == 0) return;
+            if (_syncBusy) return;
+            // ProcessSyncQueue ichida _syncLock bor — concurrent call o'zi skip qiladi
+            ThreadPool.QueueUserWorkItem(delegate { SyncEngine.ProcessSyncQueue(); });
+        }
+
+        // ── To'liq sync: har 2 daqiqada taomlar, sozlamalar va boshqalar ────────
+        private static void FullSyncTick(object state)
+        {
+            if (!Session.IsOnline || Session.ForceOffline || Session.TenantId == 0) return;
+            if (_syncBusy) return;
+            ThreadPool.QueueUserWorkItem(delegate
             {
-                // ── Holat o'zgarmadi, lekin online — SyncQueue ni tekshir ─
-                // (SyncQueueHelper.Add() dan keyin darhol ishlamagan bo'lsa)
-                ThreadPool.QueueUserWorkItem(delegate
-                {
-                    if (_syncBusy) return;
-                    _syncBusy = true;
-                    try { SyncEngine.ProcessSyncQueue(); }
-                    finally { _syncBusy = false; }
-                });
-            }
+                if (_syncBusy) return;
+                _syncBusy = true;
+                try { SyncEngine.SyncAll(); }
+                finally { _syncBusy = false; }
+            });
         }
 
         // ── Download: central → local (har 1 soatda, zahira sifatida) ─────────

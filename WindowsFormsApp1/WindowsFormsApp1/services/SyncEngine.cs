@@ -1,11 +1,14 @@
 using System;
 using System.Data;
 using System.Data.SqlClient;
+using System.Threading;
 
 namespace WindowsFormsApp1.services
 {
     internal static class SyncEngine
     {
+        private static readonly object _syncLock = new object();
+
         public class SyncResult
         {
             public int    Synced    { get; set; }
@@ -488,18 +491,20 @@ namespace WindowsFormsApp1.services
                 int localOrderId   = Convert.ToInt32(ord["local_id"]);
                 int centralOrderId = Convert.ToInt32(ord["central_id"]);
 
-                // Central dagi eski order_food larni o'chirib tashlaymiz (clean slate)
-                Exec(central, "DELETE FROM order_food WHERE order_id=@oid", P("@oid", centralOrderId));
-
                 // Lokal barcha order_food ni qayta yuboramiz (joriy holat)
                 DataTable foods = ReadAll(local,
                     $"SELECT food_id, quantity, note, sync_token FROM order_food WHERE order_id={localOrderId}");
 
+                // Central da lokal ro'yxatda yo'q qatorlarni o'chiramiz (o'chirilgan taomlar)
+                Exec(central, "DELETE FROM order_food WHERE order_id=@oid", P("@oid", centralOrderId));
+
                 foreach (DataRow f in foods.Rows)
                 {
                     Exec(central,
-                        "INSERT INTO order_food (order_id, food_id, quantity, note, sync_token) " +
-                        "VALUES (@oid, @fid, @qty, @note, @tok)",
+                        "IF EXISTS(SELECT 1 FROM order_food WHERE sync_token=@tok) " +
+                        "  UPDATE order_food SET order_id=@oid,food_id=@fid,quantity=@qty,note=@note WHERE sync_token=@tok " +
+                        "ELSE " +
+                        "  INSERT INTO order_food(order_id,food_id,quantity,note,sync_token) VALUES(@oid,@fid,@qty,@note,@tok)",
                         P("@oid",  centralOrderId), P("@fid",  f["food_id"]),
                         P("@qty",  f["quantity"]),   P("@note", f["note"]),
                         P("@tok",  f["sync_token"]));
@@ -1098,6 +1103,7 @@ namespace WindowsFormsApp1.services
         {
             var result = new SyncResult();
             if (!Session.IsOnline || Session.TenantId == 0) return result;
+            if (!Monitor.TryEnter(_syncLock)) return result;
 
             dbconnect.FixLocalDefaults();
 
@@ -1173,6 +1179,7 @@ namespace WindowsFormsApp1.services
             {
                 if (local   != null) { local.Close();   local.Dispose(); }
                 if (central != null) { central.Close(); central.Dispose(); }
+                Monitor.Exit(_syncLock);
             }
             return result;
         }
@@ -1235,13 +1242,17 @@ namespace WindowsFormsApp1.services
                 "SELECT central_id FROM [order] WHERE id=@id", "@id", localOrderId);
             if (centralOrderId == null) return;
 
-            Exec(central, "DELETE FROM order_food WHERE order_id=@oid", P("@oid", centralOrderId.Value));
             DataTable foods = ReadAll(local,
                 $"SELECT food_id,quantity,note,sync_token FROM order_food WHERE order_id={localOrderId}");
+
+            Exec(central, "DELETE FROM order_food WHERE order_id=@oid", P("@oid", centralOrderId.Value));
+
             foreach (DataRow f in foods.Rows)
                 Exec(central,
-                    "INSERT INTO order_food(order_id,food_id,quantity,note,sync_token)" +
-                    " VALUES(@oid,@fid,@qty,@note,@tok)",
+                    "IF EXISTS(SELECT 1 FROM order_food WHERE sync_token=@tok) " +
+                    "  UPDATE order_food SET order_id=@oid,food_id=@fid,quantity=@qty,note=@note WHERE sync_token=@tok " +
+                    "ELSE " +
+                    "  INSERT INTO order_food(order_id,food_id,quantity,note,sync_token) VALUES(@oid,@fid,@qty,@note,@tok)",
                     P("@oid",centralOrderId.Value),P("@fid",f["food_id"]),
                     P("@qty",f["quantity"]),P("@note",f["note"]),P("@tok",f["sync_token"]));
 
