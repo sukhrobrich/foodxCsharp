@@ -1,5 +1,6 @@
 using System;
 using System.Data.SqlClient;
+using System.Drawing;
 using System.Windows.Forms;
 using WindowsFormsApp1.forms.license;
 using WindowsFormsApp1.forms.settings;
@@ -64,11 +65,26 @@ namespace WindowsFormsApp1
             Session.TenantId = tenantId;
             Session.IsOnline = !isOffline && dbconnect.CheckCentral();
 
-            // 3a. Faqat oflayn holatda (server yetib bo'lmaganda) saqlangan rejimni tiklaymiz.
-            // Agar server bilan bog'liq bo'lsak (IsOnline=true), foydalanuvchi
-            // ilovadan ichida Sozlamalar orqali oflayn rejimga o'tishi mumkin.
+            // 3a. Faqat oflayn holatda saqlangan rejimni tiklaymiz
             if (!Session.IsOnline)
                 ApplySavedConnectionMode();
+
+            // 3b. Mahalliy bazani tekshirib, zarur bo'lsa yaratamiz
+            bool localWasMissing = !dbconnect.CheckLocal();
+            if (!dbconnect.EnsureLocalDatabase())
+            {
+                MessageBox.Show(
+                    "Mahalliy baza yaratilmadi.\n\ninstall_local_db.sql fayli yo'q yoki SQL Server ishlamayapti.\nDasturchi bilan bog'laning.",
+                    "FoodX — Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                _licTimer?.Dispose();
+                return;
+            }
+
+            // 3c. Baza yangi yaratilgan bo'lsa — centraldan barcha ma'lumotlarni yuklaymiz
+            if (localWasMissing && Session.IsOnline && Session.TenantId > 0)
+            {
+                RestoreFromCentral();
+            }
 
             // 4. Watchdog — har 30 daqiqada litsenziyani qayta tekshiradi
             _licLogin = login;
@@ -122,6 +138,52 @@ namespace WindowsFormsApp1
         }
 
         // ── Yordamchi metodlar ───────────────────────────────────────────────
+
+        // Markaziy serverdan barcha ma'lumotlarni local bazaga yuklab oladi
+        static void RestoreFromCentral()
+        {
+            Form dlg = new Form
+            {
+                Text            = "FoodX — Tiklash",
+                Size            = new Size(380, 120),
+                StartPosition   = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                ControlBox      = false,
+                BackColor       = Color.White
+            };
+            Label lbl = new Label
+            {
+                Text      = "Markaziy serverdan ma'lumotlar yuklanmoqda...\nIltimos kuting.",
+                Dock      = DockStyle.Fill,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Font      = new Font("Segoe UI", 10)
+            };
+            dlg.Controls.Add(lbl);
+            dlg.Show();
+            Application.DoEvents();
+
+            try
+            {
+                // Avval reference jadvallar va tranzaksiyalarni yuklaymiz
+                SyncEngine.DownloadAll();
+
+                lbl.Text = "Tiklash yakunlandi. Ishga tushirilmoqda...";
+                Application.DoEvents();
+                System.Threading.Thread.Sleep(800);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Ma'lumotlar yuklanishida xatolik:\n" + ex.Message +
+                    "\n\nDastur bo'sh baza bilan ishga tushadi.",
+                    "FoodX — Ogohlantirish", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                dlg.Close();
+                dlg.Dispose();
+            }
+        }
 
         // Lokal bazadan saqlangan connection_mode ni o'qib Session ga qo'llaydi.
         // Faqat local DB mavjud bo'lsa ishlaydi; yo'q bo'lsa hech narsa qilmaydi.
