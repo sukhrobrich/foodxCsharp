@@ -1774,6 +1774,7 @@ namespace WindowsFormsApp1.services
         public static void Add(string entityName, int entityId,
                                string actionType = "Insert")
         {
+            EnsureTable();
             try
             {
                 using (var conn = dbconnect.OpenLocalForSync())
@@ -1786,15 +1787,17 @@ namespace WindowsFormsApp1.services
                     cmd.Parameters.AddWithValue("@at",  actionType);
                     cmd.ExecuteNonQuery();
                 }
-                if (Session.IsOnline && Session.TenantId > 0)
-                    System.Threading.Tasks.Task.Run(() => SyncEngine.ProcessSyncQueue());
             }
             catch { }
+            // Task.Run try-catch TASHQARISIDA — har holda chaqiriladi
+            if (Session.IsOnline && Session.TenantId > 0)
+                System.Threading.Tasks.Task.Run(() => SyncEngine.ProcessSyncQueue());
         }
 
         public static void AddBatch(
             params (string entity, int id, string action)[] items)
         {
+            EnsureTable();
             try
             {
                 using (var conn = dbconnect.OpenLocalForSync())
@@ -1810,8 +1813,33 @@ namespace WindowsFormsApp1.services
                         cmd.ExecuteNonQuery();
                     }
                 }
-                if (Session.IsOnline && Session.TenantId > 0)
-                    System.Threading.Tasks.Task.Run(() => SyncEngine.ProcessSyncQueue());
+            }
+            catch { }
+            // Task.Run try-catch TASHQARISIDA — har holda chaqiriladi
+            if (Session.IsOnline && Session.TenantId > 0)
+                System.Threading.Tasks.Task.Run(() => SyncEngine.ProcessSyncQueue());
+        }
+
+        // SyncQueue jadvali mavjudligini kafolatlaydi
+        private static void EnsureTable()
+        {
+            try
+            {
+                using (var conn = dbconnect.OpenLocalForSync())
+                using (var cmd = new System.Data.SqlClient.SqlCommand(@"
+                    IF OBJECT_ID('dbo.SyncQueue','U') IS NULL
+                    CREATE TABLE SyncQueue (
+                        Id         INT IDENTITY(1,1) PRIMARY KEY,
+                        EntityName NVARCHAR(100) NOT NULL,
+                        EntityId   INT           NOT NULL,
+                        ActionType NVARCHAR(20)  NOT NULL DEFAULT 'Insert',
+                        IsSynced   BIT           NOT NULL DEFAULT 0,
+                        CreatedAt  DATETIME      NOT NULL DEFAULT GETDATE(),
+                        SyncedAt   DATETIME      NULL,
+                        RetryCount INT           NOT NULL DEFAULT 0,
+                        ErrorMsg   NVARCHAR(500) NULL
+                    )", conn))
+                    cmd.ExecuteNonQuery();
             }
             catch { }
         }

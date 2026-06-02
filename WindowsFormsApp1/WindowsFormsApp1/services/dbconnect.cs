@@ -313,6 +313,10 @@ namespace WindowsFormsApp1.services
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='payment2_id') ALTER TABLE [order] ADD payment2_id INT NULL",
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='payment2_amount') ALTER TABLE [order] ADD payment2_amount DECIMAL(18,2) NULL",
 
+                        // order_payments — sync uchun kerakli ustunlar
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order_payments' AND COLUMN_NAME='sync_token') BEGIN ALTER TABLE order_payments ADD sync_token UNIQUEIDENTIFIER NULL DEFAULT NEWID(); UPDATE order_payments SET sync_token=NEWID() WHERE sync_token IS NULL END",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order_payments' AND COLUMN_NAME='is_synced') ALTER TABLE order_payments ADD is_synced BIT NOT NULL DEFAULT 1",
+
                         // ingredient — delta sync uchun (EXEC ishlatamiz — runtime kompilatsiya)
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='synced_qty') ALTER TABLE ingredient ADD synced_qty DECIMAL(18,4) NULL",
                         "EXEC('UPDATE ingredient SET synced_qty = quantity WHERE synced_qty IS NULL')",

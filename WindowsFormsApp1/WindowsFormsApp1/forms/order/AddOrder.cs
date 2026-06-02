@@ -2247,7 +2247,7 @@ namespace WindowsFormsApp1.forms.order
                 SqlCommand updTotal = new SqlCommand(@"UPDATE [order] SET total=@total,
                     customer_id=@cid, customer_name=@cname, delivery_phone=@dph, delivery_address=@dadr,
                     is_delivery=@isdeliv, order_note=@note, custom_svc_fee=@sfee, custom_svc_type=@stype,
-                    discount_pct=@dpct WHERE id=@oid", db.GetCon(), tr);
+                    discount_pct=@dpct, is_synced=0 WHERE id=@oid", db.GetCon(), tr);
                 updTotal.Parameters.AddWithValue("@total",  total);
                 updTotal.Parameters.AddWithValue("@oid",    orderId);
                 updTotal.Parameters.AddWithValue("@cid",    _customerId > 0 ? (object)_customerId : DBNull.Value);
@@ -2267,7 +2267,7 @@ namespace WindowsFormsApp1.forms.order
                 { del2.Parameters.AddWithValue("@oid", orderId); del2.ExecuteNonQuery(); }
                 foreach (var en in _paymentEntries)
                 {
-                    using (var ins2 = new SqlCommand("INSERT INTO order_payments(order_id,payment_id,amount) VALUES(@oid,@pid,@amt)", db.GetCon(), tr))
+                    using (var ins2 = new SqlCommand("INSERT INTO order_payments(order_id,payment_id,amount,sync_token,is_synced) VALUES(@oid,@pid,@amt,NEWID(),0)", db.GetCon(), tr))
                     { ins2.Parameters.AddWithValue("@oid", orderId); ins2.Parameters.AddWithValue("@pid", en.id); ins2.Parameters.AddWithValue("@amt", en.amount); ins2.ExecuteNonQuery(); }
                 }
 
@@ -2484,7 +2484,8 @@ namespace WindowsFormsApp1.forms.order
                         discount_amount=@disc, discount_pct=@dpct,
                         customer_id=@cid, customer_name=@cname,
                         delivery_phone=@dph, delivery_address=@dadr, is_delivery=@isdeliv,
-                        order_note=@note, custom_svc_fee=@sfee, custom_svc_type=@stype
+                        order_note=@note, custom_svc_fee=@sfee, custom_svc_type=@stype,
+                        is_synced=0
                     WHERE id=@id", db.GetCon()))
                 {
                     cmd.Parameters.AddWithValue("@id",     orderId);
@@ -2508,7 +2509,7 @@ namespace WindowsFormsApp1.forms.order
                 { del3.Parameters.AddWithValue("@oid", orderId); del3.ExecuteNonQuery(); }
                 foreach (var en in _paymentEntries)
                 {
-                    using (var ins3 = new SqlCommand("INSERT INTO order_payments(order_id,payment_id,amount) VALUES(@oid,@pid,@amt)", db.GetCon()))
+                    using (var ins3 = new SqlCommand("INSERT INTO order_payments(order_id,payment_id,amount,sync_token,is_synced) VALUES(@oid,@pid,@amt,NEWID(),0)", db.GetCon()))
                     { ins3.Parameters.AddWithValue("@oid", orderId); ins3.Parameters.AddWithValue("@pid", en.id); ins3.Parameters.AddWithValue("@amt", en.amount); ins3.ExecuteNonQuery(); }
                 }
 

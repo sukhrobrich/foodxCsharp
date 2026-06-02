@@ -59,28 +59,34 @@ namespace WindowsFormsApp1.services
         /// </summary>
         public static void AddBatch(params (string entity, int id, string action)[] items)
         {
+            bool wrote = false;
             try
             {
                 using (var conn = dbconnect.OpenLocalForSync())
                 {
                     foreach (var (entity, id, action) in items)
                     {
-                        using (var cmd = new SqlCommand(
-                            "INSERT INTO SyncQueue(EntityName,EntityId,ActionType,IsSynced,CreatedAt)" +
-                            " VALUES(@en,@eid,@at,0,GETDATE())", conn))
+                        try
                         {
-                            cmd.Parameters.AddWithValue("@en",  entity);
-                            cmd.Parameters.AddWithValue("@eid", id);
-                            cmd.Parameters.AddWithValue("@at",  action);
-                            cmd.ExecuteNonQuery();
+                            using (var cmd = new SqlCommand(
+                                "INSERT INTO SyncQueue(EntityName,EntityId,ActionType,IsSynced,CreatedAt)" +
+                                " VALUES(@en,@eid,@at,0,GETDATE())", conn))
+                            {
+                                cmd.Parameters.AddWithValue("@en",  entity);
+                                cmd.Parameters.AddWithValue("@eid", id);
+                                cmd.Parameters.AddWithValue("@at",  action);
+                                cmd.ExecuteNonQuery();
+                                wrote = true;
+                            }
                         }
+                        catch { }
                     }
                 }
-
-                if (Session.IsOnline && Session.TenantId > 0)
-                    Task.Run(() => SyncEngine.ProcessSyncQueue());
             }
             catch { }
+
+            if (wrote && Session.IsOnline && Session.TenantId > 0)
+                Task.Run(() => SyncEngine.ProcessSyncQueue());
         }
     }
 }
