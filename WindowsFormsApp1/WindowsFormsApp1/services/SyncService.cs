@@ -24,10 +24,10 @@ namespace WindowsFormsApp1.services
                 TimeSpan.FromMinutes(2),
                 TimeSpan.FromHours(1));
 
-            // Har 8 soniyada print queue tekshiradi (mobil chek so'rovlari)
+            // Har 1 soniyada print queue tekshiradi (mobil chek so'rovlari)
             _printTimer = new System.Threading.Timer(PrintTick, null,
-                TimeSpan.FromSeconds(8),
-                TimeSpan.FromSeconds(8));
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(1));
         }
 
         public static void Stop()
@@ -98,8 +98,10 @@ namespace WindowsFormsApp1.services
             SyncEngine.DownloadAll();
         }
 
-        // ── Print: mobil chek so'rovlarini tekshiradi va chop etadi ──────────
+        // ── Print: mobil print so'rovlarini 1 soniyada tekshiradi ────────────
         private static bool _printBusy = false;
+        private static bool _tableChecked = false;
+
         private static void PrintTick(object state)
         {
             if (!Session.IsOnline || Session.ForceOffline) return;
@@ -110,15 +112,23 @@ namespace WindowsFormsApp1.services
             {
                 using (SqlConnection central = dbconnect.OpenCentralForSync(Session.TenantId))
                 {
-                    // Jadval mavjudligini tekshirish
-                    using (var chk = new SqlCommand(
-                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='print_queue'", central))
-                    { if ((int)chk.ExecuteScalar() == 0) return; }
+                    // Jadval mavjudligini bir marta tekshirish
+                    if (!_tableChecked)
+                    {
+                        using (var chk = new SqlCommand(
+                            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='print_queue'", central))
+                        {
+                            if ((int)chk.ExecuteScalar() == 0) return;
+                            _tableChecked = true;
+                        }
+                    }
 
                     // Pending joblarni olish
                     var dt = new DataTable();
                     using (var da = new SqlDataAdapter(
-                        "SELECT id, order_id FROM print_queue WHERE is_printed=0 AND tenant_id=@tid ORDER BY requested_at",
+                        "SELECT id, order_id, ISNULL(print_type,'receipt') AS print_type " +
+                        "FROM print_queue WHERE is_printed=0 AND tenant_id=@tid " +
+                        "ORDER BY requested_at",
                         central))
                     {
                         da.SelectCommand.Parameters.AddWithValue("@tid", Session.TenantId);
@@ -127,17 +137,86 @@ namespace WindowsFormsApp1.services
 
                     foreach (DataRow row in dt.Rows)
                     {
-                        int jobId   = Convert.ToInt32(row["id"]);
-                        int orderId = Convert.ToInt32(row["order_id"]);
-                        try { PrintService.PrintReceipt(orderId); } catch { }
+                        int    jobId     = Convert.ToInt32(row["id"]);
+                        int    orderId   = Convert.ToInt32(row["order_id"]);
+                        string printType = row["print_type"].ToString();
+
+                        try
+                        {
+                            if (printType == "kitchen")
+                                PrintKitchenFromCentral(central, orderId);
+                            else
+                                PrintService.PrintReceipt(orderId);
+                        }
+                        catch { }
+
+                        // Printed deb belgilash
                         using (var cmd = new SqlCommand(
-                            "UPDATE print_queue SET is_printed=1, printed_at=GETDATE() WHERE id=@id", central))
-                        { cmd.Parameters.AddWithValue("@id", jobId); cmd.ExecuteNonQuery(); }
+                            "UPDATE print_queue SET is_printed=1, printed_at=GETDATE() WHERE id=@id",
+                            central))
+                        {
+                            cmd.Parameters.AddWithValue("@id", jobId);
+                            cmd.ExecuteNonQuery();
+                        }
                     }
                 }
             }
             catch { }
             finally { _printBusy = false; }
+        }
+
+        // Markaziy serverdan kitchen tickets chop etadi
+        private static void PrintKitchenFromCentral(SqlConnection central, int orderId)
+        {
+            var dt = new DataTable();
+            using (var da = new SqlDataAdapter(@"
+                SELECT f.id AS food_id, f.name AS food_name,
+                       of2.quantity, ISNULL(f.unit,'ta') AS unit,
+                       ISNULL(fc.printer_name,'') AS printer_name,
+                       ISNULL(fc.name,'') AS cat_name,
+                       ISNULL(of2.note,'') AS note,
+                       ISNULL(u.name,'') AS waiter_name,
+                       o.created_at
+                FROM order_food of2
+                JOIN food f ON f.id = of2.food_id
+                JOIN food_category fc ON fc.id = f.food_category_id
+                JOIN [order] o ON o.id = of2.order_id
+                LEFT JOIN [user] u ON u.id = o.user_id
+                WHERE of2.order_id = @oid", central))
+            {
+                da.SelectCommand.Parameters.AddWithValue("@oid", orderId);
+                da.Fill(dt);
+            }
+
+            if (dt.Rows.Count == 0) return;
+
+            var items       = new System.Collections.Generic.List<KitchenItem>();
+            string waiter   = "";
+            DateTime orderTime = DateTime.Now;
+
+            foreach (DataRow r in dt.Rows)
+            {
+                string printer = r["printer_name"].ToString();
+                if (string.IsNullOrEmpty(printer)) continue;
+
+                items.Add(new KitchenItem
+                {
+                    FoodId       = Convert.ToInt32(r["food_id"]),
+                    FoodName     = r["food_name"].ToString(),
+                    Quantity     = Convert.ToInt32(r["quantity"]),
+                    Unit         = r["unit"].ToString(),
+                    PrinterName  = printer,
+                    CategoryName = r["cat_name"].ToString(),
+                    Note         = r["note"].ToString()
+                });
+
+                if (string.IsNullOrEmpty(waiter)) waiter = r["waiter_name"].ToString();
+                if (r["created_at"] != DBNull.Value)
+                    orderTime = Convert.ToDateTime(r["created_at"]);
+            }
+
+            if (items.Count > 0)
+                PrintService.PrintKitchenTickets(orderId, items, waiter, orderTime);
         }
     }
 }
