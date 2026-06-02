@@ -244,16 +244,35 @@ namespace WindowsFormsApp1.services
                         END", c))
                     { try { cmd.ExecuteNonQuery(); } catch { } }
 
-                    // FIX: ingredient.synced_qty ustunini qo'shish (delta sync uchun)
-                    using (var cmd = new SqlCommand(@"
-                        IF EXISTS(SELECT 1 FROM sys.objects WHERE object_id=OBJECT_ID(N'ingredient') AND type=N'U')
-                        AND NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-                            WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='synced_qty')
-                        BEGIN
-                            ALTER TABLE ingredient ADD synced_qty DECIMAL(18,4) NULL;
-                            UPDATE ingredient SET synced_qty = quantity WHERE synced_qty IS NULL;
-                        END", c))
-                    { try { cmd.ExecuteNonQuery(); } catch { } }
+                    // Lokal DB sxemasi central bilan bir xil bo'lishi uchun etishmayotgan ustunlar
+                    string[] schemaMigrations = {
+                        // [user] jadvalidagi yangi ustunlar
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user' AND COLUMN_NAME='app_password') ALTER TABLE [user] ADD app_password NVARCHAR(64) NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user' AND COLUMN_NAME='updated_at') ALTER TABLE [user] ADD updated_at DATETIME NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user' AND COLUMN_NAME='sort_order') ALTER TABLE [user] ADD sort_order INT NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user' AND COLUMN_NAME='created_at') ALTER TABLE [user] ADD created_at DATETIME NULL DEFAULT GETDATE()",
+
+                        // user_category
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user_category' AND COLUMN_NAME='role_type') ALTER TABLE user_category ADD role_type NVARCHAR(20) NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user_category' AND COLUMN_NAME='color') ALTER TABLE user_category ADD color NVARCHAR(20) NULL",
+
+                        // order_cancellation_log — sync uchun kerakli ustunlar
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order_cancellation_log' AND COLUMN_NAME='sync_token') ALTER TABLE order_cancellation_log ADD sync_token UNIQUEIDENTIFIER NULL DEFAULT NEWID()",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order_cancellation_log' AND COLUMN_NAME='food_id') ALTER TABLE order_cancellation_log ADD food_id INT NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order_cancellation_log' AND COLUMN_NAME='food_name') ALTER TABLE order_cancellation_log ADD food_name NVARCHAR(200) NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order_cancellation_log' AND COLUMN_NAME='food_category') ALTER TABLE order_cancellation_log ADD food_category NVARCHAR(200) NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order_cancellation_log' AND COLUMN_NAME='cancelled_qty') ALTER TABLE order_cancellation_log ADD cancelled_qty INT NULL",
+
+                        // [order] — payment2 va sync_token
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='payment2_id') ALTER TABLE [order] ADD payment2_id INT NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='payment2_amount') ALTER TABLE [order] ADD payment2_amount DECIMAL(18,2) NULL",
+
+                        // ingredient — delta sync uchun
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='synced_qty') BEGIN ALTER TABLE ingredient ADD synced_qty DECIMAL(18,4) NULL; UPDATE ingredient SET synced_qty=quantity WHERE synced_qty IS NULL; END",
+                    };
+                    foreach (string sql in schemaMigrations)
+                        using (var cmd = new SqlCommand(sql, c))
+                        { try { cmd.ExecuteNonQuery(); } catch { } }
 
                     string[] fixes = {
                         // [order].is_synced default 1 → 0
