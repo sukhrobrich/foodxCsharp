@@ -1587,8 +1587,17 @@ namespace WindowsFormsApp1.forms.order
             btnOk.FlatAppearance.BorderSize = 0;
             btnOk.Click += (s, e) =>
             {
-                string raw = txtAmt.Text.Replace(',', '.');
-                decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _customSvcFee);
+                string raw = txtAmt.Text.Trim().Replace(',', '.');
+                decimal entered;
+                decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out entered);
+                if (rbPct.Checked && entered > 100)
+                {
+                    MessageBox.Show(
+                        $"Foiz qiymati 100 dan oshib ketdi ({entered:G29}%).\n\nIltimos, foiz uchun 0–100 oralig'idagi qiymat kiriting.\nMasalan: 10 (ya'ni 10%).\n\nKatta summa (UZS) kiritmoqchi bo'lsangiz, \"So'm (UZS)\" rejimini tanlang.",
+                        "Noto'g'ri qiymat", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                _customSvcFee  = entered;
                 _customSvcType = rbPct.Checked ? "%" : "UZS";
                 RecalcTotal();
                 dlg.DialogResult = DialogResult.OK;
@@ -1750,7 +1759,9 @@ namespace WindowsFormsApp1.forms.order
         private decimal CalcServiceFee(decimal foodTotal)
         {
             if (_customSvcFee > 0)
-                return _customSvcType == "UZS" ? _customSvcFee : Math.Round(foodTotal * _customSvcFee / 100, 0);
+                return (_customSvcType == "UZS" || _customSvcType == "pct")
+                    ? _customSvcFee
+                    : Math.Round(foodTotal * _customSvcFee / 100, 0);
             if (!_hasServiceFee) return 0;
             return Math.Round(foodTotal * GetServiceChargePct() / 100, 0);
         }
@@ -2098,8 +2109,9 @@ namespace WindowsFormsApp1.forms.order
                     cmd.Parameters.AddWithValue("@dadr",   string.IsNullOrEmpty(_deliveryAddr)  ? (object)DBNull.Value : _deliveryAddr);
                     cmd.Parameters.AddWithValue("@isdeliv", _isDelivery ? 1 : 0);
                     cmd.Parameters.AddWithValue("@note",   string.IsNullOrEmpty(_orderNote) ? (object)DBNull.Value : _orderNote);
-                    cmd.Parameters.AddWithValue("@sfee",   _customSvcFee > 0 ? (object)_customSvcFee : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@stype",  string.IsNullOrEmpty(_customSvcType) ? (object)DBNull.Value : _customSvcType);
+                    decimal _sfeeIns = CalcServiceFee(GetFoodTotal());
+                    cmd.Parameters.AddWithValue("@sfee",   _sfeeIns > 0 ? (object)_sfeeIns : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@stype",  _sfeeIns > 0 ? (object)"UZS" : DBNull.Value);
                     cmd.Parameters.AddWithValue("@dpct",   _discountPct);
                     orderId = (int)cmd.ExecuteScalar();
 
@@ -2187,8 +2199,9 @@ namespace WindowsFormsApp1.forms.order
                 updTotal.Parameters.AddWithValue("@dadr",   string.IsNullOrEmpty(_deliveryAddr)  ? (object)DBNull.Value : _deliveryAddr);
                 updTotal.Parameters.AddWithValue("@isdeliv", _isDelivery ? 1 : 0);
                 updTotal.Parameters.AddWithValue("@note",   string.IsNullOrEmpty(_orderNote) ? (object)DBNull.Value : _orderNote);
-                updTotal.Parameters.AddWithValue("@sfee",   _customSvcFee > 0 ? (object)_customSvcFee : DBNull.Value);
-                updTotal.Parameters.AddWithValue("@stype",  string.IsNullOrEmpty(_customSvcType) ? (object)DBNull.Value : _customSvcType);
+                decimal _sfeeUpd = CalcServiceFee(GetFoodTotal());
+                updTotal.Parameters.AddWithValue("@sfee",  _sfeeUpd > 0 ? (object)_sfeeUpd : DBNull.Value);
+                updTotal.Parameters.AddWithValue("@stype", _sfeeUpd > 0 ? (object)"UZS" : DBNull.Value);
                 updTotal.Parameters.AddWithValue("@dpct",   _discountPct);
                 updTotal.ExecuteNonQuery();
 
@@ -2421,8 +2434,8 @@ namespace WindowsFormsApp1.forms.order
                     cmd.Parameters.AddWithValue("@dadr",   string.IsNullOrEmpty(_deliveryAddr)  ? (object)DBNull.Value : _deliveryAddr);
                     cmd.Parameters.AddWithValue("@isdeliv", _isDelivery ? 1 : 0);
                     cmd.Parameters.AddWithValue("@note",   string.IsNullOrEmpty(_orderNote) ? (object)DBNull.Value : _orderNote);
-                    cmd.Parameters.AddWithValue("@sfee",   _customSvcFee > 0 ? (object)_customSvcFee : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@stype",  string.IsNullOrEmpty(_customSvcType) ? (object)DBNull.Value : _customSvcType);
+                    cmd.Parameters.AddWithValue("@sfee",   svcAmt > 0 ? (object)svcAmt : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@stype",  svcAmt > 0 ? (object)"UZS" : DBNull.Value);
                     cmd.ExecuteNonQuery();
                 }
 
