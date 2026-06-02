@@ -1096,7 +1096,8 @@ namespace WindowsFormsApp1.services
             // Central API: name, phone, notes — email/address yo'q
             DataTable rows = ReadAll(central,
                 "SELECT id, ISNULL(name,'') AS name, ISNULL(phone,'') AS phone, " +
-                "  ISNULL(notes,'') AS notes, ISNULL(created_at,GETDATE()) AS created_at, sync_token " +
+                "  ISNULL(notes,'') AS notes, ISNULL(created_at,GETDATE()) AS created_at," +
+                "  ISNULL(sync_token,NEWID()) AS sync_token " +
                 "FROM customer");
             foreach (DataRow r in rows.Rows)
             {
@@ -1125,7 +1126,7 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             DataTable rows = ReadAll(central,
-                "SELECT id, user_id, place_id, payment_id, created_at, paid," +
+                "SELECT id, user_id, ISNULL(place_id,0) AS place_id, payment_id, created_at, paid," +
                 "  ISNULL(total,0) AS total," +
                 "  ISNULL(discount_amount,0) AS discount_amount," +
                 "  ISNULL(discount_pct,0) AS discount_pct," +
@@ -1136,7 +1137,8 @@ namespace WindowsFormsApp1.services
                 "  ISNULL(order_note,'') AS order_note," +
                 "  ISNULL(custom_svc_fee,0) AS custom_svc_fee," +
                 "  ISNULL(custom_svc_type,'pct') AS custom_svc_type," +
-                "  payment2_id, ISNULL(payment2_amount,0) AS payment2_amount, sync_token" +
+                "  payment2_id, ISNULL(payment2_amount,0) AS payment2_amount," +
+                "  ISNULL(sync_token,NEWID()) AS sync_token" +
                 " FROM [order]" +
                 " WHERE created_at >= DATEADD(YEAR,-1,GETDATE())");
             foreach (DataRow r in rows.Rows)
@@ -1185,7 +1187,7 @@ namespace WindowsFormsApp1.services
             int count = 0;
             DataTable rows = ReadAll(central,
                 "SELECT f.id, f.order_id, f.food_id, f.quantity," +
-                "  ISNULL(f.note,'') AS note, f.sync_token" +
+                "  ISNULL(f.note,'') AS note, ISNULL(f.sync_token,NEWID()) AS sync_token" +
                 " FROM order_food f" +
                 " JOIN [order] o ON o.id=f.order_id" +
                 " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())");
@@ -1220,7 +1222,8 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             DataTable rows = ReadAll(central,
-                "SELECT op.id, op.order_id, op.payment_id, op.amount, op.sync_token" +
+                "SELECT op.id, op.order_id, op.payment_id, op.amount," +
+                "  ISNULL(op.sync_token,NEWID()) AS sync_token" +
                 " FROM order_payments op" +
                 " JOIN [order] o ON o.id=op.order_id" +
                 " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())");
@@ -1257,7 +1260,8 @@ namespace WindowsFormsApp1.services
                 "  ISNULL(d.debtor_name,'') AS debtor_name, ISNULL(d.debtor_phone,'') AS debtor_phone," +
                 "  ISNULL(d.amount,0) AS amount, ISNULL(d.is_paid,0) AS is_paid," +
                 "  d.paid_at, ISNULL(d.debt_note,'') AS debt_note," +
-                "  ISNULL(d.created_at,GETDATE()) AS created_at, d.sync_token" +
+                "  ISNULL(d.created_at,GETDATE()) AS created_at," +
+                "  ISNULL(d.sync_token,NEWID()) AS sync_token" +
                 " FROM order_debt d" +
                 " JOIN [order] o ON o.id=d.order_id" +
                 " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())");
@@ -1299,7 +1303,8 @@ namespace WindowsFormsApp1.services
                 "SELECT l.id, l.order_id, l.food_id, ISNULL(l.food_name,'') AS food_name," +
                 "  ISNULL(l.food_category,'') AS food_category, ISNULL(l.cancelled_qty,0) AS cancelled_qty," +
                 "  ISNULL(l.cancelled_by,'') AS cancelled_by," +
-                "  ISNULL(l.cancelled_at,GETDATE()) AS cancelled_at, l.sync_token" +
+                "  ISNULL(l.cancelled_at,GETDATE()) AS cancelled_at," +
+                "  ISNULL(l.sync_token,NEWID()) AS sync_token" +
                 " FROM order_cancellation_log l" +
                 " JOIN [order] o ON o.id=l.order_id" +
                 " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())");
@@ -1334,7 +1339,8 @@ namespace WindowsFormsApp1.services
             DataTable rows = ReadAll(central,
                 "SELECT id, ISNULL(type,'') AS type, ISNULL(category,'') AS category," +
                 "  ISNULL(amount,0) AS amount, ISNULL(description,'') AS description," +
-                "  created_by, ISNULL(created_at,GETDATE()) AS created_at, sync_token" +
+                "  created_by, ISNULL(created_at,GETDATE()) AS created_at," +
+                "  ISNULL(sync_token,NEWID()) AS sync_token" +
                 " FROM cash_transaction" +
                 " WHERE created_at >= DATEADD(YEAR,-1,GETDATE())");
             foreach (DataRow r in rows.Rows)
@@ -1368,7 +1374,7 @@ namespace WindowsFormsApp1.services
                 "SELECT id, ingredient_id, ISNULL(quantity,0) AS quantity," +
                 "  ISNULL(price_per_unit,0) AS price_per_unit, ISNULL(total_price,0) AS total_price," +
                 "  ISNULL(purchased_at,GETDATE()) AS purchased_at," +
-                "  ISNULL(notes,'') AS notes, sync_token" +
+                "  ISNULL(notes,'') AS notes, ISNULL(sync_token,NEWID()) AS sync_token" +
                 " FROM ingredient_purchase" +
                 " WHERE purchased_at >= DATEADD(YEAR,-1,GETDATE())");
             foreach (DataRow r in rows.Rows)
@@ -1403,7 +1409,7 @@ namespace WindowsFormsApp1.services
                 "SELECT id, food_id, ISNULL(quantity,0) AS quantity," +
                 "  ISNULL(price_per_unit,0) AS price_per_unit, ISNULL(total_price,0) AS total_price," +
                 "  ISNULL(purchased_at,GETDATE()) AS purchased_at," +
-                "  ISNULL(notes,'') AS notes, sync_token" +
+                "  ISNULL(notes,'') AS notes, ISNULL(sync_token,NEWID()) AS sync_token" +
                 " FROM food_purchase" +
                 " WHERE purchased_at >= DATEADD(YEAR,-1,GETDATE())");
             foreach (DataRow r in rows.Rows)
