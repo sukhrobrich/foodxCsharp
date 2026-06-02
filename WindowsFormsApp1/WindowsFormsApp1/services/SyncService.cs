@@ -145,6 +145,8 @@ namespace WindowsFormsApp1.services
                         {
                             if (printType == "kitchen")
                                 PrintKitchenFromCentral(central, orderId);
+                            else if (printType == "kitchen_cancel")
+                                PrintKitchenCancelFromCentral(central, jobId, orderId);
                             else
                                 PrintService.PrintReceipt(orderId);
                         }
@@ -163,6 +165,41 @@ namespace WindowsFormsApp1.services
             }
             catch { }
             finally { _printBusy = false; }
+        }
+
+        // Markaziy serverdan bekor qilish chiptasini chop etadi
+        private static void PrintKitchenCancelFromCentral(SqlConnection central, int queueId, int orderId)
+        {
+            var dt = new DataTable();
+            using (var da = new SqlDataAdapter(
+                "SELECT food_id, food_name, quantity, unit, printer_name, cat_name " +
+                "FROM print_queue_items WHERE queue_id=@qid", central))
+            {
+                da.SelectCommand.Parameters.AddWithValue("@qid", queueId);
+                da.Fill(dt);
+            }
+
+            if (dt.Rows.Count == 0) return;
+
+            var items = new System.Collections.Generic.List<KitchenItem>();
+            foreach (DataRow r in dt.Rows)
+            {
+                string printer = r["printer_name"].ToString();
+                if (string.IsNullOrEmpty(printer)) continue;
+                items.Add(new KitchenItem
+                {
+                    FoodId       = Convert.ToInt32(r["food_id"]),
+                    FoodName     = r["food_name"].ToString(),
+                    Quantity     = Convert.ToInt32(r["quantity"]),
+                    Unit         = r["unit"].ToString(),
+                    PrinterName  = printer,
+                    CategoryName = r["cat_name"].ToString(),
+                    Note         = ""
+                });
+            }
+
+            if (items.Count > 0)
+                PrintService.PrintKitchenCancellation(orderId, items, "", DateTime.Now);
         }
 
         // Markaziy serverdan kitchen tickets chop etadi

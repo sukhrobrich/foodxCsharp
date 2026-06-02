@@ -325,7 +325,8 @@ public class PrintService
             foreach (string[] it in items)
                 foodSubtotal += int.Parse(it[1]) * decimal.Parse(it[2]);
             decimal svcAmt = hasSvcFee && svcPct > 0 ? Math.Round(foodSubtotal * svcPct / 100) : 0;
-            decimal total  = orderTotal;
+            // orderTotal ni ishlatmaymiz: har doim mahsulotlar + xizmat - chegirma (mobil va WinForms uchun bir xil)
+            decimal total  = foodSubtotal + svcAmt - discountAmt;
 
             System.Drawing.Image logoImg = null;
             if (!string.IsNullOrEmpty(logoPath) && System.IO.File.Exists(logoPath))
