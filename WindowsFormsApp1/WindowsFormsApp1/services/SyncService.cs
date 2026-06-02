@@ -19,10 +19,10 @@ namespace WindowsFormsApp1.services
                 TimeSpan.FromSeconds(60),
                 TimeSpan.FromSeconds(60));
 
-            // Har 1 soatda centraldan localga ma'lumot yuklab oladi (zahira)
+            // Har 5 daqiqada centraldan localga ma'lumot yuklab oladi (zahira)
             _downloadTimer = new System.Threading.Timer(DownloadTick, null,
                 TimeSpan.FromMinutes(2),
-                TimeSpan.FromHours(1));
+                TimeSpan.FromMinutes(5));
 
             // Har 1 soniyada print queue tekshiradi (mobil chek so'rovlari)
             _printTimer = new System.Threading.Timer(PrintTick, null,
@@ -37,74 +37,104 @@ namespace WindowsFormsApp1.services
             if (_printTimer   != null) _printTimer.Dispose();
         }
 
-        // ── Upload: local → central (online bo'lganda) ────────────────────────
+        // ── Upload: local → central ───────────────────────────────────────────
+        private static bool _syncBusy = false;
+
         private static void Tick(object state)
         {
             if (Session.ForceOffline) return;
 
             bool wasOnline = Session.IsOnline;
             bool nowOnline = dbconnect.CheckCentral();
-
-            if (wasOnline == nowOnline) return;
-
             Session.IsOnline = nowOnline;
 
             Form form = Application.OpenForms.Count > 0 ? Application.OpenForms[0] : null;
-            if (form == null || form.IsDisposed) return;
 
-            if (nowOnline)
+            if (wasOnline != nowOnline)
             {
+                // ── Holat o'zgardi ────────────────────────────────────────
+                if (nowOnline)
+                {
+                    // OFFLINE → ONLINE: to'liq sync + SyncQueue
+                    ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        if (_syncBusy) return;
+                        _syncBusy = true;
+                        try
+                        {
+                            SyncEngine.SyncResult upload   = SyncEngine.SyncAll();
+                            SyncEngine.SyncResult queue    = SyncEngine.ProcessSyncQueue();
+                            SyncEngine.SyncResult download = SyncEngine.DownloadAll();
+
+                            if (form == null || form.IsDisposed) return;
+                            form.BeginInvoke(new Action(delegate
+                            {
+                                var msgs = new System.Text.StringBuilder();
+                                bool hasError = false;
+
+                                if (upload.Errors > 0 || queue.Errors > 0)
+                                {
+                                    string err = upload.LastError ?? queue.LastError;
+                                    msgs.AppendLine("⬆ Yuklashda xatolik: " + err);
+                                    hasError = true;
+                                }
+                                else
+                                {
+                                    int synced = upload.Synced + queue.Synced;
+                                    if (synced > 0)
+                                        msgs.AppendLine("⬆ " + synced + " ta oflayn yozuv yuklandi.");
+                                }
+
+                                if (download.Errors > 0)
+                                {
+                                    msgs.AppendLine("⬇ Yuklab olishda xatolik: " + download.LastError);
+                                    hasError = true;
+                                }
+                                else if (download.Synced > 0)
+                                    msgs.AppendLine("⬇ " + download.Synced + " ta yozuv local bazaga tushdi.");
+
+                                if (hasError)
+                                    MessageBox.Show(msgs.ToString().Trim(),
+                                        "FoodX — Sinxronizatsiya xatosi",
+                                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                else if (msgs.Length > 0)
+                                    MessageBox.Show("Ulanish tiklandi!\n" + msgs.ToString().Trim(),
+                                        "FoodX — Sinxronizatsiya tugadi",
+                                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                else
+                                    MessageBox.Show(
+                                        "Server bilan ulanish tiklandi.\nDastur onlayn rejimda ishlaydi.",
+                                        "FoodX — Onlayn",
+                                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            }));
+                        }
+                        finally { _syncBusy = false; }
+                    });
+                }
+                else
+                {
+                    // ONLINE → OFFLINE
+                    if (form != null && !form.IsDisposed)
+                        form.BeginInvoke(new Action(delegate
+                        {
+                            MessageBox.Show(
+                                "Server bilan ulanish uzildi.\nDastur oflayn rejimda davom etadi.\nMa'lumotlar mahalliy bazaga yoziladi.",
+                                "FoodX — Oflayn",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }));
+                }
+            }
+            else if (nowOnline && !_syncBusy)
+            {
+                // ── Holat o'zgarmadi, lekin online — SyncQueue ni tekshir ─
+                // (SyncQueueHelper.Add() dan keyin darhol ishlamagan bo'lsa)
                 ThreadPool.QueueUserWorkItem(delegate
                 {
-                    SyncEngine.SyncResult upload   = SyncEngine.SyncAll();
-                    SyncEngine.SyncResult download = SyncEngine.DownloadAll();
-
-                    form.BeginInvoke(new Action(delegate
-                    {
-                        var msgs = new System.Text.StringBuilder();
-                        bool hasError = false;
-
-                        if (upload.Errors > 0)
-                        {
-                            msgs.AppendLine("⬆ Yuklashda xatolik: " + upload.LastError);
-                            hasError = true;
-                        }
-                        else if (upload.Synced > 0)
-                            msgs.AppendLine("⬆ " + upload.Synced + " ta oflayn yozuv yuklandi.");
-
-                        if (download.Errors > 0)
-                        {
-                            msgs.AppendLine("⬇ Yuklab olishda xatolik: " + download.LastError);
-                            hasError = true;
-                        }
-                        else if (download.Synced > 0)
-                            msgs.AppendLine("⬇ " + download.Synced + " ta yozuv local bazaga tushdi.");
-
-                        if (hasError)
-                            MessageBox.Show(msgs.ToString().Trim(),
-                                "FoodX — Sinxronizatsiya xatosi",
-                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        else if (msgs.Length > 0)
-                            MessageBox.Show("Ulanish tiklandi!\n" + msgs.ToString().Trim(),
-                                "FoodX — Sinxronizatsiya tugadi",
-                                MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        else
-                            MessageBox.Show(
-                                "Server bilan ulanish tiklandi.\nDastur onlayn rejimda ishlaydi.",
-                                "FoodX — Onlayn",
-                                MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }));
+                    if (_syncBusy) return;
+                    _syncBusy = true;
+                    try { SyncEngine.ProcessSyncQueue(); }
+                    finally { _syncBusy = false; }
                 });
-            }
-            else
-            {
-                form.BeginInvoke(new Action(delegate
-                {
-                    MessageBox.Show(
-                        "Server bilan ulanish uzildi.\nDastur oflayn rejimda davom etadi.\nMa'lumotlar mahalliy bazaga yoziladi.",
-                        "FoodX — Oflayn",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }));
             }
         }
 
