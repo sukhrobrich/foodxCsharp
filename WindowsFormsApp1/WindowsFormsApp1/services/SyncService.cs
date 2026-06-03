@@ -239,7 +239,7 @@ namespace WindowsFormsApp1.services
                         try
                         {
                             if (printType == "kitchen")
-                                PrintKitchenFromCentral(central, orderId);
+                                PrintKitchenFromCentral(central, orderId, jobId);
                             else if (printType == "kitchen_cancel")
                                 PrintKitchenCancelFromCentral(central, jobId, orderId);
                             else
@@ -298,26 +298,61 @@ namespace WindowsFormsApp1.services
         }
 
         // Markaziy serverdan kitchen tickets chop etadi
-        private static void PrintKitchenFromCentral(SqlConnection central, int orderId)
+        private static void PrintKitchenFromCentral(SqlConnection central, int orderId, int queueId)
         {
-            var dt = new DataTable();
-            using (var da = new SqlDataAdapter(@"
-                SELECT f.id AS food_id, f.name AS food_name,
-                       of2.quantity, ISNULL(f.unit,'ta') AS unit,
-                       ISNULL(fc.printer_name,'') AS printer_name,
-                       ISNULL(fc.name,'') AS cat_name,
-                       ISNULL(of2.note,'') AS note,
-                       ISNULL(u.name,'') AS waiter_name,
-                       o.created_at
-                FROM order_food of2
-                JOIN food f ON f.id = of2.food_id
-                JOIN food_category fc ON fc.id = f.food_category_id
-                JOIN [order] o ON o.id = of2.order_id
-                LEFT JOIN [user] u ON u.id = o.user_id
-                WHERE of2.order_id = @oid", central))
+            // Agar print_queue_items da bu job uchun itemlar bo'lsa — faqat o'shalarni chiqarish
+            // (buyurtma yangilanganida faqat yangi qo'shilgan taomlar)
+            bool hasSpecific = false;
+            using (var chk = new SqlCommand(
+                "SELECT COUNT(*) FROM print_queue_items WHERE queue_id=@qid", central))
             {
-                da.SelectCommand.Parameters.AddWithValue("@oid", orderId);
-                da.Fill(dt);
+                chk.Parameters.AddWithValue("@qid", queueId);
+                hasSpecific = Convert.ToInt32(chk.ExecuteScalar()) > 0;
+            }
+
+            var dt = new DataTable();
+            if (hasSpecific)
+            {
+                // Faqat yangi qo'shilgan itemlar
+                using (var da = new SqlDataAdapter(@"
+                    SELECT pqi.food_id, pqi.food_name,
+                           pqi.quantity, ISNULL(pqi.unit,'ta') AS unit,
+                           ISNULL(pqi.printer_name,'') AS printer_name,
+                           ISNULL(pqi.cat_name,'') AS cat_name,
+                           '' AS note,
+                           ISNULL(u.name,'') AS waiter_name,
+                           o.created_at
+                    FROM print_queue_items pqi
+                    JOIN [order] o ON o.id = @oid
+                    LEFT JOIN [user] u ON u.id = o.user_id
+                    WHERE pqi.queue_id = @qid", central))
+                {
+                    da.SelectCommand.Parameters.AddWithValue("@qid", queueId);
+                    da.SelectCommand.Parameters.AddWithValue("@oid", orderId);
+                    da.Fill(dt);
+                }
+            }
+            else
+            {
+                // Yangi buyurtma — barcha itemlarni chiqarish
+                using (var da = new SqlDataAdapter(@"
+                    SELECT f.id AS food_id, f.name AS food_name,
+                           of2.quantity, ISNULL(f.unit,'ta') AS unit,
+                           ISNULL(fc.printer_name,'') AS printer_name,
+                           ISNULL(fc.name,'') AS cat_name,
+                           ISNULL(of2.note,'') AS note,
+                           ISNULL(u.name,'') AS waiter_name,
+                           o.created_at
+                    FROM order_food of2
+                    JOIN food f ON f.id = of2.food_id
+                    JOIN food_category fc ON fc.id = f.food_category_id
+                    JOIN [order] o ON o.id = of2.order_id
+                    LEFT JOIN [user] u ON u.id = o.user_id
+                    WHERE of2.order_id = @oid", central))
+                {
+                    da.SelectCommand.Parameters.AddWithValue("@oid", orderId);
+                    da.Fill(dt);
+                }
             }
 
             if (dt.Rows.Count == 0) return;
