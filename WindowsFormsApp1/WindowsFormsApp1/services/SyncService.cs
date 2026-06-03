@@ -210,8 +210,8 @@ namespace WindowsFormsApp1.services
             {
                 using (SqlConnection central = dbconnect.OpenCentralForSync(Session.TenantId))
                 {
-                    // Heartbeat — har 30 soniyada settings ga yozamiz
-                    if ((DateTime.Now - _lastHeartbeat).TotalSeconds >= 30)
+                    // Heartbeat — har 10 soniyada settings ga yozamiz
+                    if ((DateTime.Now - _lastHeartbeat).TotalSeconds >= 10)
                     {
                         try
                         {
