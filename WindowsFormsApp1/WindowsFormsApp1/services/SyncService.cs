@@ -10,6 +10,7 @@ namespace WindowsFormsApp1.services
     {
         private static System.Threading.Timer _timer;
         private static System.Threading.Timer _orderSyncTimer;
+        private static System.Threading.Timer _orderDownloadTimer; // mobil zakaslami olish
         private static System.Threading.Timer _fullSyncTimer;
         private static System.Threading.Timer _downloadTimer;
         private static System.Threading.Timer _printTimer;
@@ -25,6 +26,11 @@ namespace WindowsFormsApp1.services
             _orderSyncTimer = new System.Threading.Timer(OrderSyncTick, null,
                 TimeSpan.FromSeconds(5),
                 TimeSpan.FromSeconds(5));
+
+            // Mobil ilovadan kelgan zakaslami yuklab olish — har 3 soniyada
+            _orderDownloadTimer = new System.Threading.Timer(OrderDownloadTick, null,
+                TimeSpan.FromSeconds(3),
+                TimeSpan.FromSeconds(3));
 
             // To'liq sinxronizatsiya (taomlar, sozlamalar va boshqalar) — har 2 daqiqada
             _fullSyncTimer = new System.Threading.Timer(FullSyncTick, null,
@@ -44,11 +50,12 @@ namespace WindowsFormsApp1.services
 
         public static void Stop()
         {
-            if (_timer          != null) _timer.Dispose();
-            if (_orderSyncTimer != null) _orderSyncTimer.Dispose();
-            if (_fullSyncTimer  != null) _fullSyncTimer.Dispose();
-            if (_downloadTimer  != null) _downloadTimer.Dispose();
-            if (_printTimer     != null) _printTimer.Dispose();
+            if (_timer               != null) _timer.Dispose();
+            if (_orderSyncTimer      != null) _orderSyncTimer.Dispose();
+            if (_orderDownloadTimer  != null) _orderDownloadTimer.Dispose();
+            if (_fullSyncTimer       != null) _fullSyncTimer.Dispose();
+            if (_downloadTimer       != null) _downloadTimer.Dispose();
+            if (_printTimer          != null) _printTimer.Dispose();
         }
 
         // ── Upload: local → central ───────────────────────────────────────────
@@ -160,6 +167,22 @@ namespace WindowsFormsApp1.services
                 _syncBusy = true;
                 try { SyncEngine.SyncAll(); }
                 finally { _syncBusy = false; }
+            });
+        }
+
+        // ── Tezkor download: mobil zakaslami 3 soniyada bir oladi ────────────
+        private static bool _orderDlBusy = false;
+
+        private static void OrderDownloadTick(object state)
+        {
+            if (!Session.IsOnline || Session.ForceOffline || Session.TenantId == 0) return;
+            if (_orderDlBusy || _syncBusy) return;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                if (_orderDlBusy || _syncBusy) return;
+                _orderDlBusy = true;
+                try { SyncEngine.DownloadOrdersFast(); }
+                finally { _orderDlBusy = false; }
             });
         }
 

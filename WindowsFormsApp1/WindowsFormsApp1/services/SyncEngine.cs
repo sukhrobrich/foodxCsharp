@@ -1733,6 +1733,157 @@ namespace WindowsFormsApp1.services
             return count;
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // TEZKOR DOWNLOAD — faqat aktiv buyurtmalar (3-5 soniyada bir)
+        // Mobil ilovadan kelgan zakaslami WinFormda darhol ko'rsatish uchun
+        // ═══════════════════════════════════════════════════════════════════
+        public static SyncResult DownloadOrdersFast()
+        {
+            var result = new SyncResult();
+            if (!Session.IsOnline || Session.TenantId == 0) return result;
+
+            SqlConnection local   = null;
+            SqlConnection central = null;
+            try
+            {
+                local   = dbconnect.OpenLocalForSync();
+                central = dbconnect.OpenCentralForSync(Session.TenantId);
+
+                // 1. Bugungi va kechagi aktiv buyurtmalar
+                TryDl(() => DlOrdersFast(local, central), result);
+                // 2. Ular uchun taomlar ro'yxati
+                TryDl(() => DlOrderFoodsFast(local, central), result);
+                // 3. Stol holati (band/bo'sh)
+                TryDl(() => DlPlaceIns(local, central), result);
+            }
+            catch (Exception ex) { result.Errors++; result.LastError = ex.Message; }
+            finally
+            {
+                if (local   != null) { local.Close();   local.Dispose(); }
+                if (central != null) { central.Close(); central.Dispose(); }
+            }
+            return result;
+        }
+
+        // Faqat to'lanmagan + so'nggi 48 soat ichidagi buyurtmalar
+        private static int DlOrdersFast(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT id, user_id, ISNULL(place_id,0) AS place_id, payment_id, created_at, paid," +
+                "  ISNULL(total,0) AS total," +
+                "  ISNULL(discount_amount,0) AS discount_amount," +
+                "  ISNULL(discount_pct,0) AS discount_pct," +
+                "  customer_id, ISNULL(customer_name,'') AS customer_name," +
+                "  ISNULL(delivery_phone,'') AS delivery_phone," +
+                "  ISNULL(delivery_address,'') AS delivery_address," +
+                "  ISNULL(is_delivery,0) AS is_delivery," +
+                "  ISNULL(order_note,'') AS order_note," +
+                "  ISNULL(custom_svc_fee,0) AS custom_svc_fee," +
+                "  ISNULL(custom_svc_type,'pct') AS custom_svc_type," +
+                "  payment2_id, ISNULL(payment2_amount,0) AS payment2_amount," +
+                "  ISNULL(sync_token,NEWID()) AS sync_token" +
+                " FROM [order]" +
+                " WHERE paid='NO' OR created_at >= DATEADD(HOUR,-48,GETDATE())");
+
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid = Convert.ToInt32(r["id"]);
+                // FAQAT central_id bo'yicha qidiramiz — id bo'yicha emas (xavfsiz)
+                int? lid = ScalarOrNull(local,
+                    "SELECT id FROM [order] WHERE central_id=@c", "@c", cid);
+
+                if (lid != null)
+                {
+                    Exec(local,
+                        "UPDATE [order] SET paid=@paid,total=@tot,discount_amount=@disc," +
+                        "  discount_pct=@discp,payment_id=@pay,custom_svc_fee=@svf," +
+                        "  custom_svc_type=@svt,payment2_id=@p2,payment2_amount=@p2a," +
+                        "  order_note=@note,is_synced=1 WHERE id=@id",
+                        P("@paid",r["paid"]),P("@tot",r["total"]),P("@disc",r["discount_amount"]),
+                        P("@discp",r["discount_pct"]),P("@pay",r["payment_id"]),
+                        P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
+                        P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
+                        P("@note",r["order_note"]),P("@id",lid.Value));
+                }
+                else
+                {
+                    // Yangi buyurtma (mobil yoki boshqa qurilmadan) — INSERT
+                    try
+                    {
+                        Exec(local,
+                            "SET IDENTITY_INSERT [order] ON;" +
+                            "INSERT INTO [order](id,user_id,place_id,payment_id,created_at,paid,total," +
+                            "  discount_amount,discount_pct,customer_id,customer_name,delivery_phone," +
+                            "  delivery_address,is_delivery,order_note,custom_svc_fee,custom_svc_type," +
+                            "  payment2_id,payment2_amount,sync_token,is_synced,central_id)" +
+                            " VALUES(@id,@uid,@plid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
+                            "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@tok,1,@id);" +
+                            "SET IDENTITY_INSERT [order] OFF",
+                            P("@id",cid),P("@uid",r["user_id"]),P("@plid",r["place_id"]),
+                            P("@pay",r["payment_id"]),P("@cat",r["created_at"]),
+                            P("@paid",r["paid"]),P("@tot",r["total"]),
+                            P("@disc",r["discount_amount"]),P("@discp",r["discount_pct"]),
+                            P("@cust",r["customer_id"]),P("@custn",r["customer_name"]),
+                            P("@dph",r["delivery_phone"]),P("@dadr",r["delivery_address"]),
+                            P("@isdel",r["is_delivery"]),P("@note",r["order_note"]),
+                            P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
+                            P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
+                            P("@tok",r["sync_token"]));
+                    }
+                    catch { /* ID konflikt bo'lsa o'tkazib yuboramiz */ }
+                }
+                count++;
+            }
+            return count;
+        }
+
+        // Aktiv buyurtmalar uchun order_food ni yangilash
+        private static int DlOrderFoodsFast(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            DataTable rows = ReadAll(central,
+                "SELECT f.id, f.order_id, f.food_id, f.quantity," +
+                "  ISNULL(f.note,'') AS note, ISNULL(f.sync_token,NEWID()) AS sync_token" +
+                " FROM order_food f" +
+                " JOIN [order] o ON o.id=f.order_id" +
+                " WHERE o.paid='NO' OR o.created_at >= DATEADD(HOUR,-48,GETDATE())");
+
+            foreach (DataRow r in rows.Rows)
+            {
+                int cid     = Convert.ToInt32(r["id"]);
+                int orderId = Convert.ToInt32(r["order_id"]);
+
+                // Bu orderni lokal bazada topamiz (central_id bo'yicha)
+                int? orderLid = ScalarOrNull(local,
+                    "SELECT id FROM [order] WHERE central_id=@c OR id=@c", "@c", orderId);
+                if (orderLid == null) continue;
+
+                int? lid = ScalarOrNull(local, "SELECT id FROM order_food WHERE id=@c", "@c", cid);
+                if (lid != null)
+                    Exec(local,
+                        "UPDATE order_food SET food_id=@fid,quantity=@qty,note=@note,is_synced=1 WHERE id=@id",
+                        P("@fid",r["food_id"]),P("@qty",r["quantity"]),
+                        P("@note",r["note"]),P("@id",lid.Value));
+                else
+                {
+                    try
+                    {
+                        Exec(local,
+                            "SET IDENTITY_INSERT order_food ON;" +
+                            "INSERT INTO order_food(id,order_id,food_id,quantity,note,sync_token,is_synced)" +
+                            " VALUES(@id,@oid,@fid,@qty,@note,@tok,1);" +
+                            "SET IDENTITY_INSERT order_food OFF",
+                            P("@id",cid),P("@oid",orderLid.Value),P("@fid",r["food_id"]),
+                            P("@qty",r["quantity"]),P("@note",r["note"]),P("@tok",r["sync_token"]));
+                    }
+                    catch { }
+                }
+                count++;
+            }
+            return count;
+        }
+
         // ── ADO.NET yordamchilar ─────────────────────────────────────────────
         private static DataTable ReadAll(SqlConnection conn, string sql)
         {
