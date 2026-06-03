@@ -197,6 +197,9 @@ namespace WindowsFormsApp1.services
         private static bool _printBusy = false;
         private static bool _tableChecked = false;
 
+        // Heartbeat: oxirgi marta central serverga ulanganligi (har 30 soniyada bir marta)
+        private static DateTime _lastHeartbeat = DateTime.MinValue;
+
         private static void PrintTick(object state)
         {
             if (!Session.IsOnline || Session.ForceOffline) return;
@@ -207,6 +210,28 @@ namespace WindowsFormsApp1.services
             {
                 using (SqlConnection central = dbconnect.OpenCentralForSync(Session.TenantId))
                 {
+                    // Heartbeat — har 30 soniyada settings ga yozamiz
+                    if ((DateTime.Now - _lastHeartbeat).TotalSeconds >= 30)
+                    {
+                        try
+                        {
+                            using (var hCmd = new SqlCommand(@"
+                                IF EXISTS (SELECT 1 FROM settings WHERE [key]='last_heartbeat' AND tenant_id=@tid)
+                                    UPDATE settings SET value=@v WHERE [key]='last_heartbeat' AND tenant_id=@tid
+                                ELSE
+                                    INSERT INTO settings([key],[value],tenant_id) VALUES('last_heartbeat',@v,@tid)",
+                                central))
+                            {
+                                hCmd.Parameters.AddWithValue("@tid", Session.TenantId);
+                                hCmd.Parameters.AddWithValue("@v",
+                                    DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"));
+                                hCmd.ExecuteNonQuery();
+                            }
+                            _lastHeartbeat = DateTime.Now;
+                        }
+                        catch { }
+                    }
+
                     // Jadval mavjudligini bir marta tekshirish
                     if (!_tableChecked)
                     {
