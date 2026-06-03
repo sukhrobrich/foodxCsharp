@@ -1298,6 +1298,7 @@ namespace WindowsFormsApp1.forms.settings
                     Session.IsOnline     = true;
                     Session.ForceOffline = false;
                     PrintService.SetSetting("connection_mode", "online");
+                    SetCentralHeartbeat(Session.TenantId, DateTime.UtcNow.ToString("o"));
                     updateUi(_lblConnStatus, _connectionTogglePanel);
                     runSyncCore(false);
                 }
@@ -1327,6 +1328,7 @@ namespace WindowsFormsApp1.forms.settings
                     Session.IsOnline     = false;
                     Session.ForceOffline = true;
                     PrintService.SetSetting("connection_mode", "offline");
+                    SetCentralHeartbeat(Session.TenantId, "OFFLINE");
                     updateUi(_lblConnStatus, _connectionTogglePanel);
                 }
             };
@@ -1383,6 +1385,28 @@ namespace WindowsFormsApp1.forms.settings
             p.AddArc(r.X, r.Bottom-radius*2, radius*2, radius*2, 90, 90);
             p.CloseFigure();
             return p;
+        }
+
+        // Central SQL Server ga last_heartbeat yozadi (online/offline holat uchun)
+        private static void SetCentralHeartbeat(int tenantId, string value)
+        {
+            if (tenantId <= 0) return;
+            try
+            {
+                using (var conn = dbconnect.OpenCentralForSync(tenantId))
+                using (var cmd = new System.Data.SqlClient.SqlCommand(@"
+                    IF EXISTS (SELECT 1 FROM settings WHERE [key]='last_heartbeat' AND tenant_id=@tid)
+                        UPDATE settings SET value=@v WHERE [key]='last_heartbeat' AND tenant_id=@tid
+                    ELSE
+                        INSERT INTO settings([key],[value],tenant_id) VALUES('last_heartbeat',@v,@tid)",
+                    conn))
+                {
+                    cmd.Parameters.AddWithValue("@tid", tenantId);
+                    cmd.Parameters.AddWithValue("@v", value);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch { }
         }
     }
 }
