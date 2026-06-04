@@ -7,7 +7,8 @@ namespace WindowsFormsApp1.services
 {
     internal static class LicenseService
     {
-        public static string ApiUrl = "http://192.168.35.230/api/licenses/verify";
+        // API URL — connection.cfg dan avtomatik olinadi (LicenseLoginForm da o'rnatiladi)
+        public static string ApiUrl = "http://195.158.24.155:5050/api/licenses/verify";
 
         private static readonly string LicFile = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
