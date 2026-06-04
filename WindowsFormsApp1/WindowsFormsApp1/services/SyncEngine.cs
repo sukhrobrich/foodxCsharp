@@ -224,19 +224,26 @@ namespace WindowsFormsApp1.services
 
         private static int SyncRefPlaceOuts(SqlConnection local, SqlConnection central)
         {
+            int tid = Session.TenantId;
             int count = 0;
             foreach (DataRow r in ReadAll(local,
                 "SELECT id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order FROM place_out").Rows)
             {
+                // Tenant-aware upsert: tenant_id bilan shu tenant uchun mavjud bo'lsa yangilaymiz,
+                // bo'lmasa yangi yozuv qo'shamiz (IDENTITY_INSERT ishlatmaymiz — ID konfliktlarini oldini olish)
                 Exec(central,
-                    "IF EXISTS(SELECT 1 FROM place_out WHERE id=@id)" +
+                    "IF EXISTS(SELECT 1 FROM place_out WHERE id=@id AND tenant_id=@tid)" +
                     " UPDATE place_out SET place_category_id=@pc,name=@n,place_count=@cnt," +
-                    "   updated_at=@ua,serviceFee=@sf,price=@pr,sort_order=@so WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT place_out ON;" +
-                    " INSERT INTO place_out(id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order)" +
-                    " VALUES(@id,@pc,@n,@cnt,@ca,@ua,@sf,@pr,@so);" +
-                    " SET IDENTITY_INSERT place_out OFF END",
-                    P("@id",r["id"]),P("@pc",r["place_category_id"]),P("@n",r["name"]),
+                    "   updated_at=@ua,serviceFee=@sf,price=@pr,sort_order=@so WHERE id=@id AND tenant_id=@tid" +
+                    " ELSE IF NOT EXISTS(SELECT 1 FROM place_out WHERE id=@id)" +
+                    "   BEGIN SET IDENTITY_INSERT place_out ON;" +
+                    "   INSERT INTO place_out(id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order,tenant_id)" +
+                    "   VALUES(@id,@pc,@n,@cnt,@ca,@ua,@sf,@pr,@so,@tid);" +
+                    "   SET IDENTITY_INSERT place_out OFF END" +
+                    " ELSE IF NOT EXISTS(SELECT 1 FROM place_out WHERE tenant_id=@tid AND name=@n)" +
+                    "   INSERT INTO place_out(place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order,tenant_id)" +
+                    "   VALUES(@pc,@n,@cnt,@ca,@ua,@sf,@pr,@so,@tid)",
+                    P("@id",r["id"]),P("@tid",tid),P("@pc",r["place_category_id"]),P("@n",r["name"]),
                     P("@cnt",r["place_count"]),P("@ca",r["created_at"]),P("@ua",r["updated_at"]),
                     P("@sf",r["serviceFee"]),P("@pr",r["price"]),P("@so",r["sort_order"]));
                 count++;
@@ -246,21 +253,25 @@ namespace WindowsFormsApp1.services
 
         private static int SyncRefPlaceIns(SqlConnection local, SqlConnection central)
         {
+            int tid = Session.TenantId;
             int count = 0;
-            // FIX: empty va user_id ni sync qilmaymiz — ular real-vaqt holati,
-            // mobil yoki online rejim tomonidan boshqariladi. Overwrite qilish
-            // faol buyurtmalarni o'chirishi mumkin edi.
+            // FIX: empty va user_id ni sync qilmaymiz — ular real-vaqt holati.
+            // Tenant-aware upsert bilan ID konfliktlarini ham oldini olamiz.
             foreach (DataRow r in ReadAll(local,
                 "SELECT id,place_out_id,room_name,created_at,price FROM place_in").Rows)
             {
                 Exec(central,
-                    "IF EXISTS(SELECT 1 FROM place_in WHERE id=@id)" +
-                    " UPDATE place_in SET place_out_id=@po,room_name=@rn,price=@pr WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT place_in ON;" +
-                    " INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,price)" +
-                    " VALUES(@id,@po,@rn,'YES',@ca,@pr);" +
-                    " SET IDENTITY_INSERT place_in OFF END",
-                    P("@id",r["id"]),P("@po",r["place_out_id"]),P("@rn",r["room_name"]),
+                    "IF EXISTS(SELECT 1 FROM place_in WHERE id=@id AND tenant_id=@tid)" +
+                    " UPDATE place_in SET place_out_id=@po,room_name=@rn,price=@pr WHERE id=@id AND tenant_id=@tid" +
+                    " ELSE IF NOT EXISTS(SELECT 1 FROM place_in WHERE id=@id)" +
+                    "   BEGIN SET IDENTITY_INSERT place_in ON;" +
+                    "   INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,price,tenant_id)" +
+                    "   VALUES(@id,@po,@rn,'YES',@ca,@pr,@tid);" +
+                    "   SET IDENTITY_INSERT place_in OFF END" +
+                    " ELSE IF NOT EXISTS(SELECT 1 FROM place_in WHERE tenant_id=@tid AND room_name=@rn AND place_out_id=@po)" +
+                    "   INSERT INTO place_in(place_out_id,room_name,empty,created_at,price,tenant_id)" +
+                    "   VALUES(@po,@rn,'YES',@ca,@pr,@tid)",
+                    P("@id",r["id"]),P("@tid",tid),P("@po",r["place_out_id"]),P("@rn",r["room_name"]),
                     P("@ca",r["created_at"]),P("@pr",r["price"]));
                 count++;
             }
