@@ -120,20 +120,45 @@ namespace WindowsFormsApp1.services
             catch (Exception ex) { result.Errors++; if (result.LastError == null) result.LastError = ex.Message; }
         }
 
-        // ── REFERENS JADVALLAR: local → central (id bo'yicha) ────────────────
+        // Sync token borligini ta'minlaydi, yo'q bo'lsa yaratadi va lokal DB ga saqlaydi
+        private static Guid EnsureToken(SqlConnection local, string table, DataRow r)
+        {
+            if (r["sync_token"] != DBNull.Value && r["sync_token"] is Guid g && g != Guid.Empty)
+                return g;
+            var tok = Guid.NewGuid();
+            try { Exec(local, $"UPDATE {table} SET sync_token=@t WHERE id=@id", P("@t", tok), P("@id", r["id"])); }
+            catch { }
+            return tok;
+        }
+
+        // ── REFERENS JADVALLAR: local → central (token-based, ID konfliktsiz) ──
+
+        // ── TOKEN-BASED SYNC: IDENTITY_INSERT o'rniga sync_token + central_id ──────
+        // Sabab: har bir kafe local DB da id=1 dan boshlaydi, central da ID konflikt chiqardi.
+        // Endi har bir row ning sync_token (UUID) bilan topamiz, mavjud bo'lsa UPDATE,
+        // yo'q bo'lsa INSERT qilamiz (DB yangi central ID beradi), va uni lokal central_id ga saqlaymiz.
 
         private static int SyncRefUserCategories(SqlConnection local, SqlConnection central)
         {
             int count = 0;
-            foreach (DataRow r in ReadAll(local, "SELECT id,name,role_type,color FROM user_category").Rows)
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,name,role_type,color,sync_token,central_id FROM user_category").Rows)
             {
-                Exec(central,
-                    "IF EXISTS(SELECT 1 FROM user_category WHERE id=@id)" +
-                    " UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT user_category ON;" +
-                    " INSERT INTO user_category(id,name,role_type,color) VALUES(@id,@n,@rt,@c);" +
-                    " SET IDENTITY_INSERT user_category OFF END",
-                    P("@id",r["id"]),P("@n",r["name"]),P("@rt",r["role_type"]),P("@c",r["color"]));
+                Guid tok = EnsureToken(local, "user_category", r);
+                int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
+                    "SELECT id FROM user_category WHERE sync_token=@t", "@t", tok);
+                if (cid.HasValue)
+                    Exec(central, "UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE id=@cid",
+                        P("@n",r["name"]),P("@rt",r["role_type"]),P("@c",r["color"]),P("@cid",cid.Value));
+                else
+                {
+                    object newId = Exec(central,
+                        "INSERT INTO user_category(name,role_type,color,sync_token) OUTPUT INSERTED.id VALUES(@n,@rt,@c,@t)",
+                        P("@n",r["name"]),P("@rt",r["role_type"]),P("@c",r["color"]),P("@t",tok));
+                    cid = Convert.ToInt32(newId);
+                    Exec(local,"UPDATE user_category SET central_id=@c WHERE id=@id",
+                        P("@c",cid.Value),P("@id",r["id"]));
+                }
                 count++;
             }
             return count;
@@ -143,19 +168,37 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order FROM [user]").Rows)
+                "SELECT u.id,u.name,u.user_category_id,u.login,u.password,u.app_password," +
+                "u.phone_number,u.created_at,u.updated_at,u.sort_order,u.sync_token,u.central_id," +
+                "uc.central_id AS cat_central_id " +
+                "FROM [user] u LEFT JOIN user_category uc ON uc.id=u.user_category_id").Rows)
             {
-                Exec(central,
-                    "IF EXISTS(SELECT 1 FROM [user] WHERE id=@id)" +
-                    " UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
-                    "   phone_number=@ph,updated_at=@ua,sort_order=@so WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT [user] ON;" +
-                    " INSERT INTO [user](id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order)" +
-                    " VALUES(@id,@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so);" +
-                    " SET IDENTITY_INSERT [user] OFF END",
-                    P("@id",r["id"]),P("@n",r["name"]),P("@uc",r["user_category_id"]),
-                    P("@l",r["login"]),P("@pw",r["password"]),P("@ap",r["app_password"]),
-                    P("@ph",r["phone_number"]),P("@ca",r["created_at"]),P("@ua",r["updated_at"]),P("@so",r["sort_order"]));
+                Guid tok = EnsureToken(local, "[user]", r);
+                int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
+                    "SELECT id FROM [user] WHERE sync_token=@t", "@t", tok);
+                // Kategoriya central ID sini ishlatamiz
+                object catCid = (r["cat_central_id"] == DBNull.Value)
+                    ? (object)r["user_category_id"] : r["cat_central_id"];
+                if (cid.HasValue)
+                    Exec(central,
+                        "UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw," +
+                        "app_password=@ap,phone_number=@ph,updated_at=@ua,sort_order=@so WHERE id=@cid",
+                        P("@n",r["name"]),P("@uc",catCid),P("@l",r["login"]),P("@pw",r["password"]),
+                        P("@ap",r["app_password"]),P("@ph",r["phone_number"]),P("@ua",r["updated_at"]),
+                        P("@so",r["sort_order"]),P("@cid",cid.Value));
+                else
+                {
+                    object newId = Exec(central,
+                        "INSERT INTO [user](name,user_category_id,login,password,app_password," +
+                        "phone_number,created_at,updated_at,sort_order,sync_token) " +
+                        "OUTPUT INSERTED.id VALUES(@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so,@t)",
+                        P("@n",r["name"]),P("@uc",catCid),P("@l",r["login"]),P("@pw",r["password"]),
+                        P("@ap",r["app_password"]),P("@ph",r["phone_number"]),P("@ca",r["created_at"]),
+                        P("@ua",r["updated_at"]),P("@so",r["sort_order"]),P("@t",tok));
+                    cid = Convert.ToInt32(newId);
+                    Exec(local,"UPDATE [user] SET central_id=@c WHERE id=@id",
+                        P("@c",cid.Value),P("@id",r["id"]));
+                }
                 count++;
             }
             return count;
@@ -164,15 +207,25 @@ namespace WindowsFormsApp1.services
         private static int SyncRefFoodCategories(SqlConnection local, SqlConnection central)
         {
             int count = 0;
-            foreach (DataRow r in ReadAll(local, "SELECT id,name,printer_name,sort_order FROM food_category").Rows)
+            foreach (DataRow r in ReadAll(local,
+                "SELECT id,name,printer_name,sort_order,sync_token,central_id FROM food_category").Rows)
             {
-                Exec(central,
-                    "IF EXISTS(SELECT 1 FROM food_category WHERE id=@id)" +
-                    " UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT food_category ON;" +
-                    " INSERT INTO food_category(id,name,printer_name,sort_order) VALUES(@id,@n,@pn,@so);" +
-                    " SET IDENTITY_INSERT food_category OFF END",
-                    P("@id",r["id"]),P("@n",r["name"]),P("@pn",r["printer_name"]),P("@so",r["sort_order"]));
+                Guid tok = EnsureToken(local, "food_category", r);
+                int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
+                    "SELECT id FROM food_category WHERE sync_token=@t", "@t", tok);
+                if (cid.HasValue)
+                    Exec(central,
+                        "UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so WHERE id=@cid",
+                        P("@n",r["name"]),P("@pn",r["printer_name"]),P("@so",r["sort_order"]),P("@cid",cid.Value));
+                else
+                {
+                    object newId = Exec(central,
+                        "INSERT INTO food_category(name,printer_name,sort_order,sync_token) OUTPUT INSERTED.id VALUES(@n,@pn,@so,@t)",
+                        P("@n",r["name"]),P("@pn",r["printer_name"]),P("@so",r["sort_order"]),P("@t",tok));
+                    cid = Convert.ToInt32(newId);
+                    Exec(local,"UPDATE food_category SET central_id=@c WHERE id=@id",
+                        P("@c",cid.Value),P("@id",r["id"]));
+                }
                 count++;
             }
             return count;
@@ -182,24 +235,40 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,food_category_id,name,count,original_price,selling_price," +
-                "photo,created_at,updated_at,unit,description,is_unlimited,sort_order FROM food").Rows)
+                "SELECT f.id,f.food_category_id,f.name,f.count,f.original_price,f.selling_price," +
+                "f.photo,f.created_at,f.updated_at,f.unit,f.description,f.is_unlimited,f.sort_order," +
+                "f.sync_token,f.central_id," +
+                "fc.central_id AS cat_central_id " +
+                "FROM food f LEFT JOIN food_category fc ON fc.id=f.food_category_id").Rows)
             {
-                Exec(central,
-                    "IF EXISTS(SELECT 1 FROM food WHERE id=@id)" +
-                    " UPDATE food SET food_category_id=@fc,name=@n,count=@cnt,original_price=@op," +
-                    "   selling_price=@sp,photo=@ph,updated_at=@ua,unit=@u,description=@d," +
-                    "   is_unlimited=@iu,sort_order=@so WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT food ON;" +
-                    " INSERT INTO food(id,food_category_id,name,count,original_price,selling_price," +
-                    "   photo,created_at,updated_at,unit,description,is_unlimited,sort_order)" +
-                    " VALUES(@id,@fc,@n,@cnt,@op,@sp,@ph,@ca,@ua,@u,@d,@iu,@so);" +
-                    " SET IDENTITY_INSERT food OFF END",
-                    P("@id",r["id"]),P("@fc",r["food_category_id"]),P("@n",r["name"]),
-                    P("@cnt",r["count"]),P("@op",r["original_price"]),P("@sp",r["selling_price"]),
-                    P("@ph",r["photo"]),P("@ca",r["created_at"]),P("@ua",r["updated_at"]),
-                    P("@u",r["unit"]),P("@d",r["description"]),
-                    P("@iu",r["is_unlimited"]),P("@so",r["sort_order"]));
+                Guid tok = EnsureToken(local, "food", r);
+                int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
+                    "SELECT id FROM food WHERE sync_token=@t", "@t", tok);
+                object catCid = (r["cat_central_id"] == DBNull.Value)
+                    ? (object)r["food_category_id"] : r["cat_central_id"];
+                if (cid.HasValue)
+                    Exec(central,
+                        "UPDATE food SET food_category_id=@fc,name=@n,count=@cnt,original_price=@op," +
+                        "selling_price=@sp,photo=@ph,updated_at=@ua,unit=@u,description=@d," +
+                        "is_unlimited=@iu,sort_order=@so WHERE id=@cid",
+                        P("@fc",catCid),P("@n",r["name"]),P("@cnt",r["count"]),
+                        P("@op",r["original_price"]),P("@sp",r["selling_price"]),P("@ph",r["photo"]),
+                        P("@ua",r["updated_at"]),P("@u",r["unit"]),P("@d",r["description"]),
+                        P("@iu",r["is_unlimited"]),P("@so",r["sort_order"]),P("@cid",cid.Value));
+                else
+                {
+                    object newId = Exec(central,
+                        "INSERT INTO food(food_category_id,name,count,original_price,selling_price," +
+                        "photo,created_at,updated_at,unit,description,is_unlimited,sort_order,sync_token) " +
+                        "OUTPUT INSERTED.id VALUES(@fc,@n,@cnt,@op,@sp,@ph,@ca,@ua,@u,@d,@iu,@so,@t)",
+                        P("@fc",catCid),P("@n",r["name"]),P("@cnt",r["count"]),
+                        P("@op",r["original_price"]),P("@sp",r["selling_price"]),P("@ph",r["photo"]),
+                        P("@ca",r["created_at"]),P("@ua",r["updated_at"]),P("@u",r["unit"]),
+                        P("@d",r["description"]),P("@iu",r["is_unlimited"]),P("@so",r["sort_order"]),P("@t",tok));
+                    cid = Convert.ToInt32(newId);
+                    Exec(local,"UPDATE food SET central_id=@c WHERE id=@id",
+                        P("@c",cid.Value),P("@id",r["id"]));
+                }
                 count++;
             }
             return count;
@@ -281,15 +350,23 @@ namespace WindowsFormsApp1.services
         private static int SyncRefPayments(SqlConnection local, SqlConnection central)
         {
             int count = 0;
-            foreach (DataRow r in ReadAll(local, "SELECT id,name,sort_order FROM payment").Rows)
+            foreach (DataRow r in ReadAll(local, "SELECT id,name,sort_order,sync_token,central_id FROM payment").Rows)
             {
-                Exec(central,
-                    "IF EXISTS(SELECT 1 FROM payment WHERE id=@id)" +
-                    " UPDATE payment SET name=@n,sort_order=@so WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT payment ON;" +
-                    " INSERT INTO payment(id,name,sort_order) VALUES(@id,@n,@so);" +
-                    " SET IDENTITY_INSERT payment OFF END",
-                    P("@id",r["id"]),P("@n",r["name"]),P("@so",r["sort_order"]));
+                Guid tok = EnsureToken(local, "payment", r);
+                int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
+                    "SELECT id FROM payment WHERE sync_token=@t", "@t", tok);
+                if (cid.HasValue)
+                    Exec(central, "UPDATE payment SET name=@n,sort_order=@so WHERE id=@cid",
+                        P("@n",r["name"]),P("@so",r["sort_order"]),P("@cid",cid.Value));
+                else
+                {
+                    object newId = Exec(central,
+                        "INSERT INTO payment(name,sort_order,sync_token) OUTPUT INSERTED.id VALUES(@n,@so,@t)",
+                        P("@n",r["name"]),P("@so",r["sort_order"]),P("@t",tok));
+                    cid = Convert.ToInt32(newId);
+                    Exec(local,"UPDATE payment SET central_id=@c WHERE id=@id",
+                        P("@c",cid.Value),P("@id",r["id"]));
+                }
                 count++;
             }
             return count;
@@ -299,16 +376,27 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,name,unit,quantity,price_per_unit,min_quantity FROM ingredient").Rows)
+                "SELECT id,name,unit,quantity,price_per_unit,min_quantity,sync_token,central_id FROM ingredient").Rows)
             {
-                Exec(central,
-                    "IF EXISTS(SELECT 1 FROM ingredient WHERE id=@id)" +
-                    " UPDATE ingredient SET name=@n,unit=@u,quantity=@q,price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT ingredient ON;" +
-                    " INSERT INTO ingredient(id,name,unit,quantity,price_per_unit,min_quantity) VALUES(@id,@n,@u,@q,@pp,@mq);" +
-                    " SET IDENTITY_INSERT ingredient OFF END",
-                    P("@id",r["id"]),P("@n",r["name"]),P("@u",r["unit"]),
-                    P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]));
+                Guid tok = EnsureToken(local, "ingredient", r);
+                int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
+                    "SELECT id FROM ingredient WHERE sync_token=@t", "@t", tok);
+                if (cid.HasValue)
+                    Exec(central,
+                        "UPDATE ingredient SET name=@n,unit=@u,quantity=@q,price_per_unit=@pp,min_quantity=@mq WHERE id=@cid",
+                        P("@n",r["name"]),P("@u",r["unit"]),P("@q",r["quantity"]),
+                        P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]),P("@cid",cid.Value));
+                else
+                {
+                    object newId = Exec(central,
+                        "INSERT INTO ingredient(name,unit,quantity,price_per_unit,min_quantity,sync_token) " +
+                        "OUTPUT INSERTED.id VALUES(@n,@u,@q,@pp,@mq,@t)",
+                        P("@n",r["name"]),P("@u",r["unit"]),P("@q",r["quantity"]),
+                        P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]),P("@t",tok));
+                    cid = Convert.ToInt32(newId);
+                    Exec(local,"UPDATE ingredient SET central_id=@c WHERE id=@id",
+                        P("@c",cid.Value),P("@id",r["id"]));
+                }
                 count++;
             }
             return count;
@@ -420,9 +508,18 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             DataTable rows = ReadAll(local,
-                "SELECT o.*, c.central_id AS c_central_id " +
+                "SELECT o.*, " +
+                "  c.central_id  AS c_central_id, " +
+                "  u.central_id  AS u_central_id, " +
+                "  p.central_id  AS p_central_id, " +
+                "  p2.central_id AS p2_central_id, " +
+                "  pi.central_id AS pi_central_id " +
                 "FROM [order] o " +
-                "LEFT JOIN customer c ON c.id = o.customer_id " +
+                "LEFT JOIN customer  c  ON c.id  = o.customer_id " +
+                "LEFT JOIN [user]    u  ON u.id  = o.user_id " +
+                "LEFT JOIN payment   p  ON p.id  = o.payment_id " +
+                "LEFT JOIN payment   p2 ON p2.id = o.payment2_id " +
+                "LEFT JOIN place_in  pi ON pi.id = o.place_id " +
                 "WHERE o.is_synced = 0");
 
             foreach (DataRow r in rows.Rows)
@@ -434,9 +531,12 @@ namespace WindowsFormsApp1.services
 
                 if (centralId == null)
                 {
-                    object centralCustId = (r["c_central_id"] == DBNull.Value)
-                        ? (object)DBNull.Value
-                        : r["c_central_id"];
+                    // Central ID lardan foydalanamiz (local ID o'rniga)
+                    object centralCustId = r["c_central_id"]  == DBNull.Value ? DBNull.Value : r["c_central_id"];
+                    object centralUserId = r["u_central_id"]  == DBNull.Value ? r["user_id"]  : r["u_central_id"];
+                    object centralPayId  = r["p_central_id"]  == DBNull.Value ? r["payment_id"] : r["p_central_id"];
+                    object centralPay2Id = r["p2_central_id"] == DBNull.Value ? r["payment2_id"] : r["p2_central_id"];
+                    object centralPlaceId= r["pi_central_id"] == DBNull.Value ? r["place_id"]  : r["pi_central_id"];
 
                     object inserted = Exec(central,
                         "INSERT INTO [order] " +
@@ -447,15 +547,15 @@ namespace WindowsFormsApp1.services
                         "OUTPUT INSERTED.id " +
                         "VALUES (@uid,@pid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
                         "        @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@tok)",
-                        P("@uid",   r["user_id"]),          P("@pid",   r["place_id"]),
-                        P("@pay",   r["payment_id"]),        P("@cat",   r["created_at"]),
+                        P("@uid",   centralUserId),          P("@pid",   centralPlaceId),
+                        P("@pay",   centralPayId),            P("@cat",   r["created_at"]),
                         P("@paid",  r["paid"]),              P("@tot",   r["total"]),
                         P("@disc",  r["discount_amount"]),   P("@discp", r["discount_pct"]),
                         P("@cust",  centralCustId),          P("@custn", r["customer_name"]),
                         P("@dph",   r["delivery_phone"]),    P("@dadr",  r["delivery_address"]),
                         P("@isdel", r["is_delivery"]),       P("@note",  r["order_note"]),
                         P("@svf",   r["custom_svc_fee"]),    P("@svt",   r["custom_svc_type"]),
-                        P("@p2",    r["payment2_id"]),        P("@p2a",   r["payment2_amount"]),
+                        P("@p2",    centralPay2Id),           P("@p2a",   r["payment2_amount"]),
                         P("@tok",   tok));
                     centralId = Convert.ToInt32(inserted);
                 }
@@ -502,9 +602,13 @@ namespace WindowsFormsApp1.services
                 int localOrderId   = Convert.ToInt32(ord["local_id"]);
                 int centralOrderId = Convert.ToInt32(ord["central_id"]);
 
-                // Lokal barcha order_food ni qayta yuboramiz (joriy holat)
+                // food central_id ni ham olamiz (lokal food_id ni central ID ga aylantiramiz)
                 DataTable foods = ReadAll(local,
-                    $"SELECT food_id, quantity, note, sync_token FROM order_food WHERE order_id={localOrderId}");
+                    $"SELECT of2.food_id, of2.quantity, of2.note, of2.sync_token, " +
+                    $"ISNULL(f.central_id, of2.food_id) AS central_food_id " +
+                    $"FROM order_food of2 " +
+                    $"LEFT JOIN food f ON f.id=of2.food_id " +
+                    $"WHERE of2.order_id={localOrderId}");
 
                 // Central da lokal ro'yxatda yo'q qatorlarni o'chiramiz (o'chirilgan taomlar)
                 Exec(central, "DELETE FROM order_food WHERE order_id=@oid", P("@oid", centralOrderId));
@@ -516,7 +620,7 @@ namespace WindowsFormsApp1.services
                         "  UPDATE order_food SET order_id=@oid,food_id=@fid,quantity=@qty,note=@note WHERE sync_token=@tok " +
                         "ELSE " +
                         "  INSERT INTO order_food(order_id,food_id,quantity,note,sync_token) VALUES(@oid,@fid,@qty,@note,@tok)",
-                        P("@oid",  centralOrderId), P("@fid",  f["food_id"]),
+                        P("@oid",  centralOrderId), P("@fid",  f["central_food_id"]),
                         P("@qty",  f["quantity"]),   P("@note", f["note"]),
                         P("@tok",  f["sync_token"]));
                     count++;
@@ -534,9 +638,11 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             DataTable rows = ReadAll(local,
-                "SELECT p.*, o.central_id AS order_central_id " +
+                "SELECT p.*, o.central_id AS order_central_id, " +
+                "  ISNULL(pay.central_id, p.payment_id) AS central_payment_id " +
                 "FROM order_payments p " +
                 "JOIN [order] o ON o.id = p.order_id " +
+                "LEFT JOIN payment pay ON pay.id = p.payment_id " +
                 "WHERE p.is_synced = 0 AND o.central_id IS NOT NULL");
 
             foreach (DataRow r in rows.Rows)
@@ -549,13 +655,12 @@ namespace WindowsFormsApp1.services
                     Exec(central,
                         "INSERT INTO order_payments (order_id, payment_id, amount, sync_token) " +
                         "VALUES (@oid, @pid, @amt, @tok)",
-                        P("@oid", r["order_central_id"]), P("@pid", r["payment_id"]),
+                        P("@oid", r["order_central_id"]), P("@pid", r["central_payment_id"]),
                         P("@amt", r["amount"]),            P("@tok", tok));
                 else
-                    // FIX: Mavjud to'lov yozuvini yangilash
                     Exec(central,
                         "UPDATE order_payments SET payment_id=@pid, amount=@amt WHERE sync_token=@tok",
-                        P("@pid", r["payment_id"]), P("@amt", r["amount"]), P("@tok", tok));
+                        P("@pid", r["central_payment_id"]), P("@amt", r["amount"]), P("@tok", tok));
 
                 Exec(local, "UPDATE order_payments SET is_synced = 1 WHERE id = @id", P("@id", r["id"]));
                 count++;

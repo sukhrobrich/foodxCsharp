@@ -295,6 +295,31 @@ namespace WindowsFormsApp1.services
                         // ingredient — delta sync uchun (EXEC ishlatamiz — runtime kompilatsiya)
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='synced_qty') ALTER TABLE ingredient ADD synced_qty DECIMAL(18,4) NULL",
                         "EXEC('UPDATE ingredient SET synced_qty = quantity WHERE synced_qty IS NULL')",
+
+                        // sync_token va central_id — reference jadvallar uchun (multi-tenant ID konflikti)
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='food' AND COLUMN_NAME='sync_token') ALTER TABLE food ADD sync_token UNIQUEIDENTIFIER NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='food' AND COLUMN_NAME='central_id') ALTER TABLE food ADD central_id INT NULL",
+                        "EXEC('UPDATE food SET sync_token=NEWID() WHERE sync_token IS NULL')",
+
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='food_category' AND COLUMN_NAME='sync_token') ALTER TABLE food_category ADD sync_token UNIQUEIDENTIFIER NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='food_category' AND COLUMN_NAME='central_id') ALTER TABLE food_category ADD central_id INT NULL",
+                        "EXEC('UPDATE food_category SET sync_token=NEWID() WHERE sync_token IS NULL')",
+
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user' AND COLUMN_NAME='sync_token') ALTER TABLE [user] ADD sync_token UNIQUEIDENTIFIER NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user' AND COLUMN_NAME='central_id') ALTER TABLE [user] ADD central_id INT NULL",
+                        "EXEC('UPDATE [user] SET sync_token=NEWID() WHERE sync_token IS NULL')",
+
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user_category' AND COLUMN_NAME='sync_token') ALTER TABLE user_category ADD sync_token UNIQUEIDENTIFIER NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user_category' AND COLUMN_NAME='central_id') ALTER TABLE user_category ADD central_id INT NULL",
+                        "EXEC('UPDATE user_category SET sync_token=NEWID() WHERE sync_token IS NULL')",
+
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='payment' AND COLUMN_NAME='sync_token') ALTER TABLE payment ADD sync_token UNIQUEIDENTIFIER NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='payment' AND COLUMN_NAME='central_id') ALTER TABLE payment ADD central_id INT NULL",
+                        "EXEC('UPDATE payment SET sync_token=NEWID() WHERE sync_token IS NULL')",
+
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='sync_token') ALTER TABLE ingredient ADD sync_token UNIQUEIDENTIFIER NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='central_id') ALTER TABLE ingredient ADD central_id INT NULL",
+                        "EXEC('UPDATE ingredient SET sync_token=NEWID() WHERE sync_token IS NULL')",
                     };
                     foreach (string sql in schemaMigrations)
                         using (var cmd = new SqlCommand(sql, c))
