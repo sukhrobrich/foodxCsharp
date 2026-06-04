@@ -2269,14 +2269,17 @@ namespace WindowsFormsApp1.forms.report
             try { fp = Q<decimal>(db, "SELECT ISNULL(SUM((f.selling_price - ISNULL(f.original_price,0)) * ofd.quantity),0) FROM [order] o JOIN order_food ofd ON ofd.order_id=o.id JOIN food f ON f.id=ofd.food_id WHERE o.paid='YES' AND CAST(o.created_at AS DATE) BETWEEN @d1 AND @d2"); } catch { }
             _lblFoodProfit.Text = Fmt(fp);
 
-            // Try fee_amount column; if missing, derive from service_charge setting
-            bool feeFromDb = false;
-            try { fee = Q<decimal>(db, $"SELECT ISNULL(SUM(fee_amount),0) FROM [order] WHERE {wc}"); feeFromDb = true; } catch { }
-            if (!feeFromDb)
+            // custom_svc_fee har doim UZS da saqlanadi
+            try
             {
+                fee = Q<decimal>(db, $"SELECT ISNULL(SUM(ISNULL(custom_svc_fee,0)),0) FROM [order] WHERE {wc} AND ISNULL(custom_svc_fee,0) > 0");
+            }
+            catch
+            {
+                // Eski DB uchun fallback
                 decimal svcPct = 0;
                 decimal.TryParse(PrintService.GetSetting("service_charge", "0"), out svcPct);
-                if (svcPct > 0) fee = Math.Round(oSum * svcPct / 100);
+                if (svcPct > 0) fee = Math.Round(oSum * svcPct / (100 + svcPct));
             }
             _lblFeeProfit.Text = Fmt(fee);
 

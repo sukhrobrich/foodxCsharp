@@ -164,9 +164,12 @@ namespace WindowsFormsApp1.forms.order
             card.Paint += (s, e) =>
             {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (Pen p = new Pen(Border))
-                    e.Graphics.DrawRectangle(p, 0, 0, card.Width - 1, card.Height - 1);
-                e.Graphics.FillRectangle(new SolidBrush(accent), 0, 0, 4, card.Height);
+                using (var pen   = new Pen(Border))
+                using (var brush = new SolidBrush(accent))
+                {
+                    e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
+                    e.Graphics.FillRectangle(brush, 0, 0, 4, card.Height);
+                }
             };
 
             Label lTitle = new Label { Text = title, Font = new Font("Segoe UI", 8), ForeColor = TextMuted, AutoSize = true, Location = new Point(14, 8) };
@@ -254,7 +257,11 @@ namespace WindowsFormsApp1.forms.order
                 // Rebuild cards only when data changed
                 flpOrders.SuspendLayout();
                 SetDoubleBuffered(flpOrders, true);
+                // Eski kartochkalarni to'liq dispose qilish (GDI handle leak oldini olish)
+                var old = new Control[flpOrders.Controls.Count];
+                flpOrders.Controls.CopyTo(old, 0);
                 flpOrders.Controls.Clear();
+                foreach (Control c in old) c.Dispose();
 
                 if (dt.Rows.Count == 0)
                 {
@@ -318,12 +325,15 @@ namespace WindowsFormsApp1.forms.order
             card.Paint += (s, e) =>
             {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (var path = RoundRect(card.ClientRectangle, 10))
+                using (var path      = RoundRect(card.ClientRectangle, 10))
+                using (var bgBrush   = new SolidBrush(card.BackColor))
+                using (var borderPen = new Pen(Border))
+                using (var topBrush  = new SolidBrush(stripe))
                 {
-                    e.Graphics.FillPath(new SolidBrush(card.BackColor), path);
-                    e.Graphics.DrawPath(new Pen(Border), path);
+                    e.Graphics.FillPath(bgBrush, path);
+                    e.Graphics.DrawPath(borderPen, path);
+                    e.Graphics.FillRectangle(topBrush, 0, 0, card.Width, 4);
                 }
-                e.Graphics.FillRectangle(new SolidBrush(stripe), 0, 0, card.Width, 4);
             };
 
             // Zone — Table
