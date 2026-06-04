@@ -13,36 +13,24 @@ namespace WindowsFormsApp1.services
 
         private static string LoadCentral()
         {
-            string fallback = ConfigurationManager.ConnectionStrings["FoodX"]?.ConnectionString
-                ?? @"Data Source=192.168.35.230,1433;Initial Catalog=FoodX;User ID=sa;Password=Ac0323301;TrustServerCertificate=True;Encrypt=False";
-
+            // 1. connection.cfg dan o'qiymiz (asosiy manba)
             string cfg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "connection.cfg");
             if (File.Exists(cfg))
             {
                 string s = File.ReadAllText(cfg).Trim();
                 if (!string.IsNullOrEmpty(s))
                 {
-                    try
-                    {
-                        var b = new SqlConnectionStringBuilder(s);
-                        if (b.IntegratedSecurity)
-                        {
-                            // Eski noto'g'ri format — SQL Auth ga o'tkazamiz
-                            var fb = new SqlConnectionStringBuilder(fallback);
-                            b.IntegratedSecurity = false;
-                            b.UserID   = fb.UserID;
-                            b.Password = fb.Password;
-                            if (!b.ConnectionString.Contains("Encrypt="))
-                                b.Encrypt = false;
-                            s = b.ConnectionString;
-                            try { File.WriteAllText(cfg, s); } catch { }
-                        }
-                        return s;
-                    }
-                    catch { return s; }
+                    try { _ = new SqlConnectionStringBuilder(s); return s; }
+                    catch { }
                 }
             }
-            return fallback;
+
+            // 2. App.config dan o'qiymiz
+            string fromConfig = ConfigurationManager.ConnectionStrings["FoodX"]?.ConnectionString;
+            if (!string.IsNullOrEmpty(fromConfig)) return fromConfig;
+
+            // 3. connection.cfg yo'q — sozlamalar ko'rsatilishi kerak (bo'sh qaytaramiz)
+            return string.Empty;
         }
 
         private static string LoadLocal()
@@ -59,7 +47,7 @@ namespace WindowsFormsApp1.services
             return DetectLocalServer();
         }
 
-        // Mavjud SQL Server instansini avtomatik topadi
+        // Mavjud SQL Server instansini avtomatik topadi (faqat Windows Auth)
         private static string DetectLocalServer()
         {
             string[] candidates = {
@@ -71,39 +59,22 @@ namespace WindowsFormsApp1.services
                 @"(LocalDB)\MSSQLLocalDB",
             };
 
-            // Avval Integrated Security bilan, keyin sa login bilan urinib ko'ramiz
-            string saPassword = "Ac0323301";
-
             foreach (string ds in candidates)
             {
-                // Integrated Security
                 try
                 {
                     string test = string.Format(
                         "Data Source={0};Initial Catalog=master;Integrated Security=True;" +
-                        "TrustServerCertificate=True;Connect Timeout=3", ds);
+                        "TrustServerCertificate=True;Connect Timeout=2", ds);
                     using (var c = new SqlConnection(test)) { c.Open(); }
                     return string.Format(
                         "Data Source={0};Initial Catalog=FoodX;Integrated Security=True;" +
                         "TrustServerCertificate=True", ds);
                 }
                 catch { }
-
-                // SQL Auth (sa) — Express/Developer serverlar uchun
-                try
-                {
-                    string test = string.Format(
-                        "Data Source={0};Initial Catalog=master;User ID=sa;Password={1};" +
-                        "TrustServerCertificate=True;Encrypt=False;Connect Timeout=3", ds, saPassword);
-                    using (var c = new SqlConnection(test)) { c.Open(); }
-                    return string.Format(
-                        "Data Source={0};Initial Catalog=FoodX;User ID=sa;Password={1};" +
-                        "TrustServerCertificate=True;Encrypt=False", ds, saPassword);
-                }
-                catch { }
             }
 
-            // Default — LocalDB
+            // LocalDB fallback
             return @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=FoodX;" +
                    @"Integrated Security=True;TrustServerCertificate=True";
         }
@@ -156,8 +127,12 @@ namespace WindowsFormsApp1.services
             }
         }
 
+        public static bool IsCentralConfigured =>
+            !string.IsNullOrWhiteSpace(_central);
+
         public static bool CheckCentral()
         {
+            if (!IsCentralConfigured) return false;
             try
             {
                 using (var c = new SqlConnection(_central + ";Connect Timeout=3"))
@@ -401,6 +376,9 @@ namespace WindowsFormsApp1.services
 
         public static SqlConnection OpenCentralForSync(int tenantId)
         {
+            if (!IsCentralConfigured)
+                throw new InvalidOperationException(
+                    "Markaziy server sozlanmagan. 'connection.cfg' faylini tekshiring.");
             var c = new SqlConnection(_central);
             c.Open();
             using (var cmd = new SqlCommand(
