@@ -322,27 +322,20 @@ namespace WindowsFormsApp1.services
 
         private static int SyncRefPlaceOuts(SqlConnection local, SqlConnection central)
         {
-            int tid = Session.TenantId;
             int count = 0;
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order FROM place_out").Rows)
+                "SELECT id,name,place_count,created_at,updated_at,serviceFee,price,sort_order FROM place_out").Rows)
             {
-                // Tenant-aware upsert: tenant_id bilan shu tenant uchun mavjud bo'lsa yangilaymiz,
-                // bo'lmasa yangi yozuv qo'shamiz (IDENTITY_INSERT ishlatmaymiz — ID konfliktlarini oldini olish)
+                // IDENTITY_INSERT ishlatmaymiz — boshqa tenantlar bir xil ID ga ega bo'lishi mumkin.
+                // Nom bo'yicha upsert (RLS SESSION_CONTEXT orqali tenant izolyatsiyasini ta'minlaydi).
                 Exec(central,
-                    "IF EXISTS(SELECT 1 FROM place_out WHERE id=@id AND tenant_id=@tid)" +
-                    " UPDATE place_out SET place_category_id=@pc,name=@n,place_count=@cnt," +
-                    "   updated_at=@ua,serviceFee=@sf,price=@pr,sort_order=@so WHERE id=@id AND tenant_id=@tid" +
-                    " ELSE IF NOT EXISTS(SELECT 1 FROM place_out WHERE id=@id)" +
-                    "   BEGIN SET IDENTITY_INSERT place_out ON;" +
-                    "   INSERT INTO place_out(id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order,tenant_id)" +
-                    "   VALUES(@id,@pc,@n,@cnt,@ca,@ua,@sf,@pr,@so,@tid);" +
-                    "   SET IDENTITY_INSERT place_out OFF END" +
-                    " ELSE IF NOT EXISTS(SELECT 1 FROM place_out WHERE tenant_id=@tid AND name=@n)" +
-                    "   INSERT INTO place_out(place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order,tenant_id)" +
-                    "   VALUES(@pc,@n,@cnt,@ca,@ua,@sf,@pr,@so,@tid)",
-                    P("@id",r["id"]),P("@tid",tid),P("@pc",r["place_category_id"]),P("@n",r["name"]),
-                    P("@cnt",r["place_count"]),P("@ca",r["created_at"]),P("@ua",r["updated_at"]),
+                    "IF EXISTS(SELECT 1 FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT))" +
+                    " UPDATE place_out SET place_count=@cnt,updated_at=@ua,serviceFee=@sf,price=@pr,sort_order=@so" +
+                    "   WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)" +
+                    " ELSE INSERT INTO place_out(name,place_count,created_at,updated_at,serviceFee,price,sort_order)" +
+                    "   VALUES(@n,@cnt,@ca,@ua,@sf,@pr,@so)",
+                    P("@n",r["name"]),P("@cnt",r["place_count"]),
+                    P("@ca",r["created_at"]),P("@ua",r["updated_at"]),
                     P("@sf",r["serviceFee"]),P("@pr",r["price"]),P("@so",r["sort_order"]));
                 count++;
             }
@@ -351,25 +344,22 @@ namespace WindowsFormsApp1.services
 
         private static int SyncRefPlaceIns(SqlConnection local, SqlConnection central)
         {
-            int tid = Session.TenantId;
             int count = 0;
-            // FIX: empty va user_id ni sync qilmaymiz — ular real-vaqt holati.
-            // Tenant-aware upsert bilan ID konfliktlarini ham oldini olamiz.
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,place_out_id,room_name,created_at,price FROM place_in").Rows)
+                "SELECT pi.id, pi.room_name, pi.created_at, pi.price, po.name AS zone_name " +
+                "FROM place_in pi JOIN place_out po ON po.id=pi.place_out_id").Rows)
             {
+                // Zone ni nom bo'yicha topamiz (central da ID farq qilishi mumkin)
+                int? centralZoneId = ScalarOrNull(central,
+                    "SELECT TOP 1 id FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                    "@n", r["zone_name"]);
+                if (centralZoneId == null) continue; // Zona topilmadi, o'tkazib yuboramiz
+
                 Exec(central,
-                    "IF EXISTS(SELECT 1 FROM place_in WHERE id=@id AND tenant_id=@tid)" +
-                    " UPDATE place_in SET place_out_id=@po,room_name=@rn,price=@pr WHERE id=@id AND tenant_id=@tid" +
-                    " ELSE IF NOT EXISTS(SELECT 1 FROM place_in WHERE id=@id)" +
-                    "   BEGIN SET IDENTITY_INSERT place_in ON;" +
-                    "   INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,price,tenant_id)" +
-                    "   VALUES(@id,@po,@rn,'YES',@ca,@pr,@tid);" +
-                    "   SET IDENTITY_INSERT place_in OFF END" +
-                    " ELSE IF NOT EXISTS(SELECT 1 FROM place_in WHERE tenant_id=@tid AND room_name=@rn AND place_out_id=@po)" +
-                    "   INSERT INTO place_in(place_out_id,room_name,empty,created_at,price,tenant_id)" +
-                    "   VALUES(@po,@rn,'YES',@ca,@pr,@tid)",
-                    P("@id",r["id"]),P("@tid",tid),P("@po",r["place_out_id"]),P("@rn",r["room_name"]),
+                    "IF NOT EXISTS(SELECT 1 FROM place_in WHERE room_name=@rn AND place_out_id=@po AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT))" +
+                    " INSERT INTO place_in(place_out_id,room_name,empty,created_at,price)" +
+                    " VALUES(@po,@rn,'YES',@ca,@pr)",
+                    P("@po",centralZoneId),P("@rn",r["room_name"]),
                     P("@ca",r["created_at"]),P("@pr",r["price"]));
                 count++;
             }
@@ -1344,8 +1334,13 @@ namespace WindowsFormsApp1.services
         private static void SyncSingleOrder(SqlConnection local, SqlConnection central, int localId)
         {
             DataTable rows = ReadAll(local,
-                $"SELECT o.*, c.central_id AS c_central_id FROM [order] o " +
-                $"LEFT JOIN customer c ON c.id=o.customer_id WHERE o.id={localId}");
+                $"SELECT o.*, c.central_id AS c_central_id, " +
+                $"pi.room_name AS place_room, po.name AS place_zone " +
+                $"FROM [order] o " +
+                $"LEFT JOIN customer c ON c.id=o.customer_id " +
+                $"LEFT JOIN place_in pi ON pi.id=o.place_id " +
+                $"LEFT JOIN place_out po ON po.id=pi.place_out_id " +
+                $"WHERE o.id={localId}");
             if (rows.Rows.Count == 0) return;
 
             DataRow r = rows.Rows[0];
@@ -1356,6 +1351,40 @@ namespace WindowsFormsApp1.services
             {
                 object centralCustId = r["c_central_id"] == DBNull.Value
                     ? (object)DBNull.Value : r["c_central_id"];
+
+                // place_in central ID ni nom bo'yicha topamiz
+                object centralPlaceId = DBNull.Value;
+                if (r["place_room"] != DBNull.Value && r["place_zone"] != DBNull.Value)
+                {
+                    int? cPlaceId = ScalarOrNull(central,
+                        "SELECT TOP 1 pi.id FROM place_in pi " +
+                        "JOIN place_out po ON po.id=pi.place_out_id " +
+                        "WHERE pi.room_name=@rn AND po.name=@pn " +
+                        "AND pi.tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                        "@rn", r["place_room"]);
+                    // Note: ScalarOrNull takes 1 param, use direct Exec for 2 params
+                    if (cPlaceId == null)
+                    {
+                        try
+                        {
+                            using (var cmd = new System.Data.SqlClient.SqlCommand(
+                                "SELECT TOP 1 pi.id FROM place_in pi " +
+                                "JOIN place_out po ON po.id=pi.place_out_id " +
+                                "WHERE pi.room_name=@rn AND po.name=@pn " +
+                                "AND pi.tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                            {
+                                cmd.Parameters.AddWithValue("@rn", r["place_room"]);
+                                cmd.Parameters.AddWithValue("@pn", r["place_zone"]);
+                                var val = cmd.ExecuteScalar();
+                                if (val != null && val != DBNull.Value)
+                                    centralPlaceId = Convert.ToInt32(val);
+                            }
+                        }
+                        catch { }
+                    }
+                    else centralPlaceId = cPlaceId.Value;
+                }
+
                 object inserted = Exec(central,
                     "INSERT INTO [order](user_id,place_id,payment_id,created_at,paid,total," +
                     "  discount_amount,discount_pct,customer_id,customer_name,delivery_phone," +
@@ -1364,7 +1393,7 @@ namespace WindowsFormsApp1.services
                     "OUTPUT INSERTED.id " +
                     "VALUES(@uid,@pid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
                     "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@tok)",
-                    P("@uid",r["user_id"]),P("@pid",r["place_id"]),P("@pay",r["payment_id"]),
+                    P("@uid",r["user_id"]),P("@pid",centralPlaceId),P("@pay",r["payment_id"]),
                     P("@cat",r["created_at"]),P("@paid",r["paid"]),P("@tot",r["total"]),
                     P("@disc",r["discount_amount"]),P("@discp",r["discount_pct"]),
                     P("@cust",centralCustId),P("@custn",r["customer_name"]),
