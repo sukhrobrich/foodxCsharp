@@ -140,13 +140,7 @@ namespace WindowsFormsApp1
             flpUsers.Controls.Clear();
             userCategoryAdd.EnsureColorColumn();
             dbconnect db = new dbconnect();
-            string query = IsWaiterTerminal
-                ? @"SELECT u.id, u.name, u.login, uc.name AS category, ISNULL(uc.color, '') AS color
-                    FROM [user] u
-                    JOIN user_category uc ON u.user_category_id = uc.id
-                    WHERE LOWER(ISNULL(uc.role_type, uc.name)) = 'ofitsiant'
-                    ORDER BY ISNULL(u.sort_order, 9999), u.name"
-                : @"SELECT u.id, u.name, u.login, uc.name AS category, ISNULL(uc.color, '') AS color
+            string query = @"SELECT u.id, u.name, u.login, uc.name AS category, ISNULL(uc.color, '') AS color
                     FROM [user] u
                     JOIN user_category uc ON u.user_category_id = uc.id
                     ORDER BY ISNULL(u.sort_order, 9999), u.name";
