@@ -147,6 +147,16 @@ namespace WindowsFormsApp1.services
                 Guid tok = EnsureToken(local, "user_category", r);
                 int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
                     "SELECT id FROM user_category WHERE sync_token=@t", "@t", tok);
+                // Unique(name,tenant_id) — nom bo'yicha fallback
+                if (!cid.HasValue)
+                {
+                    cid = ScalarOrNull(central,
+                        "SELECT TOP 1 id FROM user_category WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                        "@n", r["name"]);
+                    if (cid.HasValue)
+                        Exec(central, "UPDATE user_category SET sync_token=@t WHERE id=@cid",
+                            P("@t", tok), P("@cid", cid.Value));
+                }
                 if (cid.HasValue)
                     Exec(central, "UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE id=@cid",
                         P("@n",r["name"]),P("@rt",r["role_type"]),P("@c",r["color"]),P("@cid",cid.Value));
@@ -156,9 +166,9 @@ namespace WindowsFormsApp1.services
                         "INSERT INTO user_category(name,role_type,color,sync_token) OUTPUT INSERTED.id VALUES(@n,@rt,@c,@t)",
                         P("@n",r["name"]),P("@rt",r["role_type"]),P("@c",r["color"]),P("@t",tok));
                     cid = Convert.ToInt32(newId);
-                    Exec(local,"UPDATE user_category SET central_id=@c WHERE id=@id",
-                        P("@c",cid.Value),P("@id",r["id"]));
                 }
+                Exec(local,"UPDATE user_category SET central_id=@c WHERE id=@id",
+                    P("@c",cid.Value),P("@id",r["id"]));
                 count++;
             }
             return count;
@@ -176,6 +186,16 @@ namespace WindowsFormsApp1.services
                 Guid tok = EnsureToken(local, "[user]", r);
                 int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
                     "SELECT id FROM [user] WHERE sync_token=@t", "@t", tok);
+                // Unique(login,tenant_id) — login bo'yicha fallback
+                if (!cid.HasValue)
+                {
+                    cid = ScalarOrNull(central,
+                        "SELECT TOP 1 id FROM [user] WHERE login=@l AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                        "@l", r["login"]);
+                    if (cid.HasValue)
+                        Exec(central, "UPDATE [user] SET sync_token=@t WHERE id=@cid",
+                            P("@t", tok), P("@cid", cid.Value));
+                }
                 // Kategoriya central ID sini ishlatamiz
                 object catCid = (r["cat_central_id"] == DBNull.Value)
                     ? (object)r["user_category_id"] : r["cat_central_id"];
@@ -196,9 +216,9 @@ namespace WindowsFormsApp1.services
                         P("@ap",r["app_password"]),P("@ph",r["phone_number"]),P("@ca",r["created_at"]),
                         P("@ua",r["updated_at"]),P("@so",r["sort_order"]),P("@t",tok));
                     cid = Convert.ToInt32(newId);
-                    Exec(local,"UPDATE [user] SET central_id=@c WHERE id=@id",
-                        P("@c",cid.Value),P("@id",r["id"]));
                 }
+                Exec(local,"UPDATE [user] SET central_id=@c WHERE id=@id",
+                    P("@c",cid.Value),P("@id",r["id"]));
                 count++;
             }
             return count;
@@ -213,6 +233,16 @@ namespace WindowsFormsApp1.services
                 Guid tok = EnsureToken(local, "food_category", r);
                 int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
                     "SELECT id FROM food_category WHERE sync_token=@t", "@t", tok);
+                // Unique(name,tenant_id) — nom bo'yicha fallback
+                if (!cid.HasValue)
+                {
+                    cid = ScalarOrNull(central,
+                        "SELECT TOP 1 id FROM food_category WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                        "@n", r["name"]);
+                    if (cid.HasValue)
+                        Exec(central, "UPDATE food_category SET sync_token=@t WHERE id=@cid",
+                            P("@t", tok), P("@cid", cid.Value));
+                }
                 if (cid.HasValue)
                     Exec(central,
                         "UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so WHERE id=@cid",
@@ -223,9 +253,9 @@ namespace WindowsFormsApp1.services
                         "INSERT INTO food_category(name,printer_name,sort_order,sync_token) OUTPUT INSERTED.id VALUES(@n,@pn,@so,@t)",
                         P("@n",r["name"]),P("@pn",r["printer_name"]),P("@so",r["sort_order"]),P("@t",tok));
                     cid = Convert.ToInt32(newId);
-                    Exec(local,"UPDATE food_category SET central_id=@c WHERE id=@id",
-                        P("@c",cid.Value),P("@id",r["id"]));
                 }
+                Exec(local,"UPDATE food_category SET central_id=@c WHERE id=@id",
+                    P("@c",cid.Value),P("@id",r["id"]));
                 count++;
             }
             return count;
@@ -279,13 +309,12 @@ namespace WindowsFormsApp1.services
             int count = 0;
             foreach (DataRow r in ReadAll(local, "SELECT id,name FROM place_category").Rows)
             {
+                // Unique(tenant_id,name) — nom bo'yicha upsert
                 Exec(central,
-                    "IF EXISTS(SELECT 1 FROM place_category WHERE id=@id)" +
-                    " UPDATE place_category SET name=@n WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT place_category ON;" +
-                    " INSERT INTO place_category(id,name) VALUES(@id,@n);" +
-                    " SET IDENTITY_INSERT place_category OFF END",
-                    P("@id",r["id"]),P("@n",r["name"]));
+                    "IF EXISTS(SELECT 1 FROM place_category WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT))" +
+                    " UPDATE place_category SET name=@n WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)" +
+                    " ELSE INSERT INTO place_category(name) VALUES(@n)",
+                    P("@n",r["name"]));
                 count++;
             }
             return count;
@@ -355,6 +384,16 @@ namespace WindowsFormsApp1.services
                 Guid tok = EnsureToken(local, "payment", r);
                 int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
                     "SELECT id FROM payment WHERE sync_token=@t", "@t", tok);
+                // Unique(name,tenant_id) — nom bo'yicha fallback
+                if (!cid.HasValue)
+                {
+                    cid = ScalarOrNull(central,
+                        "SELECT TOP 1 id FROM payment WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                        "@n", r["name"]);
+                    if (cid.HasValue)
+                        Exec(central, "UPDATE payment SET sync_token=@t WHERE id=@cid",
+                            P("@t", tok), P("@cid", cid.Value));
+                }
                 if (cid.HasValue)
                     Exec(central, "UPDATE payment SET name=@n,sort_order=@so WHERE id=@cid",
                         P("@n",r["name"]),P("@so",r["sort_order"]),P("@cid",cid.Value));
@@ -364,9 +403,9 @@ namespace WindowsFormsApp1.services
                         "INSERT INTO payment(name,sort_order,sync_token) OUTPUT INSERTED.id VALUES(@n,@so,@t)",
                         P("@n",r["name"]),P("@so",r["sort_order"]),P("@t",tok));
                     cid = Convert.ToInt32(newId);
-                    Exec(local,"UPDATE payment SET central_id=@c WHERE id=@id",
-                        P("@c",cid.Value),P("@id",r["id"]));
                 }
+                Exec(local,"UPDATE payment SET central_id=@c WHERE id=@id",
+                    P("@c",cid.Value),P("@id",r["id"]));
                 count++;
             }
             return count;
