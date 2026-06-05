@@ -266,11 +266,42 @@ namespace WindowsFormsApp1.services
                     { try { cmd.ExecuteNonQuery(); } catch { } }
 
                     // Eski xatolikdan qolgan stuck SyncQueue yozuvlarni reset qilish
-                    // (ID mapping bug tuzatildi — ular qayta sinxronlanishi kerak)
                     using (var cmd = new SqlCommand(
                         "UPDATE SyncQueue SET RetryCount=0, ErrorMsg=NULL " +
                         "WHERE IsSynced=0 AND RetryCount>=5", c))
                     { try { cmd.ExecuteNonQuery(); } catch { } }
+
+                    // Lokal DB dagi duplikat food/food_category yozuvlarni tozalash
+                    // (DownloadAll IDENTITY_INSERT qilgan lekin central_id o'rnatmagan yozuvlar)
+                    string[] dupCleanup = {
+                        // food_category: central_id bor va id != central_id bo'lgan yozuvlarni o'chirish
+                        @"IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME='food_category' AND COLUMN_NAME='central_id')
+                          BEGIN
+                            -- food_category duplikatlarini o'chirish (central_id ga mos id bor bo'lsa)
+                            DELETE fc FROM food_category fc
+                            WHERE fc.central_id IS NOT NULL
+                              AND fc.id = fc.central_id
+                              AND EXISTS(SELECT 1 FROM food_category fc2
+                                         WHERE fc2.central_id = fc.id AND fc2.id != fc.id)
+                          END",
+                        // food: central_id bor va id = central_id bo'lgan (IDENTITY_INSERT) yozuvlarni o'chirish
+                        @"IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME='food' AND COLUMN_NAME='central_id')
+                          BEGIN
+                            UPDATE order_food SET food_id=(
+                                SELECT MIN(f2.id) FROM food f2 WHERE f2.name=food.name)
+                            FROM order_food JOIN food ON food.id=order_food.food_id
+                            WHERE food.id=food.central_id
+                              AND EXISTS(SELECT 1 FROM food f3 WHERE f3.name=food.name AND f3.id!=food.id);
+                            DELETE FROM food
+                            WHERE id=central_id
+                              AND EXISTS(SELECT 1 FROM food f2 WHERE f2.name=food.name AND f2.id!=food.id);
+                          END",
+                    };
+                    foreach (string sql in dupCleanup)
+                        using (var cmd = new SqlCommand(sql, c))
+                        { cmd.CommandTimeout = 15; try { cmd.ExecuteNonQuery(); } catch { } }
 
                     // Lokal DB sxemasi central bilan bir xil bo'lishi uchun etishmayotgan ustunlar
                     string[] schemaMigrations = {

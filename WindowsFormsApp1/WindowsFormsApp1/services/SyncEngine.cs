@@ -909,12 +909,15 @@ namespace WindowsFormsApp1.services
             DataTable rows = ReadAll(central, "SELECT id,name,role_type,color FROM user_category");
             foreach (DataRow r in rows.Rows)
             {
+                // BUG FIX: avval central_id ga mos lokal yozuvni qidirish (duplikat oldini olish)
                 Exec(local,
-                    "IF EXISTS (SELECT 1 FROM user_category WHERE id=@id) " +
-                    "  UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE id=@id " +
+                    "IF EXISTS (SELECT 1 FROM user_category WHERE central_id=@id) " +
+                    "  UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE central_id=@id " +
+                    "ELSE IF EXISTS (SELECT 1 FROM user_category WHERE id=@id) " +
+                    "  UPDATE user_category SET name=@n,role_type=@rt,color=@c,central_id=@id WHERE id=@id " +
                     "ELSE BEGIN " +
                     "  SET IDENTITY_INSERT user_category ON; " +
-                    "  INSERT INTO user_category(id,name,role_type,color) VALUES(@id,@n,@rt,@c); " +
+                    "  INSERT INTO user_category(id,name,role_type,color,central_id) VALUES(@id,@n,@rt,@c,@id); " +
                     "  SET IDENTITY_INSERT user_category OFF " +
                     "END",
                     P("@id", r["id"]), P("@n", r["name"]),
@@ -931,14 +934,21 @@ namespace WindowsFormsApp1.services
                 "SELECT id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order FROM [user]");
             foreach (DataRow r in rows.Rows)
             {
+                // BUG FIX: login bo'yicha avval lokal yozuvni topish (duplikat oldini olish)
                 Exec(local,
-                    "IF EXISTS (SELECT 1 FROM [user] WHERE id=@id) " +
+                    "IF EXISTS (SELECT 1 FROM [user] WHERE central_id=@id) " +
                     "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
-                    "    phone_number=@ph,updated_at=@ua,sort_order=@so WHERE id=@id " +
+                    "    phone_number=@ph,updated_at=@ua,sort_order=@so WHERE central_id=@id " +
+                    "ELSE IF EXISTS (SELECT 1 FROM [user] WHERE login=@l) " +
+                    "  UPDATE [user] SET name=@n,user_category_id=@uc,password=@pw,app_password=@ap," +
+                    "    phone_number=@ph,updated_at=@ua,sort_order=@so,central_id=@id WHERE login=@l " +
+                    "ELSE IF EXISTS (SELECT 1 FROM [user] WHERE id=@id) " +
+                    "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
+                    "    phone_number=@ph,updated_at=@ua,sort_order=@so,central_id=@id WHERE id=@id " +
                     "ELSE BEGIN " +
                     "  SET IDENTITY_INSERT [user] ON; " +
-                    "  INSERT INTO [user](id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order) " +
-                    "  VALUES(@id,@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so); " +
+                    "  INSERT INTO [user](id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order,central_id) " +
+                    "  VALUES(@id,@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so,@id); " +
                     "  SET IDENTITY_INSERT [user] OFF " +
                     "END",
                     P("@id", r["id"]), P("@n", r["name"]), P("@uc", r["user_category_id"]),
@@ -956,12 +966,15 @@ namespace WindowsFormsApp1.services
             DataTable rows = ReadAll(central, "SELECT id,name,printer_name,sort_order FROM food_category");
             foreach (DataRow r in rows.Rows)
             {
+                // BUG FIX: central_id ga mos lokal yozuvni topish (duplikat oldini olish)
                 Exec(local,
-                    "IF EXISTS (SELECT 1 FROM food_category WHERE id=@id) " +
-                    "  UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so WHERE id=@id " +
+                    "IF EXISTS (SELECT 1 FROM food_category WHERE central_id=@id) " +
+                    "  UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so WHERE central_id=@id " +
+                    "ELSE IF EXISTS (SELECT 1 FROM food_category WHERE id=@id) " +
+                    "  UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so,central_id=@id WHERE id=@id " +
                     "ELSE BEGIN " +
                     "  SET IDENTITY_INSERT food_category ON; " +
-                    "  INSERT INTO food_category(id,name,printer_name,sort_order) VALUES(@id,@n,@pn,@so); " +
+                    "  INSERT INTO food_category(id,name,printer_name,sort_order,central_id) VALUES(@id,@n,@pn,@so,@id); " +
                     "  SET IDENTITY_INSERT food_category OFF " +
                     "END",
                     P("@id", r["id"]), P("@n", r["name"]),
@@ -979,16 +992,23 @@ namespace WindowsFormsApp1.services
                 "photo,created_at,updated_at,unit,description,is_unlimited,sort_order FROM food");
             foreach (DataRow r in rows.Rows)
             {
+                // BUG FIX: central_id ga mos lokal yozuvni topish (duplikat oldini olish)
+                // Avval central_id=@id tekshiriladi (eski lokal yozuv), keyin id=@id
+                // Faqat ikkisi ham yo'q bo'lsagina IDENTITY_INSERT qilinadi va central_id o'rnatiladi
                 Exec(local,
-                    "IF EXISTS (SELECT 1 FROM food WHERE id=@id) " +
+                    "IF EXISTS (SELECT 1 FROM food WHERE central_id=@id) " +
                     "  UPDATE food SET food_category_id=@fc,name=@n,count=@cnt,original_price=@op," +
                     "    selling_price=@sp,photo=@ph,updated_at=@ua,unit=@u,description=@d," +
-                    "    is_unlimited=@iu,sort_order=@so WHERE id=@id " +
+                    "    is_unlimited=@iu,sort_order=@so WHERE central_id=@id " +
+                    "ELSE IF EXISTS (SELECT 1 FROM food WHERE id=@id) " +
+                    "  UPDATE food SET food_category_id=@fc,name=@n,count=@cnt,original_price=@op," +
+                    "    selling_price=@sp,photo=@ph,updated_at=@ua,unit=@u,description=@d," +
+                    "    is_unlimited=@iu,sort_order=@so,central_id=@id WHERE id=@id " +
                     "ELSE BEGIN " +
                     "  SET IDENTITY_INSERT food ON; " +
                     "  INSERT INTO food(id,food_category_id,name,count,original_price,selling_price," +
-                    "    photo,created_at,updated_at,unit,description,is_unlimited,sort_order) " +
-                    "  VALUES(@id,@fc,@n,@cnt,@op,@sp,@ph,@ca,@ua,@u,@d,@iu,@so); " +
+                    "    photo,created_at,updated_at,unit,description,is_unlimited,sort_order,central_id) " +
+                    "  VALUES(@id,@fc,@n,@cnt,@op,@sp,@ph,@ca,@ua,@u,@d,@iu,@so,@id); " +
                     "  SET IDENTITY_INSERT food OFF " +
                     "END",
                     P("@id", r["id"]), P("@fc", r["food_category_id"]), P("@n", r["name"]),
