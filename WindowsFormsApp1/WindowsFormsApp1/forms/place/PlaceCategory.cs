@@ -41,10 +41,12 @@ namespace WindowsFormsApp1.forms.place
                     db.CloseCon();
                 }
 
-                MessageBox.Show("Kategoriya qo‘shildi!");
+                MessageBox.Show("Kategoriya qo’shildi!");
                 //txtCategoryName.Clear();
                 LoadCategories();
                 //LoadUserCategoriesCombo(); // ComboBox yangilash
+                if (Session.IsOnline && Session.TenantId > 0)
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
             }
             catch (Exception ex)
             {

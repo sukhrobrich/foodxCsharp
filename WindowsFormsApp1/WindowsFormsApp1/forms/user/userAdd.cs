@@ -688,6 +688,8 @@ namespace WindowsFormsApp1.forms.user
                 db.CloseCon();
                 userEditPanel.Visible = false;
                 ClearUserForm(); LoadUsers(); LoadRolesCombo();
+                if (Session.IsOnline && Session.TenantId > 0)
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
             }
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
         }
@@ -849,6 +851,8 @@ namespace WindowsFormsApp1.forms.user
                 db.CloseCon();
                 roleEditPanel.Visible = false;
                 ClearRoleForm(); LoadRolesList(); LoadRolesCombo();
+                if (Session.IsOnline && Session.TenantId > 0)
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
             }
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
         }

@@ -212,6 +212,8 @@ namespace WindowsFormsApp1.forms.warehouse
                     }
                 }
                 db.CloseCon();
+                if (Session.IsOnline && Session.TenantId > 0)
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
                 DialogResult = DialogResult.OK;
                 Close();
             }

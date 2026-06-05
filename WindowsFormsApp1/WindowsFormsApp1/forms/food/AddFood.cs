@@ -917,6 +917,8 @@ namespace WindowsFormsApp1.forms.food
                 db.CloseCon();
                 editPanel.Visible = false;
                 LoadFoods();
+                if (Session.IsOnline && Session.TenantId > 0)
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
             }
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
         }

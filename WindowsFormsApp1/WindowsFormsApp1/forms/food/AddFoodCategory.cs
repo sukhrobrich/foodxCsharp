@@ -541,6 +541,8 @@ namespace WindowsFormsApp1.forms.food
                 editPanel.Visible = false;
                 LoadCategories(GetSearchText());
                 MessageBox.Show("Saqlandi!", "Muvaffaqiyat", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (Session.IsOnline && Session.TenantId > 0)
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
             }
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
         }

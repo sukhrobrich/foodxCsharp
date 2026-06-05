@@ -288,6 +288,8 @@ namespace WindowsFormsApp1.forms.place
                             }
                         }
                         db.CloseCon();
+                        if (Session.IsOnline && Session.TenantId > 0)
+                            System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
                         dlg.DialogResult = DialogResult.OK;
                     }
                     catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
@@ -360,6 +362,8 @@ namespace WindowsFormsApp1.forms.place
                             { cmd.Parameters.AddWithValue("@z", selectedZoneId); cmd.Parameters.AddWithValue("@r", roomName); cmd.ExecuteNonQuery(); }
                         }
                         db.CloseCon();
+                        if (Session.IsOnline && Session.TenantId > 0)
+                            System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
                         dlg.DialogResult = DialogResult.OK;
                     }
                     catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
