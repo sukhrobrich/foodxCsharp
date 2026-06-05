@@ -274,9 +274,33 @@ namespace WindowsFormsApp1.services
                 Guid tok = EnsureToken(local, "food", r);
                 int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
                     "SELECT id FROM food WHERE sync_token=@t", "@t", tok);
+
+                // BUG FIX: nom bo'yicha fallback — mavjud taomni topib UPDATE qiladi, duplikat yaratmaydi
+                if (!cid.HasValue)
+                {
+                    try
+                    {
+                        using (var cmd = new System.Data.SqlClient.SqlCommand(
+                            "SELECT TOP 1 id FROM food WHERE name=@n " +
+                            "AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                        {
+                            cmd.Parameters.AddWithValue("@n", r["name"]);
+                            object val = cmd.ExecuteScalar();
+                            if (val != null && val != DBNull.Value)
+                            {
+                                cid = Convert.ToInt32(val);
+                                Exec(central, "UPDATE food SET sync_token=@t WHERE id=@cid",
+                                    P("@t", tok), P("@cid", cid.Value));
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
                 object catCid = (r["cat_central_id"] == DBNull.Value)
                     ? (object)r["food_category_id"] : r["cat_central_id"];
                 if (cid.HasValue)
+                {
                     Exec(central,
                         "UPDATE food SET food_category_id=@fc,name=@n,count=@cnt,original_price=@op," +
                         "selling_price=@sp,photo=@ph,updated_at=@ua,unit=@u,description=@d," +
@@ -285,6 +309,9 @@ namespace WindowsFormsApp1.services
                         P("@op",r["original_price"]),P("@sp",r["selling_price"]),P("@ph",r["photo"]),
                         P("@ua",r["updated_at"]),P("@u",r["unit"]),P("@d",r["description"]),
                         P("@iu",r["is_unlimited"]),P("@so",r["sort_order"]),P("@cid",cid.Value));
+                    Exec(local,"UPDATE food SET central_id=@c WHERE id=@id",
+                        P("@c",cid.Value),P("@id",r["id"]));
+                }
                 else
                 {
                     object newId = Exec(central,
