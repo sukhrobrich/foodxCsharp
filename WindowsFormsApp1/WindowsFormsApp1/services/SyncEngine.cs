@@ -215,13 +215,13 @@ namespace WindowsFormsApp1.services
                     "SELECT id FROM food_category WHERE sync_token=@t", "@t", tok);
                 if (cid.HasValue)
                     Exec(central,
-                        "UPDATE food_category SET name=@n,sort_order=@so WHERE id=@cid",
-                        P("@n",r["name"]),P("@so",r["sort_order"]),P("@cid",cid.Value));
+                        "UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so WHERE id=@cid",
+                        P("@n",r["name"]),P("@pn",r["printer_name"]),P("@so",r["sort_order"]),P("@cid",cid.Value));
                 else
                 {
                     object newId = Exec(central,
-                        "INSERT INTO food_category(name,sort_order,sync_token) OUTPUT INSERTED.id VALUES(@n,@so,@t)",
-                        P("@n",r["name"]),P("@so",r["sort_order"]),P("@t",tok));
+                        "INSERT INTO food_category(name,printer_name,sort_order,sync_token) OUTPUT INSERTED.id VALUES(@n,@pn,@so,@t)",
+                        P("@n",r["name"]),P("@pn",r["printer_name"]),P("@so",r["sort_order"]),P("@t",tok));
                     cid = Convert.ToInt32(newId);
                     Exec(local,"UPDATE food_category SET central_id=@c WHERE id=@id",
                         P("@c",cid.Value),P("@id",r["id"]));
