@@ -265,6 +265,13 @@ namespace WindowsFormsApp1.services
                         )", c))
                     { try { cmd.ExecuteNonQuery(); } catch { } }
 
+                    // Eski xatolikdan qolgan stuck SyncQueue yozuvlarni reset qilish
+                    // (ID mapping bug tuzatildi — ular qayta sinxronlanishi kerak)
+                    using (var cmd = new SqlCommand(
+                        "UPDATE SyncQueue SET RetryCount=0, ErrorMsg=NULL " +
+                        "WHERE IsSynced=0 AND RetryCount>=5", c))
+                    { try { cmd.ExecuteNonQuery(); } catch { } }
+
                     // Lokal DB sxemasi central bilan bir xil bo'lishi uchun etishmayotgan ustunlar
                     string[] schemaMigrations = {
                         // [user] jadvalidagi yangi ustunlar

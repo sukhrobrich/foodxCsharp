@@ -1333,13 +1333,22 @@ namespace WindowsFormsApp1.services
 
         private static void SyncSingleOrder(SqlConnection local, SqlConnection central, int localId)
         {
+            // BUG FIX: lokal user_id/payment_id/payment2_id → central_id ga mapping qo'shildi
             DataTable rows = ReadAll(local,
-                $"SELECT o.*, c.central_id AS c_central_id, " +
-                $"pi.room_name AS place_room, po.name AS place_zone " +
+                $"SELECT o.*, " +
+                $"c.central_id  AS c_central_id, " +
+                $"u.central_id  AS u_central_id, " +
+                $"p.central_id  AS p_central_id, " +
+                $"p2.central_id AS p2_central_id, " +
+                $"pi.room_name  AS place_room, " +
+                $"po.name       AS place_zone " +
                 $"FROM [order] o " +
-                $"LEFT JOIN customer c ON c.id=o.customer_id " +
-                $"LEFT JOIN place_in pi ON pi.id=o.place_id " +
-                $"LEFT JOIN place_out po ON po.id=pi.place_out_id " +
+                $"LEFT JOIN customer c  ON c.id  = o.customer_id " +
+                $"LEFT JOIN [user]   u  ON u.id  = o.user_id " +
+                $"LEFT JOIN payment  p  ON p.id  = o.payment_id " +
+                $"LEFT JOIN payment  p2 ON p2.id = o.payment2_id " +
+                $"LEFT JOIN place_in pi ON pi.id = o.place_id " +
+                $"LEFT JOIN place_out po ON po.id = pi.place_out_id " +
                 $"WHERE o.id={localId}");
             if (rows.Rows.Count == 0) return;
 
@@ -1347,44 +1356,36 @@ namespace WindowsFormsApp1.services
             Guid tok = (Guid)r["sync_token"];
             int? centralId = ScalarOrNull(central, "SELECT id FROM [order] WHERE sync_token=@t", "@t", tok);
 
-            if (centralId == null)
-            {
-                object centralCustId = r["c_central_id"] == DBNull.Value
-                    ? (object)DBNull.Value : r["c_central_id"];
+            // Lokal ID lerni markaziy ID larga map qilamiz
+            object centralUserId  = r["u_central_id"]  == DBNull.Value ? r["user_id"]    : r["u_central_id"];
+            object centralPayId   = r["p_central_id"]  == DBNull.Value ? r["payment_id"] : r["p_central_id"];
+            object centralPay2Id  = r["p2_central_id"] == DBNull.Value ? r["payment2_id"]: r["p2_central_id"];
+            object centralCustId  = r["c_central_id"]  == DBNull.Value ? (object)DBNull.Value : r["c_central_id"];
 
-                // place_in central ID ni nom bo'yicha topamiz
-                object centralPlaceId = DBNull.Value;
-                if (r["place_room"] != DBNull.Value && r["place_zone"] != DBNull.Value)
+            // place_in markaziy ID ni xona nomi + zona nomi bo'yicha topamiz
+            object centralPlaceId = DBNull.Value;
+            if (r["place_room"] != DBNull.Value && r["place_zone"] != DBNull.Value)
+            {
+                try
                 {
-                    int? cPlaceId = ScalarOrNull(central,
+                    using (var cmd = new System.Data.SqlClient.SqlCommand(
                         "SELECT TOP 1 pi.id FROM place_in pi " +
                         "JOIN place_out po ON po.id=pi.place_out_id " +
                         "WHERE pi.room_name=@rn AND po.name=@pn " +
-                        "AND pi.tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
-                        "@rn", r["place_room"]);
-                    // Note: ScalarOrNull takes 1 param, use direct Exec for 2 params
-                    if (cPlaceId == null)
+                        "AND pi.tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
                     {
-                        try
-                        {
-                            using (var cmd = new System.Data.SqlClient.SqlCommand(
-                                "SELECT TOP 1 pi.id FROM place_in pi " +
-                                "JOIN place_out po ON po.id=pi.place_out_id " +
-                                "WHERE pi.room_name=@rn AND po.name=@pn " +
-                                "AND pi.tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
-                            {
-                                cmd.Parameters.AddWithValue("@rn", r["place_room"]);
-                                cmd.Parameters.AddWithValue("@pn", r["place_zone"]);
-                                var val = cmd.ExecuteScalar();
-                                if (val != null && val != DBNull.Value)
-                                    centralPlaceId = Convert.ToInt32(val);
-                            }
-                        }
-                        catch { }
+                        cmd.Parameters.AddWithValue("@rn", r["place_room"]);
+                        cmd.Parameters.AddWithValue("@pn", r["place_zone"]);
+                        var val = cmd.ExecuteScalar();
+                        if (val != null && val != DBNull.Value)
+                            centralPlaceId = Convert.ToInt32(val);
                     }
-                    else centralPlaceId = cPlaceId.Value;
                 }
+                catch { }
+            }
 
+            if (centralId == null)
+            {
                 object inserted = Exec(central,
                     "INSERT INTO [order](user_id,place_id,payment_id,created_at,paid,total," +
                     "  discount_amount,discount_pct,customer_id,customer_name,delivery_phone," +
@@ -1393,14 +1394,14 @@ namespace WindowsFormsApp1.services
                     "OUTPUT INSERTED.id " +
                     "VALUES(@uid,@pid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
                     "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@tok)",
-                    P("@uid",r["user_id"]),P("@pid",centralPlaceId),P("@pay",r["payment_id"]),
+                    P("@uid",centralUserId),P("@pid",centralPlaceId),P("@pay",centralPayId),
                     P("@cat",r["created_at"]),P("@paid",r["paid"]),P("@tot",r["total"]),
                     P("@disc",r["discount_amount"]),P("@discp",r["discount_pct"]),
                     P("@cust",centralCustId),P("@custn",r["customer_name"]),
                     P("@dph",r["delivery_phone"]),P("@dadr",r["delivery_address"]),
                     P("@isdel",r["is_delivery"]),P("@note",r["order_note"]),
                     P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
-                    P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),P("@tok",tok));
+                    P("@p2",centralPay2Id),P("@p2a",r["payment2_amount"]),P("@tok",tok));
                 centralId = Convert.ToInt32(inserted);
             }
             else
@@ -1411,9 +1412,9 @@ namespace WindowsFormsApp1.services
                     "  custom_svc_type=@svt,order_note=@note,payment2_id=@p2,payment2_amount=@p2a " +
                     "WHERE id=@cid",
                     P("@paid",r["paid"]),P("@tot",r["total"]),P("@disc",r["discount_amount"]),
-                    P("@discp",r["discount_pct"]),P("@pay",r["payment_id"]),
+                    P("@discp",r["discount_pct"]),P("@pay",centralPayId),
                     P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
-                    P("@note",r["order_note"]),P("@p2",r["payment2_id"]),
+                    P("@note",r["order_note"]),P("@p2",centralPay2Id),
                     P("@p2a",r["payment2_amount"]),P("@cid",centralId.Value));
             }
 
@@ -1426,19 +1427,27 @@ namespace WindowsFormsApp1.services
                 "SELECT central_id FROM [order] WHERE id=@id", "@id", localOrderId);
             if (centralOrderId == null) return;
 
+            // BUG FIX: lokal food_id → food.central_id ga mapping qo'shildi
             DataTable foods = ReadAll(local,
-                $"SELECT food_id,quantity,note,sync_token FROM order_food WHERE order_id={localOrderId}");
+                $"SELECT of2.food_id, f.central_id AS f_central_id, " +
+                $"of2.quantity, of2.note, of2.sync_token " +
+                $"FROM order_food of2 " +
+                $"LEFT JOIN food f ON f.id = of2.food_id " +
+                $"WHERE of2.order_id={localOrderId}");
 
             Exec(central, "DELETE FROM order_food WHERE order_id=@oid", P("@oid", centralOrderId.Value));
 
             foreach (DataRow f in foods.Rows)
+            {
+                object centralFoodId = f["f_central_id"] == DBNull.Value ? f["food_id"] : f["f_central_id"];
                 Exec(central,
                     "IF EXISTS(SELECT 1 FROM order_food WHERE sync_token=@tok) " +
                     "  UPDATE order_food SET order_id=@oid,food_id=@fid,quantity=@qty,note=@note WHERE sync_token=@tok " +
                     "ELSE " +
                     "  INSERT INTO order_food(order_id,food_id,quantity,note,sync_token) VALUES(@oid,@fid,@qty,@note,@tok)",
-                    P("@oid",centralOrderId.Value),P("@fid",f["food_id"]),
+                    P("@oid",centralOrderId.Value),P("@fid",centralFoodId),
                     P("@qty",f["quantity"]),P("@note",f["note"]),P("@tok",f["sync_token"]));
+            }
 
             Exec(local, $"UPDATE order_food SET is_synced=1 WHERE order_id={localOrderId}");
         }
@@ -1449,10 +1458,15 @@ namespace WindowsFormsApp1.services
                 "SELECT central_id FROM [order] WHERE id=@id", "@id", localOrderId);
             if (centralOrderId == null) return;
 
+            // BUG FIX: lokal payment_id → payment.central_id ga mapping qo'shildi
             DataTable payments = ReadAll(local,
-                $"SELECT * FROM order_payments WHERE order_id={localOrderId} AND is_synced=0");
+                $"SELECT op.*, p.central_id AS p_central_id " +
+                $"FROM order_payments op " +
+                $"LEFT JOIN payment p ON p.id = op.payment_id " +
+                $"WHERE op.order_id={localOrderId} AND op.is_synced=0");
             foreach (DataRow p in payments.Rows)
             {
+                object centralPayId = p["p_central_id"] == DBNull.Value ? p["payment_id"] : p["p_central_id"];
                 Guid tok = (Guid)p["sync_token"];
                 int? exists = ScalarOrNull(central,
                     "SELECT id FROM order_payments WHERE sync_token=@t", "@t", tok);
@@ -1460,7 +1474,7 @@ namespace WindowsFormsApp1.services
                     Exec(central,
                         "INSERT INTO order_payments(order_id,payment_id,amount,sync_token)" +
                         " VALUES(@oid,@pid,@amt,@tok)",
-                        P("@oid",centralOrderId.Value),P("@pid",p["payment_id"]),
+                        P("@oid",centralOrderId.Value),P("@pid",centralPayId),
                         P("@amt",p["amount"]),P("@tok",tok));
                 else
                     Exec(central,
