@@ -280,7 +280,7 @@ namespace WindowsFormsApp1.forms.place
                             { chk.Parameters.AddWithValue("@id", id); object v = chk.ExecuteScalar(); if (v != null) oldName = v.ToString(); }
 
                             using (SqlCommand cmd = new SqlCommand(
-                                "UPDATE place_out SET name=@n, serviceFee=@sf, price=@pr, price_type=@pt WHERE id=@id",
+                                "UPDATE place_out SET name=@n, serviceFee=@sf, price=@pr, price_type=@pt, updated_at=GETDATE() WHERE id=@id",
                                 db.GetCon()))
                             {
                                 cmd.Parameters.AddWithValue("@n",  n);

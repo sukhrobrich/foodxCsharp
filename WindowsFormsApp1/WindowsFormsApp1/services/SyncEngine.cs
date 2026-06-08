@@ -383,8 +383,11 @@ namespace WindowsFormsApp1.services
             bool hasCentralId = false;
             try { using (var t = new System.Data.SqlClient.SqlCommand("SELECT TOP 0 central_id FROM place_out", local)) { t.ExecuteNonQuery(); hasCentralId = true; } } catch { }
 
+            // place_count: saqlangan qiymat o'rniga haqiqiy sonni hisoblaymiz
             string sql =
-                "SELECT po.id, po.name, po.place_count, po.created_at, po.updated_at, " +
+                "SELECT po.id, po.name, " +
+                "(SELECT COUNT(*) FROM place_in WHERE place_out_id=po.id) AS place_count, " +
+                "po.created_at, po.updated_at, " +
                 "po.serviceFee, po.price, po.sort_order, pc.name AS cat_name" +
                 (hasCentralId ? ", po.central_id" : ", CAST(NULL AS INT) AS central_id") +
                 " FROM place_out po LEFT JOIN place_category pc ON pc.id=po.place_category_id";
@@ -404,17 +407,19 @@ namespace WindowsFormsApp1.services
                 if (cid.HasValue)
                 {
                     Exec(central,
-                        "UPDATE place_out SET name=@n,place_count=@cnt,serviceFee=@sf,price=@pr,sort_order=@so WHERE id=@cid",
+                        "UPDATE place_out SET name=@n,place_count=@cnt,serviceFee=@sf,price=@pr," +
+                        "sort_order=@so,updated_at=@ua WHERE id=@cid",
                         P("@n",r["name"]),P("@cnt",r["place_count"]),P("@sf",r["serviceFee"]),
-                        P("@pr",r["price"]),P("@so",r["sort_order"]),P("@cid",cid.Value));
+                        P("@pr",r["price"]),P("@so",r["sort_order"]),
+                        P("@ua",r["updated_at"]),P("@cid",cid.Value));
                 }
                 else
                 {
                     object newId = Exec(central,
-                        "INSERT INTO place_out(place_category_id,name,place_count,created_at,serviceFee,price,sort_order)" +
-                        " OUTPUT INSERTED.id VALUES(@catid,@n,@cnt,@ca,@sf,@pr,@so)",
+                        "INSERT INTO place_out(place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order)" +
+                        " OUTPUT INSERTED.id VALUES(@catid,@n,@cnt,@ca,@ua,@sf,@pr,@so)",
                         P("@catid",centralCatId),P("@n",r["name"]),P("@cnt",r["place_count"]),
-                        P("@ca",r["created_at"]),P("@sf",r["serviceFee"]),
+                        P("@ca",r["created_at"]),P("@ua",r["updated_at"]),P("@sf",r["serviceFee"]),
                         P("@pr",r["price"]),P("@so",r["sort_order"]));
                     cid = Convert.ToInt32(newId);
                 }
