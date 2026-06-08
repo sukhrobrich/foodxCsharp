@@ -100,6 +100,8 @@ namespace WindowsFormsApp1.services
                 TryUl(() => SyncIngredientQuantities(local, central), result);
                 // FIX: Oflayn o'zgartirilgan sozlamalarni central ga yuklash
                 TryUl(() => SyncSettings(local, central),             result);
+                // Web/mobil dan qo'shilgan kassa yozuvlarini yuklab olish
+                TryDl(() => DlCashTransactions(local, central),       result);
             }
             catch (Exception ex)
             {
