@@ -2234,13 +2234,20 @@ namespace WindowsFormsApp1.forms.order
                     }
                     else
                     {
-                        SqlCommand upd = new SqlCommand("UPDATE order_food SET quantity=@qty, note=@note WHERE order_id=@oid AND food_id=@fid", db.GetCon(), tr);
+                        SqlCommand upd = new SqlCommand("UPDATE order_food SET quantity=@qty, note=@note, is_synced=0 WHERE order_id=@oid AND food_id=@fid", db.GetCon(), tr);
                         upd.Parameters.AddWithValue("@qty", ci.Quantity);
                         upd.Parameters.AddWithValue("@note", string.IsNullOrEmpty(ci.Note) ? (object)DBNull.Value : ci.Note);
                         upd.Parameters.AddWithValue("@oid", orderId);
                         upd.Parameters.AddWithValue("@fid", ci.FoodId);
                         upd.ExecuteNonQuery();
                     }
+                }
+
+                // Item o'chirilgan bo'lsa, qolgan itemlar ham qayta sync qilinsin
+                using (var resetSync = new SqlCommand("UPDATE order_food SET is_synced=0 WHERE order_id=@oid", db.GetCon(), tr))
+                {
+                    resetSync.Parameters.AddWithValue("@oid", orderId);
+                    resetSync.ExecuteNonQuery();
                 }
 
                 // Update total + extra fields
