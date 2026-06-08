@@ -328,26 +328,39 @@ namespace WindowsFormsApp1.forms.place
                         try
                         {
                             var db = new dbconnect(); db.OpenCon();
-                            // Central ID larni olish (delete uchun)
-                            int? centralPlaceOutId = null;
-                            using (var chk = new SqlCommand("SELECT central_id FROM place_out WHERE id=@id", db.GetCon()))
-                            { chk.Parameters.AddWithValue("@id", id); object v = chk.ExecuteScalar(); if (v != null && v != DBNull.Value) centralPlaceOutId = Convert.ToInt32(v); }
+                            // Zone nomini olamiz (central da nom bo'yicha topish uchun)
+                            string zoneName = "";
+                            using (var chk = new SqlCommand("SELECT name FROM place_out WHERE id=@id", db.GetCon()))
+                            { chk.Parameters.AddWithValue("@id", id); object v = chk.ExecuteScalar(); if (v != null && v != DBNull.Value) zoneName = v.ToString(); }
                             using (SqlCommand c = new SqlCommand("DELETE FROM place_in WHERE place_out_id=@id", db.GetCon()))
                             { c.Parameters.AddWithValue("@id", id); c.ExecuteNonQuery(); }
                             using (SqlCommand c = new SqlCommand("DELETE FROM place_out WHERE id=@id", db.GetCon()))
                             { c.Parameters.AddWithValue("@id", id); c.ExecuteNonQuery(); }
                             db.CloseCon();
-                            // Centraldan ham o'chirish
-                            if (centralPlaceOutId.HasValue && Session.IsOnline && Session.TenantId > 0)
+                            // Centraldan nom bo'yicha o'chirish
+                            if (!string.IsNullOrEmpty(zoneName) && Session.IsOnline && Session.TenantId > 0)
                             {
                                 try
                                 {
                                     using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
                                     {
-                                        using (var c = new SqlCommand("DELETE FROM place_in WHERE place_out_id=@id", central))
-                                        { c.Parameters.AddWithValue("@id", centralPlaceOutId.Value); c.ExecuteNonQuery(); }
-                                        using (var c = new SqlCommand("DELETE FROM place_out WHERE id=@id", central))
-                                        { c.Parameters.AddWithValue("@id", centralPlaceOutId.Value); c.ExecuteNonQuery(); }
+                                        // Avval zone ni topamiz
+                                        int? centralZoneId = null;
+                                        using (var cmd = new SqlCommand(
+                                            "SELECT TOP 1 id FROM place_out WHERE name=@n " +
+                                            "AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                                        {
+                                            cmd.Parameters.AddWithValue("@n", zoneName);
+                                            object v = cmd.ExecuteScalar();
+                                            if (v != null && v != DBNull.Value) centralZoneId = Convert.ToInt32(v);
+                                        }
+                                        if (centralZoneId.HasValue)
+                                        {
+                                            using (var c = new SqlCommand("DELETE FROM place_in WHERE place_out_id=@id", central))
+                                            { c.Parameters.AddWithValue("@id", centralZoneId.Value); c.ExecuteNonQuery(); }
+                                            using (var c = new SqlCommand("DELETE FROM place_out WHERE id=@id", central))
+                                            { c.Parameters.AddWithValue("@id", centralZoneId.Value); c.ExecuteNonQuery(); }
+                                        }
                                     }
                                 }
                                 catch { }
@@ -788,10 +801,16 @@ namespace WindowsFormsApp1.forms.place
                 try
                 {
                     var db = new dbconnect(); db.OpenCon();
-                    // Central ID ni olib qo'yamiz
-                    int? centralPlaceInId = null;
-                    using (var chk = new SqlCommand("SELECT central_id FROM place_in WHERE id=@id", db.GetCon()))
-                    { chk.Parameters.AddWithValue("@id", id); object v = chk.ExecuteScalar(); if (v != null && v != DBNull.Value) centralPlaceInId = Convert.ToInt32(v); }
+                    // Stol nomi va zona nomini olamiz (central da nom bo'yicha topish uchun)
+                    string roomName = "", zoneName2 = "";
+                    using (var chk = new SqlCommand(
+                        "SELECT pi.room_name, po.name FROM place_in pi " +
+                        "JOIN place_out po ON po.id=pi.place_out_id WHERE pi.id=@id", db.GetCon()))
+                    {
+                        chk.Parameters.AddWithValue("@id", id);
+                        using (var rdr = chk.ExecuteReader())
+                        { if (rdr.Read()) { roomName = rdr.GetString(0); zoneName2 = rdr.GetString(1); } }
+                    }
                     using (SqlCommand c = new SqlCommand(
                         "DELETE FROM order_food WHERE order_id IN (SELECT id FROM [order] WHERE place_id=@id)",
                         db.GetCon()))
@@ -802,14 +821,22 @@ namespace WindowsFormsApp1.forms.place
                     using (SqlCommand cmd = new SqlCommand("DELETE FROM place_in WHERE id=@id", db.GetCon()))
                     { cmd.Parameters.AddWithValue("@id", id); cmd.ExecuteNonQuery(); }
                     db.CloseCon();
-                    // Centraldan ham o'chirish
-                    if (centralPlaceInId.HasValue && Session.IsOnline && Session.TenantId > 0)
+                    // Centraldan nom+zona bo'yicha o'chirish
+                    if (!string.IsNullOrEmpty(roomName) && Session.IsOnline && Session.TenantId > 0)
                     {
                         try
                         {
                             using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
-                            using (var c = new SqlCommand("DELETE FROM place_in WHERE id=@id", central))
-                            { c.Parameters.AddWithValue("@id", centralPlaceInId.Value); c.ExecuteNonQuery(); }
+                            using (var cmd = new SqlCommand(
+                                "DELETE pi FROM place_in pi " +
+                                "JOIN place_out po ON po.id=pi.place_out_id " +
+                                "WHERE pi.room_name=@rn AND po.name=@zn " +
+                                "AND pi.tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                            {
+                                cmd.Parameters.AddWithValue("@rn", roomName);
+                                cmd.Parameters.AddWithValue("@zn", zoneName2);
+                                cmd.ExecuteNonQuery();
+                            }
                         }
                         catch { }
                     }
