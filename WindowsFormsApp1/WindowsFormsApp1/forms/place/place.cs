@@ -713,8 +713,7 @@ namespace WindowsFormsApp1.forms.place
 
             try
             {
-                dbconnect db = new dbconnect();
-                db.OpenCon();
+                var db = new dbconnect(); db.OpenCon();
                 // Cascade: order_food → order → place_in → place_out
                 using (SqlCommand c = new SqlCommand(
                     "DELETE FROM order_food WHERE order_id IN (SELECT o.id FROM [order] o JOIN place_in pi ON pi.id=o.place_id WHERE pi.place_out_id=@id)",
@@ -729,6 +728,40 @@ namespace WindowsFormsApp1.forms.place
                 using (SqlCommand c = new SqlCommand("DELETE FROM place_out WHERE id=@id", db.GetCon()))
                 { c.Parameters.AddWithValue("@id", id); c.ExecuteNonQuery(); }
                 db.CloseCon();
+
+                // Markaziy DBdan ham o'chirish
+                if (Session.IsOnline && Session.TenantId > 0)
+                {
+                    try
+                    {
+                        int tid = Session.TenantId;
+                        using (var central = dbconnect.OpenCentralForSync(tid))
+                        {
+                            using (var c = new SqlCommand(
+                                "DELETE FROM order_food WHERE order_id IN " +
+                                " (SELECT o.id FROM [order] o JOIN place_in pi ON pi.id=o.place_id" +
+                                "  JOIN place_out po ON po.id=pi.place_out_id" +
+                                "  WHERE po.name=@n AND po.tenant_id=@tid)", central))
+                            { c.Parameters.AddWithValue("@n", name); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
+
+                            using (var c = new SqlCommand(
+                                "DELETE FROM [order] WHERE place_id IN" +
+                                " (SELECT pi.id FROM place_in pi JOIN place_out po ON po.id=pi.place_out_id" +
+                                "  WHERE po.name=@n AND po.tenant_id=@tid)", central))
+                            { c.Parameters.AddWithValue("@n", name); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
+
+                            using (var c = new SqlCommand(
+                                "DELETE pi FROM place_in pi JOIN place_out po ON po.id=pi.place_out_id" +
+                                " WHERE po.name=@n AND po.tenant_id=@tid", central))
+                            { c.Parameters.AddWithValue("@n", name); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
+
+                            using (var c = new SqlCommand(
+                                "DELETE FROM place_out WHERE name=@n AND tenant_id=@tid", central))
+                            { c.Parameters.AddWithValue("@n", name); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
+                        }
+                    }
+                    catch (Exception ex) { MessageBox.Show("Markaziy serverdan o'chirishda xatolik:\n" + ex.Message, "Ogohlantirish", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                }
 
                 if (id == selectedZoneId)
                 {
