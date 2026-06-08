@@ -299,7 +299,7 @@ namespace WindowsFormsApp1.forms.cashflow
             catch (Exception ex) { MessageBox.Show("Yuklashda xatolik: " + ex.Message); }
         }
 
-        // Hisobotlar bilan bir xil formulada sof savdo foydasi (xaridlar ta'sir qilmaydi)
+        // ReportPage.LoadStats() bilan bir xil formula
         private decimal CalcSavdoFoyda(DateTime from, DateTime to)
         {
             decimal fp = 0, fee = 0, plP = 0;
@@ -328,24 +328,22 @@ namespace WindowsFormsApp1.forms.cashflow
                 }
                 catch { }
 
-                // Xizmat haqqi — hisobotlar bilan bir xil: fee_amount ustuni bo'lmasa service_charge sozlamasidan
-                bool feeFromDb = false;
+                // Xizmat haqqi — custom_svc_fee (ReportPage bilan bir xil)
                 try
                 {
                     using (var cmd = new SqlCommand(@"
-                        SELECT ISNULL(SUM(fee_amount), 0) FROM [order]
-                        WHERE paid='YES' AND CAST(created_at AS DATE) BETWEEN @f AND @t", db.GetCon()))
+                        SELECT ISNULL(SUM(ISNULL(custom_svc_fee,0)), 0) FROM [order]
+                        WHERE paid='YES' AND ISNULL(custom_svc_fee,0) > 0
+                          AND CAST(created_at AS DATE) BETWEEN @f AND @t", db.GetCon()))
                     {
                         cmd.Parameters.AddWithValue("@f", from);
                         cmd.Parameters.AddWithValue("@t", to);
                         object v = cmd.ExecuteScalar();
-                        if (v != null && v != DBNull.Value) { fee = Convert.ToDecimal(v); feeFromDb = true; }
+                        if (v != null && v != DBNull.Value) fee = Convert.ToDecimal(v);
                     }
                 }
-                catch { }
-                if (!feeFromDb)
+                catch
                 {
-                    // Jami savdo summasidan service_charge foizini hisoblaymiz
                     decimal oSum = 0;
                     try
                     {
@@ -362,16 +360,24 @@ namespace WindowsFormsApp1.forms.cashflow
                     catch { }
                     decimal svcPct = 0;
                     decimal.TryParse(PrintService.GetSetting("service_charge", "0"), out svcPct);
-                    if (svcPct > 0) fee = Math.Round(oSum * svcPct / 100);
+                    if (svcPct > 0) fee = Math.Round(oSum * svcPct / (100 + svcPct));
                 }
 
-                // Joy narxi
+                // Joy narxi — price_type hisobiga (ReportPage bilan bir xil)
                 try
                 {
                     using (var cmd = new SqlCommand(@"
-                        SELECT ISNULL(SUM(pi.price), 0)
+                        SELECT ISNULL(SUM(
+                          CASE WHEN ISNULL(po.price_type,'UZS')='UZS' THEN ISNULL(po.price,0)
+                               ELSE ISNULL(fo.food_total,0)*ISNULL(po.price,0)/100.0
+                          END),0)
                         FROM [order] o
                         JOIN place_in pi ON pi.id = o.place_id
+                        JOIN place_out po ON po.id = pi.place_out_id
+                        LEFT JOIN (
+                          SELECT ofd.order_id, SUM(ofd.quantity*f.selling_price) AS food_total
+                          FROM order_food ofd JOIN food f ON f.id=ofd.food_id GROUP BY ofd.order_id
+                        ) fo ON fo.order_id = o.id
                         WHERE o.paid='YES'
                           AND CAST(o.created_at AS DATE) BETWEEN @f AND @t", db.GetCon()))
                     {
