@@ -351,17 +351,50 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,name,place_count,created_at,updated_at,serviceFee,price,sort_order FROM place_out").Rows)
+                "SELECT po.id, po.name, po.place_count, po.created_at, po.updated_at, " +
+                "po.serviceFee, po.price, po.sort_order, pc.name AS cat_name " +
+                "FROM place_out po " +
+                "LEFT JOIN place_category pc ON pc.id=po.place_category_id").Rows)
             {
-                // IDENTITY_INSERT ishlatmaymiz — boshqa tenantlar bir xil ID ga ega bo'lishi mumkin.
-                // Nom bo'yicha upsert (RLS SESSION_CONTEXT orqali tenant izolyatsiyasini ta'minlaydi).
+                // place_category ni central da topamiz (yoki birinchisini olamiz)
+                // BUG FIX: place_category_id NOT NULL — INSERT da bo'lishi shart
+                int? centralCatId = null;
+                string catName = r["cat_name"] as string;
+                if (!string.IsNullOrEmpty(catName))
+                    centralCatId = ScalarOrNull(central,
+                        "SELECT TOP 1 id FROM place_category WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                        "@n", catName);
+                // Fallback: istalgan kategoriyani olamiz
+                if (!centralCatId.HasValue)
+                {
+                    try
+                    {
+                        using (var cmd = new System.Data.SqlClient.SqlCommand(
+                            "SELECT TOP 1 id FROM place_category WHERE tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                            central))
+                        {
+                            object v = cmd.ExecuteScalar();
+                            if (v != null && v != DBNull.Value) centralCatId = Convert.ToInt32(v);
+                        }
+                    }
+                    catch { }
+                }
+                // Hali ham yo'q bo'lsa — kategoriya yaratamiz
+                if (!centralCatId.HasValue)
+                {
+                    object newCatId = Exec(central,
+                        "INSERT INTO place_category(name) OUTPUT INSERTED.id VALUES(@n)",
+                        P("@n", string.IsNullOrEmpty(catName) ? "Umumiy" : catName));
+                    centralCatId = Convert.ToInt32(newCatId);
+                }
+
                 Exec(central,
                     "IF EXISTS(SELECT 1 FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT))" +
                     " UPDATE place_out SET place_count=@cnt,updated_at=@ua,serviceFee=@sf,price=@pr,sort_order=@so" +
                     "   WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)" +
-                    " ELSE INSERT INTO place_out(name,place_count,created_at,updated_at,serviceFee,price,sort_order)" +
-                    "   VALUES(@n,@cnt,@ca,@ua,@sf,@pr,@so)",
-                    P("@n",r["name"]),P("@cnt",r["place_count"]),
+                    " ELSE INSERT INTO place_out(place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order)" +
+                    "   VALUES(@catid,@n,@cnt,@ca,@ua,@sf,@pr,@so)",
+                    P("@catid",centralCatId.Value),P("@n",r["name"]),P("@cnt",r["place_count"]),
                     P("@ca",r["created_at"]),P("@ua",r["updated_at"]),
                     P("@sf",r["serviceFee"]),P("@pr",r["price"]),P("@so",r["sort_order"]));
                 count++;
