@@ -337,33 +337,46 @@ namespace WindowsFormsApp1.forms.place
                             using (SqlCommand c = new SqlCommand("DELETE FROM place_out WHERE id=@id", db.GetCon()))
                             { c.Parameters.AddWithValue("@id", id); c.ExecuteNonQuery(); }
                             db.CloseCon();
-                            // Centraldan nom bo'yicha o'chirish
+                            // Centraldan o'chirish (SESSION_CONTEXT va bevosita tenant_id filter bilan)
                             if (!string.IsNullOrEmpty(zoneName) && Session.IsOnline && Session.TenantId > 0)
                             {
                                 try
                                 {
                                     using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
                                     {
-                                        // Avval zone ni topamiz
-                                        int? centralZoneId = null;
-                                        using (var cmd = new SqlCommand(
-                                            "SELECT TOP 1 id FROM place_out WHERE name=@n " +
-                                            "AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
-                                        {
-                                            cmd.Parameters.AddWithValue("@n", zoneName);
-                                            object v = cmd.ExecuteScalar();
-                                            if (v != null && v != DBNull.Value) centralZoneId = Convert.ToInt32(v);
-                                        }
-                                        if (centralZoneId.HasValue)
-                                        {
-                                            using (var c = new SqlCommand("DELETE FROM place_in WHERE place_out_id=@id", central))
-                                            { c.Parameters.AddWithValue("@id", centralZoneId.Value); c.ExecuteNonQuery(); }
-                                            using (var c = new SqlCommand("DELETE FROM place_out WHERE id=@id", central))
-                                            { c.Parameters.AddWithValue("@id", centralZoneId.Value); c.ExecuteNonQuery(); }
-                                        }
+                                        int tid = Session.TenantId;
+                                        // place_in larni o'chirish (orders ni ham tozalaymiz)
+                                        using (var c = new SqlCommand(
+                                            "DELETE FROM order_food WHERE order_id IN " +
+                                            "  (SELECT o.id FROM [order] o " +
+                                            "   JOIN place_in pi ON pi.id=o.place_id " +
+                                            "   JOIN place_out po ON po.id=pi.place_out_id " +
+                                            "   WHERE po.name=@n AND po.tenant_id=@tid)", central))
+                                        { c.Parameters.AddWithValue("@n", zoneName); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
+
+                                        using (var c = new SqlCommand(
+                                            "DELETE FROM [order] WHERE place_id IN " +
+                                            "  (SELECT pi.id FROM place_in pi " +
+                                            "   JOIN place_out po ON po.id=pi.place_out_id " +
+                                            "   WHERE po.name=@n AND po.tenant_id=@tid)", central))
+                                        { c.Parameters.AddWithValue("@n", zoneName); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
+
+                                        using (var c = new SqlCommand(
+                                            "DELETE pi FROM place_in pi " +
+                                            "JOIN place_out po ON po.id=pi.place_out_id " +
+                                            "WHERE po.name=@n AND po.tenant_id=@tid", central))
+                                        { c.Parameters.AddWithValue("@n", zoneName); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
+
+                                        using (var c = new SqlCommand(
+                                            "DELETE FROM place_out WHERE name=@n AND tenant_id=@tid", central))
+                                        { c.Parameters.AddWithValue("@n", zoneName); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
                                     }
                                 }
-                                catch { }
+                                catch (Exception ex)
+                                {
+                                    MessageBox.Show("Markaziy serverdan o'chirishda xatolik:\n" + ex.Message,
+                                        "Ogohlantirish", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                }
                             }
                             dlg.Tag = "deleted";
                             dlg.DialogResult = DialogResult.OK;
@@ -826,19 +839,37 @@ namespace WindowsFormsApp1.forms.place
                     {
                         try
                         {
-                            using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
-                            using (var cmd = new SqlCommand(
-                                "DELETE pi FROM place_in pi " +
-                                "JOIN place_out po ON po.id=pi.place_out_id " +
-                                "WHERE pi.room_name=@rn AND po.name=@zn " +
-                                "AND pi.tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                            int tid = Session.TenantId;
+                            using (var central = dbconnect.OpenCentralForSync(tid))
                             {
-                                cmd.Parameters.AddWithValue("@rn", roomName);
-                                cmd.Parameters.AddWithValue("@zn", zoneName2);
-                                cmd.ExecuteNonQuery();
+                                // order_food va order ni tozalaymiz (FK)
+                                using (var c = new SqlCommand(
+                                    "DELETE FROM order_food WHERE order_id IN " +
+                                    "  (SELECT o.id FROM [order] o " +
+                                    "   JOIN place_in pi ON pi.id=o.place_id " +
+                                    "   JOIN place_out po ON po.id=pi.place_out_id " +
+                                    "   WHERE pi.room_name=@rn AND po.name=@zn AND po.tenant_id=@tid)", central))
+                                { c.Parameters.AddWithValue("@rn", roomName); c.Parameters.AddWithValue("@zn", zoneName2); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
+
+                                using (var c = new SqlCommand(
+                                    "DELETE FROM [order] WHERE place_id IN " +
+                                    "  (SELECT pi.id FROM place_in pi " +
+                                    "   JOIN place_out po ON po.id=pi.place_out_id " +
+                                    "   WHERE pi.room_name=@rn AND po.name=@zn AND po.tenant_id=@tid)", central))
+                                { c.Parameters.AddWithValue("@rn", roomName); c.Parameters.AddWithValue("@zn", zoneName2); c.Parameters.AddWithValue("@tid", tid); c.ExecuteNonQuery(); }
+
+                                using (var cmd = new SqlCommand(
+                                    "DELETE pi FROM place_in pi " +
+                                    "JOIN place_out po ON po.id=pi.place_out_id " +
+                                    "WHERE pi.room_name=@rn AND po.name=@zn AND po.tenant_id=@tid", central))
+                                { cmd.Parameters.AddWithValue("@rn", roomName); cmd.Parameters.AddWithValue("@zn", zoneName2); cmd.Parameters.AddWithValue("@tid", tid); cmd.ExecuteNonQuery(); }
                             }
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show("Markaziy serverdan o'chirishda xatolik:\n" + ex.Message,
+                                "Ogohlantirish", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
                     }
                     LoadTables(selectedZoneId);
                     LoadZones();
