@@ -941,9 +941,23 @@ namespace WindowsFormsApp1.forms.food
                     MessageBox.Show($"Bu taom {refs} ta buyurtmada ishlatilgan. O'chirish mumkin emas.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
+                // Markaziy DB dagi ID ni saqlash (o'chirishdan OLDIN)
+                int? centralFoodId = null;
+                using (SqlCommand cid = new SqlCommand("SELECT central_id FROM food WHERE id=@id", db.GetCon()))
+                {
+                    cid.Parameters.AddWithValue("@id", editingFoodId);
+                    object v = cid.ExecuteScalar();
+                    if (v != null && v != DBNull.Value) centralFoodId = Convert.ToInt32(v);
+                }
+
                 using (SqlCommand cmd = new SqlCommand("DELETE FROM food WHERE id=@id", db.GetCon()))
                 { cmd.Parameters.AddWithValue("@id", editingFoodId); cmd.ExecuteNonQuery(); }
                 db.CloseCon();
+
+                // Markaziy DB dan ham o'chirish uchun SyncQueue ga yozamiz
+                if (centralFoodId.HasValue)
+                    SyncQueueHelper.Add(SyncQueueHelper.FoodDelete, centralFoodId.Value, "Delete");
+
                 editPanel.Visible = false;
                 LoadFoods();
             }

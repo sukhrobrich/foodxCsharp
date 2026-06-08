@@ -1449,6 +1449,10 @@ namespace WindowsFormsApp1.services
                             case SyncQueueHelper.FoodPurchases:
                                 SyncSingleFoodPurchase(local, central, entityId);
                                 break;
+                            case SyncQueueHelper.FoodDelete:
+                                // entityId = central_id (lokal o'chirilgandan keyin yozilgan)
+                                Exec(central, "DELETE FROM food WHERE id=@id", P("@id", entityId));
+                                break;
                         }
 
                         Exec(local,
