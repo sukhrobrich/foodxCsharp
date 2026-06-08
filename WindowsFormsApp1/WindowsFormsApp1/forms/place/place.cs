@@ -256,8 +256,8 @@ namespace WindowsFormsApp1.forms.place
                     string pt  = rbPct.Checked ? "%" : "UZS";
                     try
                     {
-                        dbconnect db = new dbconnect();
-                        db.OpenCon();
+                        var db = new dbconnect(); db.OpenCon();
+                        string oldName = "";
                         if (id == 0)
                         {
                             int cat = EnsureDefaultCategory(db);
@@ -275,6 +275,10 @@ namespace WindowsFormsApp1.forms.place
                         }
                         else
                         {
+                            // Eski nomni saqlаymiz (central da update uchun)
+                            using (var chk = new SqlCommand("SELECT name FROM place_out WHERE id=@id", db.GetCon()))
+                            { chk.Parameters.AddWithValue("@id", id); object v = chk.ExecuteScalar(); if (v != null) oldName = v.ToString(); }
+
                             using (SqlCommand cmd = new SqlCommand(
                                 "UPDATE place_out SET name=@n, serviceFee=@sf, price=@pr, price_type=@pt WHERE id=@id",
                                 db.GetCon()))
@@ -285,6 +289,25 @@ namespace WindowsFormsApp1.forms.place
                                 cmd.Parameters.AddWithValue("@pt", pt);
                                 cmd.Parameters.AddWithValue("@id", id);
                                 cmd.ExecuteNonQuery();
+                            }
+                            // Agar nom o'zgardi va online bo'lsa — central da ham yangilaymiz
+                            if (oldName != n && Session.IsOnline && Session.TenantId > 0)
+                            {
+                                try
+                                {
+                                    using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
+                                    using (var cmd = new SqlCommand(
+                                        "UPDATE place_out SET name=@n,serviceFee=@sf,price=@pr WHERE name=@old " +
+                                        "AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                                    {
+                                        cmd.Parameters.AddWithValue("@n",   n);
+                                        cmd.Parameters.AddWithValue("@sf",  sf);
+                                        cmd.Parameters.AddWithValue("@pr",  pr);
+                                        cmd.Parameters.AddWithValue("@old", oldName);
+                                        cmd.ExecuteNonQuery();
+                                    }
+                                }
+                                catch { }
                             }
                         }
                         db.CloseCon();
@@ -412,12 +435,36 @@ namespace WindowsFormsApp1.forms.place
                     {
                         dbconnect db = new dbconnect();
                         db.OpenCon();
+                        // Eski nomni olamiz
+                        string oldRoomName = "";
+                        using (var chk = new SqlCommand("SELECT room_name FROM place_in WHERE id=@id", db.GetCon()))
+                        { chk.Parameters.AddWithValue("@id", id); object v = chk.ExecuteScalar(); if (v != null) oldRoomName = v.ToString(); }
+
                         using (SqlCommand cmd = new SqlCommand("UPDATE place_in SET room_name=@n WHERE id=@id", db.GetCon()))
                         { cmd.Parameters.AddWithValue("@n", n); cmd.Parameters.AddWithValue("@id", id); cmd.ExecuteNonQuery(); }
                         db.CloseCon();
-                        // Centralga ham yangilash
+
+                        // Central da ham nomni yangilaymiz
                         if (Session.IsOnline && Session.TenantId > 0)
+                        {
+                            if (oldRoomName != n)
+                            {
+                                try
+                                {
+                                    using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
+                                    using (var cmd = new SqlCommand(
+                                        "UPDATE place_in SET room_name=@n WHERE room_name=@old " +
+                                        "AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                                    {
+                                        cmd.Parameters.AddWithValue("@n",   n);
+                                        cmd.Parameters.AddWithValue("@old", oldRoomName);
+                                        cmd.ExecuteNonQuery();
+                                    }
+                                }
+                                catch { }
+                            }
                             System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
+                        }
                         dlg.DialogResult = DialogResult.OK;
                     }
                     catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }

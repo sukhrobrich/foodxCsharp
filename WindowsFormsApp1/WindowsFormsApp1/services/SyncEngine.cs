@@ -347,43 +347,55 @@ namespace WindowsFormsApp1.services
             return count;
         }
 
+        // place_category: markaziy DB da oladi yoki yaratadi
+        private static int EnsureCentralPlaceCategory(SqlConnection central, string catName)
+        {
+            if (!string.IsNullOrEmpty(catName))
+            {
+                int? id = ScalarOrNull(central,
+                    "SELECT TOP 1 id FROM place_category WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                    "@n", catName);
+                if (id.HasValue) return id.Value;
+            }
+            // Mavjud birinchi kategoriyani olamiz
+            try
+            {
+                using (var cmd = new System.Data.SqlClient.SqlCommand(
+                    "SELECT TOP 1 id FROM place_category WHERE tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                    central))
+                {
+                    object v = cmd.ExecuteScalar();
+                    if (v != null && v != DBNull.Value) return Convert.ToInt32(v);
+                }
+            }
+            catch { }
+            // Hali ham yo'q — yangi yaratamiz
+            object newId = Exec(central,
+                "INSERT INTO place_category(name) OUTPUT INSERTED.id VALUES(@n)",
+                P("@n", string.IsNullOrEmpty(catName) ? "Umumiy" : catName));
+            return Convert.ToInt32(newId);
+        }
+
         private static int SyncRefPlaceOuts(SqlConnection local, SqlConnection central)
         {
             int count = 0;
-            foreach (DataRow r in ReadAll(local,
-                "SELECT po.id, po.name, po.place_count, po.created_at, po.updated_at, " +
-                "po.serviceFee, po.price, po.sort_order, po.central_id, pc.name AS cat_name " +
-                "FROM place_out po " +
-                "LEFT JOIN place_category pc ON pc.id=po.place_category_id").Rows)
-            {
-                // place_category ni central da topamiz (yoki yaratamiz)
-                int? centralCatId = null;
-                string catName = r["cat_name"] as string;
-                if (!string.IsNullOrEmpty(catName))
-                    centralCatId = ScalarOrNull(central,
-                        "SELECT TOP 1 id FROM place_category WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
-                        "@n", catName);
-                if (!centralCatId.HasValue)
-                {
-                    try
-                    {
-                        using (var cmd = new System.Data.SqlClient.SqlCommand(
-                            "SELECT TOP 1 id FROM place_category WHERE tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
-                            central))
-                        { object v = cmd.ExecuteScalar(); if (v != null && v != DBNull.Value) centralCatId = Convert.ToInt32(v); }
-                    }
-                    catch { }
-                }
-                if (!centralCatId.HasValue)
-                {
-                    object newCatId = Exec(central,
-                        "INSERT INTO place_category(name) OUTPUT INSERTED.id VALUES(@n)",
-                        P("@n", string.IsNullOrEmpty(catName) ? "Umumiy" : catName));
-                    centralCatId = Convert.ToInt32(newCatId);
-                }
+            // central_id ustuni mavjudligini tekshirish (lokal DB da bo'lmasligi mumkin)
+            bool hasCentralId = false;
+            try { using (var t = new System.Data.SqlClient.SqlCommand("SELECT TOP 0 central_id FROM place_out", local)) { t.ExecuteNonQuery(); hasCentralId = true; } } catch { }
 
-                // central_id bo'yicha topamiz (nom o'zgarganda ham ishlaydi)
+            string sql =
+                "SELECT po.id, po.name, po.place_count, po.created_at, po.updated_at, " +
+                "po.serviceFee, po.price, po.sort_order, pc.name AS cat_name" +
+                (hasCentralId ? ", po.central_id" : ", CAST(NULL AS INT) AS central_id") +
+                " FROM place_out po LEFT JOIN place_category pc ON pc.id=po.place_category_id";
+
+            foreach (DataRow r in ReadAll(local, sql).Rows)
+            {
+                int centralCatId = EnsureCentralPlaceCategory(central, r["cat_name"] as string);
+
+                // central_id bo'yicha topishga harakat (mavjud bo'lsa)
                 int? cid = r["central_id"] as int?;
+                // Yo'q bo'lsa nom bo'yicha topamiz
                 if (!cid.HasValue)
                     cid = ScalarOrNull(central,
                         "SELECT TOP 1 id FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
@@ -393,22 +405,22 @@ namespace WindowsFormsApp1.services
                 {
                     Exec(central,
                         "UPDATE place_out SET name=@n,place_count=@cnt,serviceFee=@sf,price=@pr,sort_order=@so WHERE id=@cid",
-                        P("@n",r["name"]),P("@cnt",r["place_count"]),
-                        P("@sf",r["serviceFee"]),P("@pr",r["price"]),
-                        P("@so",r["sort_order"]),P("@cid",cid.Value));
+                        P("@n",r["name"]),P("@cnt",r["place_count"]),P("@sf",r["serviceFee"]),
+                        P("@pr",r["price"]),P("@so",r["sort_order"]),P("@cid",cid.Value));
                 }
                 else
                 {
                     object newId = Exec(central,
                         "INSERT INTO place_out(place_category_id,name,place_count,created_at,serviceFee,price,sort_order)" +
                         " OUTPUT INSERTED.id VALUES(@catid,@n,@cnt,@ca,@sf,@pr,@so)",
-                        P("@catid",centralCatId.Value),P("@n",r["name"]),P("@cnt",r["place_count"]),
+                        P("@catid",centralCatId),P("@n",r["name"]),P("@cnt",r["place_count"]),
                         P("@ca",r["created_at"]),P("@sf",r["serviceFee"]),
                         P("@pr",r["price"]),P("@so",r["sort_order"]));
                     cid = Convert.ToInt32(newId);
                 }
-                Exec(local, "UPDATE place_out SET central_id=@c WHERE id=@id",
-                    P("@c",cid.Value), P("@id",r["id"]));
+                // central_id ni lokal DB ga saqlash (ustun mavjud bo'lsa)
+                if (hasCentralId)
+                    try { Exec(local, "UPDATE place_out SET central_id=@c WHERE id=@id", P("@c",cid.Value), P("@id",r["id"])); } catch { }
                 count++;
             }
             return count;
@@ -417,25 +429,41 @@ namespace WindowsFormsApp1.services
         private static int SyncRefPlaceIns(SqlConnection local, SqlConnection central)
         {
             int count = 0;
-            foreach (DataRow r in ReadAll(local,
-                "SELECT pi.id, pi.room_name, pi.created_at, pi.price, pi.central_id, " +
-                "po.name AS zone_name, po.central_id AS zone_central_id " +
-                "FROM place_in pi JOIN place_out po ON po.id=pi.place_out_id").Rows)
-            {
-                // Zona central ID sini olamiz
-                int? centralZoneId = r["zone_central_id"] as int?;
-                if (!centralZoneId.HasValue)
-                    centralZoneId = ScalarOrNull(central,
-                        "SELECT TOP 1 id FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
-                        "@n", r["zone_name"]);
-                if (centralZoneId == null) continue;
+            // central_id ustuni mavjudligini tekshirish
+            bool hasCentralId = false;
+            try { using (var t = new System.Data.SqlClient.SqlCommand("SELECT TOP 0 central_id FROM place_in", local)) { t.ExecuteNonQuery(); hasCentralId = true; } } catch { }
 
-                // central_id bo'yicha topamiz (nom o'zgarganda ham ishlaydi)
+            string sql =
+                "SELECT pi.id, pi.room_name, pi.created_at, pi.price, po.name AS zone_name" +
+                (hasCentralId ? ", pi.central_id" : ", CAST(NULL AS INT) AS central_id") +
+                " FROM place_in pi JOIN place_out po ON po.id=pi.place_out_id";
+
+            foreach (DataRow r in ReadAll(local, sql).Rows)
+            {
+                // Zona central ID sini nom bo'yicha topamiz
+                int? centralZoneId = ScalarOrNull(central,
+                    "SELECT TOP 1 id FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                    "@n", r["zone_name"]);
+                if (!centralZoneId.HasValue) continue;
+
+                // central_id bo'yicha yoki nom+zona bo'yicha topamiz
                 int? cid = r["central_id"] as int?;
                 if (!cid.HasValue)
-                    cid = ScalarOrNull(central,
-                        "SELECT TOP 1 id FROM place_in WHERE room_name=@n AND place_out_id=@po AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
-                        "@n", r["room_name"]);
+                {
+                    try
+                    {
+                        using (var cmd = new System.Data.SqlClient.SqlCommand(
+                            "SELECT TOP 1 id FROM place_in WHERE room_name=@rn AND place_out_id=@po " +
+                            "AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                        {
+                            cmd.Parameters.AddWithValue("@rn", r["room_name"]);
+                            cmd.Parameters.AddWithValue("@po", centralZoneId.Value);
+                            object v = cmd.ExecuteScalar();
+                            if (v != null && v != DBNull.Value) cid = Convert.ToInt32(v);
+                        }
+                    }
+                    catch { }
+                }
 
                 if (cid.HasValue)
                 {
@@ -453,8 +481,8 @@ namespace WindowsFormsApp1.services
                         P("@ca",r["created_at"]),P("@pr",r["price"]));
                     cid = Convert.ToInt32(newId);
                 }
-                Exec(local, "UPDATE place_in SET central_id=@c WHERE id=@id",
-                    P("@c",cid.Value), P("@id",r["id"]));
+                if (hasCentralId)
+                    try { Exec(local, "UPDATE place_in SET central_id=@c WHERE id=@id", P("@c",cid.Value), P("@id",r["id"])); } catch { }
                 count++;
             }
             return count;
