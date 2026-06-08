@@ -1566,6 +1566,10 @@ namespace WindowsFormsApp1.services
             }
 
             Exec(local, $"UPDATE [order] SET is_synced=1, central_id={centralId} WHERE id={localId}");
+
+            // Order sync bo'lgandan keyin darhol foods ham sync qilamiz
+            // SyncQueue tartibiga bog'liq bo'lmay, har doim birga ketsin
+            try { SyncOrderFoodsForOrder(local, central, localId); } catch { }
         }
 
         private static void SyncOrderFoodsForOrder(SqlConnection local, SqlConnection central, int localOrderId)
