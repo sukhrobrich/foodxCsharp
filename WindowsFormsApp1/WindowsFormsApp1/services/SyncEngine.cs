@@ -439,7 +439,7 @@ namespace WindowsFormsApp1.services
             try { using (var t = new System.Data.SqlClient.SqlCommand("SELECT TOP 0 central_id FROM place_in", local)) { t.ExecuteNonQuery(); hasCentralId = true; } } catch { }
 
             string sql =
-                "SELECT pi.id, pi.room_name, pi.created_at, pi.price, po.name AS zone_name" +
+                "SELECT pi.id, pi.room_name, pi.empty, pi.created_at, pi.price, po.name AS zone_name" +
                 (hasCentralId ? ", pi.central_id" : ", CAST(NULL AS INT) AS central_id") +
                 " FROM place_in pi JOIN place_out po ON po.id=pi.place_out_id";
 
@@ -473,9 +473,9 @@ namespace WindowsFormsApp1.services
                 if (cid.HasValue)
                 {
                     Exec(central,
-                        "UPDATE place_in SET room_name=@rn,place_out_id=@po,price=@pr WHERE id=@cid",
+                        "UPDATE place_in SET room_name=@rn,place_out_id=@po,price=@pr,empty=@e WHERE id=@cid",
                         P("@rn",r["room_name"]),P("@po",centralZoneId.Value),
-                        P("@pr",r["price"]),P("@cid",cid.Value));
+                        P("@pr",r["price"]),P("@e",r["empty"]),P("@cid",cid.Value));
                 }
                 else
                 {
