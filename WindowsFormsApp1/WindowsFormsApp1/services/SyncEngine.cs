@@ -1477,7 +1477,7 @@ namespace WindowsFormsApp1.services
                             case SyncQueueHelper.FoodPurchases:
                                 SyncSingleFoodPurchase(local, central, entityId);
                                 break;
-                            case SyncQueueHelper.FoodDelete:
+                            case "FoodDelete":
                                 // entityId = central_id. order_food da yo'q bo'lsa o'chiradi
                                 try {
                                     int fRefs = Convert.ToInt32(ScalarOrNull(central,

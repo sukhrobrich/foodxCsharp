@@ -956,7 +956,7 @@ namespace WindowsFormsApp1.forms.food
 
                 // Markaziy DB dan ham o'chirish uchun SyncQueue ga yozamiz
                 if (centralFoodId.HasValue)
-                    SyncQueueHelper.Add(SyncQueueHelper.FoodDelete, centralFoodId.Value, "Delete");
+                    SyncQueueHelper.Add("FoodDelete", centralFoodId.Value, "Delete");
 
                 editPanel.Visible = false;
                 LoadFoods();
