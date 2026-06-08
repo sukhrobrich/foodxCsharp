@@ -102,6 +102,9 @@ namespace WindowsFormsApp1.services
                 TryUl(() => SyncSettings(local, central),             result);
                 // Web/mobil dan qo'shilgan kassa yozuvlarini yuklab olish
                 TryDl(() => DlCashTransactions(local, central),       result);
+                // Web dan taom/kategoriya o'zgarishlarini yuklab olish (create/update/delete)
+                TryDl(() => DlFoodCategories(local, central),         result);
+                TryDl(() => DlFoodsWithDelete(local, central),        result);
             }
             catch (Exception ex)
             {
@@ -1150,6 +1153,31 @@ namespace WindowsFormsApp1.services
             return count;
         }
 
+        // DlFoods + webdan o'chirilgan taomlarni lokaldan ham o'chirish
+        private static int DlFoodsWithDelete(SqlConnection local, SqlConnection central)
+        {
+            int count = DlFoods(local, central);
+
+            // Markaziy DB da yo'q, lekin lokalda central_id bilan mavjud taomlarni o'chirish
+            DataTable centralIds = ReadAll(central, "SELECT id FROM food");
+            if (centralIds.Rows.Count == 0) return count;
+
+            var ids = new System.Text.StringBuilder();
+            foreach (DataRow r in centralIds.Rows)
+            {
+                if (ids.Length > 0) ids.Append(',');
+                ids.Append(r["id"]);
+            }
+
+            // order_food da ishlatilmagan taomlarni o'chir
+            Exec(local,
+                $"DELETE FROM food WHERE central_id IS NOT NULL " +
+                $"AND central_id NOT IN ({ids}) " +
+                $"AND id NOT IN (SELECT DISTINCT food_id FROM order_food)");
+
+            return count;
+        }
+
         private static int DlPlaceCategories(SqlConnection local, SqlConnection central)
         {
             int count = 0;
@@ -1450,8 +1478,13 @@ namespace WindowsFormsApp1.services
                                 SyncSingleFoodPurchase(local, central, entityId);
                                 break;
                             case SyncQueueHelper.FoodDelete:
-                                // entityId = central_id (lokal o'chirilgandan keyin yozilgan)
-                                Exec(central, "DELETE FROM food WHERE id=@id", P("@id", entityId));
+                                // entityId = central_id. order_food da yo'q bo'lsa o'chiradi
+                                try {
+                                    int fRefs = Convert.ToInt32(ScalarOrNull(central,
+                                        "SELECT COUNT(*) FROM order_food WHERE food_id=@id", "@id", entityId) ?? 0);
+                                    if (fRefs == 0)
+                                        Exec(central, "DELETE FROM food WHERE id=@id", P("@id", entityId));
+                                } catch { }
                                 break;
                         }
 
