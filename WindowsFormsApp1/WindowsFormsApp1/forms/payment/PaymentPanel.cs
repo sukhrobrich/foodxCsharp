@@ -323,11 +323,11 @@ namespace WindowsFormsApp1.forms.payment
                     { cmd.Parameters.AddWithValue("@id", pid); cmd.ExecuteNonQuery(); }
                     db.CloseCon();
                     // Centraldan ham o'chirish
-                    if (centralId.HasValue && WindowsFormsApp1.services.Session.IsOnline && WindowsFormsApp1.services.Session.TenantId > 0)
+                    if (centralId.HasValue && Session.IsOnline && Session.TenantId > 0)
                     {
                         try
                         {
-                            using (var central = WindowsFormsApp1.services.dbconnect.OpenCentralForSync(WindowsFormsApp1.services.Session.TenantId))
+                            using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
                             using (var cmd = new SqlCommand("DELETE FROM payment WHERE id=@id", central))
                             { cmd.Parameters.AddWithValue("@id", centralId.Value); cmd.ExecuteNonQuery(); }
                         }

@@ -183,13 +183,13 @@ namespace WindowsFormsApp1.forms.customer
                 db.CloseCon();
 
                 // Centraldan ham o'chirish (agar sync bo'lgan bo'lsa)
-                if (centralId.HasValue && WindowsFormsApp1.services.Session.IsOnline
-                    && WindowsFormsApp1.services.Session.TenantId > 0)
+                if (centralId.HasValue && Session.IsOnline
+                    && Session.TenantId > 0)
                 {
                     try
                     {
-                        using (var central = WindowsFormsApp1.services.dbconnect.OpenCentralForSync(
-                            WindowsFormsApp1.services.Session.TenantId))
+                        using (var central = dbconnect.OpenCentralForSync(
+                            Session.TenantId))
                         using (var cmd = new SqlCommand("DELETE FROM customer WHERE id=@id", central))
                         {
                             cmd.Parameters.AddWithValue("@id", centralId.Value);
@@ -262,8 +262,7 @@ namespace WindowsFormsApp1.forms.customer
                     }
                     db.CloseCon();
                     // Darhol sync trigger (5 soniyada markaziy bazaga tushadi)
-                    WindowsFormsApp1.services.SyncQueueHelper.Add(
-                        WindowsFormsApp1.services.SyncQueueHelper.Customers, savedId, isNew ? "Insert" : "Update");
+                    SyncQueueHelper.Add(SyncQueueHelper.Customers, savedId, isNew ? "Insert" : "Update");
                     dlg.DialogResult = DialogResult.OK;
                     LoadData(txtSearch.Text);
                 }

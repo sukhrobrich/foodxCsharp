@@ -236,9 +236,8 @@ namespace WindowsFormsApp1.forms.warehouse
 
                 db.CloseCon();
                 // Darhol sync trigger
-                WindowsFormsApp1.services.SyncQueueHelper.Add(
-                    WindowsFormsApp1.services.SyncQueueHelper.IngredientPurchases, newPurchaseId, "Insert");
-                System.Threading.Tasks.Task.Run(() => WindowsFormsApp1.services.SyncEngine.SyncAll());
+                SyncQueueHelper.Add(SyncQueueHelper.IngredientPurchases, newPurchaseId, "Insert");
+                System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
                 DialogResult = DialogResult.OK;
                 Close();
             }
