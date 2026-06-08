@@ -315,9 +315,24 @@ namespace WindowsFormsApp1.forms.payment
                 {
                     dbconnect db = new dbconnect();
                     db.OpenCon();
+                    // Central_id ni olib qo'yamiz
+                    int? centralId = null;
+                    using (var chk = new SqlCommand("SELECT central_id FROM payment WHERE id=@id", db.GetCon()))
+                    { chk.Parameters.AddWithValue("@id", pid); object v = chk.ExecuteScalar(); if (v != null && v != DBNull.Value) centralId = Convert.ToInt32(v); }
                     using (SqlCommand cmd = new SqlCommand("DELETE FROM payment WHERE id=@id", db.GetCon()))
                     { cmd.Parameters.AddWithValue("@id", pid); cmd.ExecuteNonQuery(); }
                     db.CloseCon();
+                    // Centraldan ham o'chirish
+                    if (centralId.HasValue && WindowsFormsApp1.services.Session.IsOnline && WindowsFormsApp1.services.Session.TenantId > 0)
+                    {
+                        try
+                        {
+                            using (var central = WindowsFormsApp1.services.dbconnect.OpenCentralForSync(WindowsFormsApp1.services.Session.TenantId))
+                            using (var cmd = new SqlCommand("DELETE FROM payment WHERE id=@id", central))
+                            { cmd.Parameters.AddWithValue("@id", centralId.Value); cmd.ExecuteNonQuery(); }
+                        }
+                        catch { }
+                    }
                     LoadPayments();
                 }
                 catch (Exception ex) { MessageBox.Show("O'chirishda xatolik: " + ex.Message); }

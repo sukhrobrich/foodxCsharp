@@ -170,8 +170,10 @@ namespace WindowsFormsApp1.forms.cashflow
             {
                 var db = new dbconnect();
                 db.OpenCon();
+                int newTxId;
                 using (var cmd = new SqlCommand(
                     @"INSERT INTO cash_transaction(type, category, amount, description, created_by)
+                      OUTPUT INSERTED.id
                       VALUES(@t, @c, @a, @d, @u)",
                     db.GetCon()))
                 {
@@ -180,9 +182,11 @@ namespace WindowsFormsApp1.forms.cashflow
                     cmd.Parameters.AddWithValue("@a", amount);
                     cmd.Parameters.AddWithValue("@d", string.IsNullOrEmpty(desc) ? (object)DBNull.Value : desc);
                     cmd.Parameters.AddWithValue("@u", Session.UserId > 0 ? (object)Session.UserId : DBNull.Value);
-                    cmd.ExecuteNonQuery();
+                    newTxId = (int)cmd.ExecuteScalar();
                 }
                 db.CloseCon();
+                // Darhol sync trigger
+                SyncQueueHelper.Add(SyncQueueHelper.CashTransactions, newTxId, "Insert");
                 DialogResult = DialogResult.OK;
                 Close();
             }

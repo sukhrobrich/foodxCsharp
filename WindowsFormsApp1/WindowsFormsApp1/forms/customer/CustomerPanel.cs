@@ -170,9 +170,35 @@ namespace WindowsFormsApp1.forms.customer
             try
             {
                 var db = new dbconnect(); db.OpenCon();
+                // Central_id ni olamiz — agar synced bo'lsa, centraldan ham o'chiramiz
+                int? centralId = null;
+                using (var chk = new SqlCommand("SELECT central_id FROM customer WHERE id=@id", db.GetCon()))
+                {
+                    chk.Parameters.AddWithValue("@id", id);
+                    object v = chk.ExecuteScalar();
+                    if (v != null && v != DBNull.Value) centralId = Convert.ToInt32(v);
+                }
                 new SqlCommand("DELETE FROM customer WHERE id=@id", db.GetCon())
                     { Parameters = { new SqlParameter("@id", id) } }.ExecuteNonQuery();
                 db.CloseCon();
+
+                // Centraldan ham o'chirish (agar sync bo'lgan bo'lsa)
+                if (centralId.HasValue && WindowsFormsApp1.services.Session.IsOnline
+                    && WindowsFormsApp1.services.Session.TenantId > 0)
+                {
+                    try
+                    {
+                        using (var central = WindowsFormsApp1.services.dbconnect.OpenCentralForSync(
+                            WindowsFormsApp1.services.Session.TenantId))
+                        using (var cmd = new SqlCommand("DELETE FROM customer WHERE id=@id", central))
+                        {
+                            cmd.Parameters.AddWithValue("@id", centralId.Value);
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                    catch { }
+                }
+
                 LoadData(txtSearch.Text);
             }
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
@@ -211,13 +237,33 @@ namespace WindowsFormsApp1.forms.customer
                 try
                 {
                     var db = new dbconnect(); db.OpenCon();
+                    int savedId = id;
                     if (isNew)
-                        new SqlCommand("INSERT INTO customer(name,phone,notes) VALUES(@n,@p,@nt)", db.GetCon())
-                            { Parameters = { new SqlParameter("@n", txtName.Text.Trim()), new SqlParameter("@p", (object)txtPhone.Text.Trim() ?? DBNull.Value), new SqlParameter("@nt", (object)txtNotes.Text.Trim() ?? DBNull.Value) } }.ExecuteNonQuery();
+                    {
+                        var insCmd = new SqlCommand(
+                            "INSERT INTO customer(name,phone,notes) OUTPUT INSERTED.id VALUES(@n,@p,@nt)",
+                            db.GetCon());
+                        insCmd.Parameters.AddWithValue("@n",  txtName.Text.Trim());
+                        insCmd.Parameters.AddWithValue("@p",  string.IsNullOrEmpty(txtPhone.Text.Trim()) ? (object)DBNull.Value : txtPhone.Text.Trim());
+                        insCmd.Parameters.AddWithValue("@nt", string.IsNullOrEmpty(txtNotes.Text.Trim()) ? (object)DBNull.Value : txtNotes.Text.Trim());
+                        savedId = (int)insCmd.ExecuteScalar();
+                    }
                     else
-                        new SqlCommand("UPDATE customer SET name=@n, phone=@p, notes=@nt WHERE id=@id", db.GetCon())
-                            { Parameters = { new SqlParameter("@n", txtName.Text.Trim()), new SqlParameter("@p", (object)txtPhone.Text.Trim() ?? DBNull.Value), new SqlParameter("@nt", (object)txtNotes.Text.Trim() ?? DBNull.Value), new SqlParameter("@id", id) } }.ExecuteNonQuery();
+                    {
+                        // UPDATE: is_synced=0 — centralga qayta yuboriladi
+                        var updCmd = new SqlCommand(
+                            "UPDATE customer SET name=@n, phone=@p, notes=@nt, is_synced=0 WHERE id=@id",
+                            db.GetCon());
+                        updCmd.Parameters.AddWithValue("@n",  txtName.Text.Trim());
+                        updCmd.Parameters.AddWithValue("@p",  string.IsNullOrEmpty(txtPhone.Text.Trim()) ? (object)DBNull.Value : txtPhone.Text.Trim());
+                        updCmd.Parameters.AddWithValue("@nt", string.IsNullOrEmpty(txtNotes.Text.Trim()) ? (object)DBNull.Value : txtNotes.Text.Trim());
+                        updCmd.Parameters.AddWithValue("@id", id);
+                        updCmd.ExecuteNonQuery();
+                    }
                     db.CloseCon();
+                    // Darhol sync trigger (5 soniyada markaziy bazaga tushadi)
+                    WindowsFormsApp1.services.SyncQueueHelper.Add(
+                        WindowsFormsApp1.services.SyncQueueHelper.Customers, savedId, isNew ? "Insert" : "Update");
                     dlg.DialogResult = DialogResult.OK;
                     LoadData(txtSearch.Text);
                 }

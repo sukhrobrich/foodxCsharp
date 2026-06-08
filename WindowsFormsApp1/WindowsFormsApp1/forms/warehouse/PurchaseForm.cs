@@ -210,8 +210,9 @@ namespace WindowsFormsApp1.forms.warehouse
                 var db = new dbconnect();
                 db.OpenCon();
 
+                int newPurchaseId;
                 using (var cmd = new SqlCommand(
-                    "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit,total_price,notes) VALUES(@i,@q,@p,@t,@n)",
+                    "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit,total_price,notes) OUTPUT INSERTED.id VALUES(@i,@q,@p,@t,@n)",
                     db.GetCon()))
                 {
                     cmd.Parameters.AddWithValue("@i", ingId);
@@ -219,7 +220,7 @@ namespace WindowsFormsApp1.forms.warehouse
                     cmd.Parameters.AddWithValue("@p", ppu);
                     cmd.Parameters.AddWithValue("@t", tot);
                     cmd.Parameters.AddWithValue("@n", string.IsNullOrEmpty(notes) ? (object)DBNull.Value : notes);
-                    cmd.ExecuteNonQuery();
+                    newPurchaseId = (int)cmd.ExecuteScalar();
                 }
 
                 // Update stock and price
@@ -234,6 +235,10 @@ namespace WindowsFormsApp1.forms.warehouse
                 }
 
                 db.CloseCon();
+                // Darhol sync trigger
+                WindowsFormsApp1.services.SyncQueueHelper.Add(
+                    WindowsFormsApp1.services.SyncQueueHelper.IngredientPurchases, newPurchaseId, "Insert");
+                System.Threading.Tasks.Task.Run(() => WindowsFormsApp1.services.SyncEngine.SyncAll());
                 DialogResult = DialogResult.OK;
                 Close();
             }

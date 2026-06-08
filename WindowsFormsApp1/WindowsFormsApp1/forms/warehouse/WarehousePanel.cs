@@ -876,19 +876,31 @@ namespace WindowsFormsApp1.forms.warehouse
                 try
                 {
                     var db = new dbconnect(); db.OpenCon();
+                    int newPurchaseId;
                     using (var cmd = new SqlCommand(@"
                         INSERT INTO food_purchase(food_id,quantity,price_per_unit,total_price,notes,purchased_at)
-                        VALUES(@fid,@qty,@ppu,@total,@note,GETDATE());
-                        UPDATE food SET [count]=ISNULL([count],0)+@qty WHERE id=@fid", db.GetCon()))
+                        OUTPUT INSERTED.id
+                        VALUES(@fid,@qty,@ppu,@total,@note,GETDATE())", db.GetCon()))
                     {
                         cmd.Parameters.AddWithValue("@fid",   foodId);
                         cmd.Parameters.AddWithValue("@qty",   qty);
                         cmd.Parameters.AddWithValue("@ppu",   price);
                         cmd.Parameters.AddWithValue("@total", total);
                         cmd.Parameters.AddWithValue("@note",  string.IsNullOrEmpty(txtNote.Text) ? (object)DBNull.Value : txtNote.Text.Trim());
+                        newPurchaseId = (int)cmd.ExecuteScalar();
+                    }
+                    using (var cmd = new SqlCommand(
+                        "UPDATE food SET [count]=ISNULL([count],0)+@qty WHERE id=@fid", db.GetCon()))
+                    {
+                        cmd.Parameters.AddWithValue("@qty", qty);
+                        cmd.Parameters.AddWithValue("@fid", foodId);
                         cmd.ExecuteNonQuery();
                     }
                     db.CloseCon();
+                    // Darhol sync trigger
+                    WindowsFormsApp1.services.SyncQueueHelper.Add(
+                        WindowsFormsApp1.services.SyncQueueHelper.FoodPurchases, newPurchaseId, "Insert");
+                    System.Threading.Tasks.Task.Run(() => WindowsFormsApp1.services.SyncEngine.SyncAll());
                     close();
                     reload?.Invoke();
                 }
