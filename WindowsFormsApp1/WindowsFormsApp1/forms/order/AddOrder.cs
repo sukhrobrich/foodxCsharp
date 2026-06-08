@@ -2581,9 +2581,10 @@ namespace WindowsFormsApp1.forms.order
 
                 db.CloseCon();
 
-                // To'lov SyncQueue ga — orders + payments
+                // To'lov SyncQueue ga — orders + food + payments
                 SyncQueueHelper.AddBatch(
-                    (SyncQueueHelper.Orders,      orderId, "Update"),
+                    (SyncQueueHelper.Orders,        orderId, "Update"),
+                    (SyncQueueHelper.OrderFood,     orderId, "Update"),
                     (SyncQueueHelper.OrderPayments, orderId, "Update")
                 );
             }
