@@ -324,6 +324,9 @@ namespace WindowsFormsApp1
                         cmd.ExecuteNonQuery();
                     }
                 db.CloseCon();
+                // Markaziy DB ga sync (sort_order yangilangandan keyin)
+                if (Session.IsOnline && Session.TenantId > 0)
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
             }
             catch (Exception ex)
             {

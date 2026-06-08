@@ -407,8 +407,8 @@ namespace WindowsFormsApp1.forms.main
                             string zone  = row["zone"].ToString();
                             int    tid   = Convert.ToInt32(row["tid"]);
                             string rname = row["room_name"].ToString();
-                            bool   empty = row["empty"].ToString().ToUpper() == "YES";
                             int    cnt   = Convert.ToInt32(row["cnt"]);
+                            bool   empty = row["empty"].ToString().ToUpper() == "YES" && cnt == 0;
 
                             if (zone != curZone)
                             {
