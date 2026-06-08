@@ -352,19 +352,17 @@ namespace WindowsFormsApp1.services
             int count = 0;
             foreach (DataRow r in ReadAll(local,
                 "SELECT po.id, po.name, po.place_count, po.created_at, po.updated_at, " +
-                "po.serviceFee, po.price, po.sort_order, pc.name AS cat_name " +
+                "po.serviceFee, po.price, po.sort_order, po.central_id, pc.name AS cat_name " +
                 "FROM place_out po " +
                 "LEFT JOIN place_category pc ON pc.id=po.place_category_id").Rows)
             {
-                // place_category ni central da topamiz (yoki birinchisini olamiz)
-                // BUG FIX: place_category_id NOT NULL — INSERT da bo'lishi shart
+                // place_category ni central da topamiz (yoki yaratamiz)
                 int? centralCatId = null;
                 string catName = r["cat_name"] as string;
                 if (!string.IsNullOrEmpty(catName))
                     centralCatId = ScalarOrNull(central,
                         "SELECT TOP 1 id FROM place_category WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
                         "@n", catName);
-                // Fallback: istalgan kategoriyani olamiz
                 if (!centralCatId.HasValue)
                 {
                     try
@@ -372,14 +370,10 @@ namespace WindowsFormsApp1.services
                         using (var cmd = new System.Data.SqlClient.SqlCommand(
                             "SELECT TOP 1 id FROM place_category WHERE tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
                             central))
-                        {
-                            object v = cmd.ExecuteScalar();
-                            if (v != null && v != DBNull.Value) centralCatId = Convert.ToInt32(v);
-                        }
+                        { object v = cmd.ExecuteScalar(); if (v != null && v != DBNull.Value) centralCatId = Convert.ToInt32(v); }
                     }
                     catch { }
                 }
-                // Hali ham yo'q bo'lsa — kategoriya yaratamiz
                 if (!centralCatId.HasValue)
                 {
                     object newCatId = Exec(central,
@@ -388,15 +382,33 @@ namespace WindowsFormsApp1.services
                     centralCatId = Convert.ToInt32(newCatId);
                 }
 
-                Exec(central,
-                    "IF EXISTS(SELECT 1 FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT))" +
-                    " UPDATE place_out SET place_count=@cnt,updated_at=@ua,serviceFee=@sf,price=@pr,sort_order=@so" +
-                    "   WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)" +
-                    " ELSE INSERT INTO place_out(place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order)" +
-                    "   VALUES(@catid,@n,@cnt,@ca,@ua,@sf,@pr,@so)",
-                    P("@catid",centralCatId.Value),P("@n",r["name"]),P("@cnt",r["place_count"]),
-                    P("@ca",r["created_at"]),P("@ua",r["updated_at"]),
-                    P("@sf",r["serviceFee"]),P("@pr",r["price"]),P("@so",r["sort_order"]));
+                // central_id bo'yicha topamiz (nom o'zgarganda ham ishlaydi)
+                int? cid = r["central_id"] as int?;
+                if (!cid.HasValue)
+                    cid = ScalarOrNull(central,
+                        "SELECT TOP 1 id FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                        "@n", r["name"]);
+
+                if (cid.HasValue)
+                {
+                    Exec(central,
+                        "UPDATE place_out SET name=@n,place_count=@cnt,serviceFee=@sf,price=@pr,sort_order=@so WHERE id=@cid",
+                        P("@n",r["name"]),P("@cnt",r["place_count"]),
+                        P("@sf",r["serviceFee"]),P("@pr",r["price"]),
+                        P("@so",r["sort_order"]),P("@cid",cid.Value));
+                }
+                else
+                {
+                    object newId = Exec(central,
+                        "INSERT INTO place_out(place_category_id,name,place_count,created_at,serviceFee,price,sort_order)" +
+                        " OUTPUT INSERTED.id VALUES(@catid,@n,@cnt,@ca,@sf,@pr,@so)",
+                        P("@catid",centralCatId.Value),P("@n",r["name"]),P("@cnt",r["place_count"]),
+                        P("@ca",r["created_at"]),P("@sf",r["serviceFee"]),
+                        P("@pr",r["price"]),P("@so",r["sort_order"]));
+                    cid = Convert.ToInt32(newId);
+                }
+                Exec(local, "UPDATE place_out SET central_id=@c WHERE id=@id",
+                    P("@c",cid.Value), P("@id",r["id"]));
                 count++;
             }
             return count;
@@ -406,21 +418,43 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             foreach (DataRow r in ReadAll(local,
-                "SELECT pi.id, pi.room_name, pi.created_at, pi.price, po.name AS zone_name " +
+                "SELECT pi.id, pi.room_name, pi.created_at, pi.price, pi.central_id, " +
+                "po.name AS zone_name, po.central_id AS zone_central_id " +
                 "FROM place_in pi JOIN place_out po ON po.id=pi.place_out_id").Rows)
             {
-                // Zone ni nom bo'yicha topamiz (central da ID farq qilishi mumkin)
-                int? centralZoneId = ScalarOrNull(central,
-                    "SELECT TOP 1 id FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
-                    "@n", r["zone_name"]);
-                if (centralZoneId == null) continue; // Zona topilmadi, o'tkazib yuboramiz
+                // Zona central ID sini olamiz
+                int? centralZoneId = r["zone_central_id"] as int?;
+                if (!centralZoneId.HasValue)
+                    centralZoneId = ScalarOrNull(central,
+                        "SELECT TOP 1 id FROM place_out WHERE name=@n AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                        "@n", r["zone_name"]);
+                if (centralZoneId == null) continue;
 
-                Exec(central,
-                    "IF NOT EXISTS(SELECT 1 FROM place_in WHERE room_name=@rn AND place_out_id=@po AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT))" +
-                    " INSERT INTO place_in(place_out_id,room_name,empty,created_at,price)" +
-                    " VALUES(@po,@rn,'YES',@ca,@pr)",
-                    P("@po",centralZoneId),P("@rn",r["room_name"]),
-                    P("@ca",r["created_at"]),P("@pr",r["price"]));
+                // central_id bo'yicha topamiz (nom o'zgarganda ham ishlaydi)
+                int? cid = r["central_id"] as int?;
+                if (!cid.HasValue)
+                    cid = ScalarOrNull(central,
+                        "SELECT TOP 1 id FROM place_in WHERE room_name=@n AND place_out_id=@po AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)",
+                        "@n", r["room_name"]);
+
+                if (cid.HasValue)
+                {
+                    Exec(central,
+                        "UPDATE place_in SET room_name=@rn,place_out_id=@po,price=@pr WHERE id=@cid",
+                        P("@rn",r["room_name"]),P("@po",centralZoneId.Value),
+                        P("@pr",r["price"]),P("@cid",cid.Value));
+                }
+                else
+                {
+                    object newId = Exec(central,
+                        "INSERT INTO place_in(place_out_id,room_name,empty,created_at,price)" +
+                        " OUTPUT INSERTED.id VALUES(@po,@rn,'YES',@ca,@pr)",
+                        P("@po",centralZoneId.Value),P("@rn",r["room_name"]),
+                        P("@ca",r["created_at"]),P("@pr",r["price"]));
+                    cid = Convert.ToInt32(newId);
+                }
+                Exec(local, "UPDATE place_in SET central_id=@c WHERE id=@id",
+                    P("@c",cid.Value), P("@id",r["id"]));
                 count++;
             }
             return count;

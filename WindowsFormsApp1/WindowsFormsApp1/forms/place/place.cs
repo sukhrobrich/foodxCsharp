@@ -304,13 +304,31 @@ namespace WindowsFormsApp1.forms.place
                             "O'chirish", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
                         try
                         {
-                            dbconnect db = new dbconnect();
-                            db.OpenCon();
+                            var db = new dbconnect(); db.OpenCon();
+                            // Central ID larni olish (delete uchun)
+                            int? centralPlaceOutId = null;
+                            using (var chk = new SqlCommand("SELECT central_id FROM place_out WHERE id=@id", db.GetCon()))
+                            { chk.Parameters.AddWithValue("@id", id); object v = chk.ExecuteScalar(); if (v != null && v != DBNull.Value) centralPlaceOutId = Convert.ToInt32(v); }
                             using (SqlCommand c = new SqlCommand("DELETE FROM place_in WHERE place_out_id=@id", db.GetCon()))
                             { c.Parameters.AddWithValue("@id", id); c.ExecuteNonQuery(); }
                             using (SqlCommand c = new SqlCommand("DELETE FROM place_out WHERE id=@id", db.GetCon()))
                             { c.Parameters.AddWithValue("@id", id); c.ExecuteNonQuery(); }
                             db.CloseCon();
+                            // Centraldan ham o'chirish
+                            if (centralPlaceOutId.HasValue && Session.IsOnline && Session.TenantId > 0)
+                            {
+                                try
+                                {
+                                    using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
+                                    {
+                                        using (var c = new SqlCommand("DELETE FROM place_in WHERE place_out_id=@id", central))
+                                        { c.Parameters.AddWithValue("@id", centralPlaceOutId.Value); c.ExecuteNonQuery(); }
+                                        using (var c = new SqlCommand("DELETE FROM place_out WHERE id=@id", central))
+                                        { c.Parameters.AddWithValue("@id", centralPlaceOutId.Value); c.ExecuteNonQuery(); }
+                                    }
+                                }
+                                catch { }
+                            }
                             dlg.Tag = "deleted";
                             dlg.DialogResult = DialogResult.OK;
                         }
@@ -397,6 +415,9 @@ namespace WindowsFormsApp1.forms.place
                         using (SqlCommand cmd = new SqlCommand("UPDATE place_in SET room_name=@n WHERE id=@id", db.GetCon()))
                         { cmd.Parameters.AddWithValue("@n", n); cmd.Parameters.AddWithValue("@id", id); cmd.ExecuteNonQuery(); }
                         db.CloseCon();
+                        // Centralga ham yangilash
+                        if (Session.IsOnline && Session.TenantId > 0)
+                            System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
                         dlg.DialogResult = DialogResult.OK;
                     }
                     catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
@@ -719,8 +740,11 @@ namespace WindowsFormsApp1.forms.place
                     "O'chirish", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
                 try
                 {
-                    dbconnect db = new dbconnect();
-                    db.OpenCon();
+                    var db = new dbconnect(); db.OpenCon();
+                    // Central ID ni olib qo'yamiz
+                    int? centralPlaceInId = null;
+                    using (var chk = new SqlCommand("SELECT central_id FROM place_in WHERE id=@id", db.GetCon()))
+                    { chk.Parameters.AddWithValue("@id", id); object v = chk.ExecuteScalar(); if (v != null && v != DBNull.Value) centralPlaceInId = Convert.ToInt32(v); }
                     using (SqlCommand c = new SqlCommand(
                         "DELETE FROM order_food WHERE order_id IN (SELECT id FROM [order] WHERE place_id=@id)",
                         db.GetCon()))
@@ -731,6 +755,17 @@ namespace WindowsFormsApp1.forms.place
                     using (SqlCommand cmd = new SqlCommand("DELETE FROM place_in WHERE id=@id", db.GetCon()))
                     { cmd.Parameters.AddWithValue("@id", id); cmd.ExecuteNonQuery(); }
                     db.CloseCon();
+                    // Centraldan ham o'chirish
+                    if (centralPlaceInId.HasValue && Session.IsOnline && Session.TenantId > 0)
+                    {
+                        try
+                        {
+                            using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
+                            using (var c = new SqlCommand("DELETE FROM place_in WHERE id=@id", central))
+                            { c.Parameters.AddWithValue("@id", centralPlaceInId.Value); c.ExecuteNonQuery(); }
+                        }
+                        catch { }
+                    }
                     LoadTables(selectedZoneId);
                     LoadZones();
                 }

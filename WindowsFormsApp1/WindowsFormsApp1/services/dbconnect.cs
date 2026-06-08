@@ -358,6 +358,10 @@ namespace WindowsFormsApp1.services
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='sync_token') ALTER TABLE ingredient ADD sync_token UNIQUEIDENTIFIER NULL",
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient' AND COLUMN_NAME='central_id') ALTER TABLE ingredient ADD central_id INT NULL",
                         "EXEC('UPDATE ingredient SET sync_token=NEWID() WHERE sync_token IS NULL')",
+
+                        // place_out va place_in uchun central_id (UPDATE/DELETE sync uchun)
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='place_out' AND COLUMN_NAME='central_id') ALTER TABLE place_out ADD central_id INT NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='place_in' AND COLUMN_NAME='central_id') ALTER TABLE place_in ADD central_id INT NULL",
                     };
                     foreach (string sql in schemaMigrations)
                         using (var cmd = new SqlCommand(sql, c))
