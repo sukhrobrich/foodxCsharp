@@ -1579,14 +1579,11 @@ namespace WindowsFormsApp1.services
                                 } catch { }
                                 break;
                             case "IngredientDelete":
-                                // entityId = central_id. recipe_ingredient va ingredient_purchase da yo'q bo'lsa o'chiradi
+                                // entityId = central_id. bog'liq yozuvlarni ham o'chiradi
                                 try {
-                                    int riRefs = Convert.ToInt32(ScalarOrNull(central,
-                                        "SELECT COUNT(*) FROM recipe_ingredient WHERE ingredient_id=@id", "@id", entityId) ?? 0);
-                                    int ipRefs = Convert.ToInt32(ScalarOrNull(central,
-                                        "SELECT COUNT(*) FROM ingredient_purchase WHERE ingredient_id=@id", "@id", entityId) ?? 0);
-                                    if (riRefs == 0 && ipRefs == 0)
-                                        Exec(central, "DELETE FROM ingredient WHERE id=@id", P("@id", entityId));
+                                    Exec(central, "DELETE FROM recipe_ingredient WHERE ingredient_id=@id", P("@id", entityId));
+                                    Exec(central, "DELETE FROM ingredient_purchase WHERE ingredient_id=@id", P("@id", entityId));
+                                    Exec(central, "DELETE FROM ingredient WHERE id=@id", P("@id", entityId));
                                 } catch { }
                                 break;
                         }

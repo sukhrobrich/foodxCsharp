@@ -311,6 +311,11 @@ namespace WindowsFormsApp1.forms.warehouse
                                         object v = chk.ExecuteScalar();
                                         if (v != null && v != DBNull.Value) centralId = Convert.ToInt32(v);
                                     }
+                                    // FK constraint: avval bog'liq yozuvlarni o'chirish
+                                    using (var cmd = new SqlCommand("DELETE FROM recipe_ingredient WHERE ingredient_id=@id", db2.GetCon()))
+                                    { cmd.Parameters.AddWithValue("@id", _id); cmd.ExecuteNonQuery(); }
+                                    using (var cmd = new SqlCommand("DELETE FROM ingredient_purchase WHERE ingredient_id=@id", db2.GetCon()))
+                                    { cmd.Parameters.AddWithValue("@id", _id); cmd.ExecuteNonQuery(); }
                                     using (var cmd = new SqlCommand("DELETE FROM ingredient WHERE id=@id", db2.GetCon()))
                                     { cmd.Parameters.AddWithValue("@id", _id); cmd.ExecuteNonQuery(); }
                                     db2.CloseCon();
