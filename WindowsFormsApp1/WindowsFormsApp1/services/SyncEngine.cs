@@ -722,18 +722,26 @@ namespace WindowsFormsApp1.services
                 }
                 else
                 {
-                    // FIX: Mavjud buyurtmani yangilash (avval bu blok yo'q edi)
+                    object centralCustId2 = r["c_central_id"]  == DBNull.Value ? DBNull.Value : r["c_central_id"];
+                    object centralPayId2  = r["p_central_id"]  == DBNull.Value ? r["payment_id"]  : r["p_central_id"];
+                    object centralPay2Id2 = r["p2_central_id"] == DBNull.Value ? r["payment2_id"] : r["p2_central_id"];
+                    // FIX: Mavjud buyurtmani yangilash — delivery fieldlari ham qo'shildi
                     Exec(central,
                         "UPDATE [order] SET " +
                         "  paid=@paid, total=@tot, discount_amount=@disc, discount_pct=@discp, " +
                         "  payment_id=@pay, custom_svc_fee=@svf, custom_svc_type=@svt, " +
-                        "  order_note=@note, payment2_id=@p2, payment2_amount=@p2a " +
+                        "  order_note=@note, payment2_id=@p2, payment2_amount=@p2a," +
+                        "  customer_id=@cust, customer_name=@custn," +
+                        "  delivery_phone=@dph, delivery_address=@dadr, is_delivery=@isdel " +
                         "WHERE id=@cid",
                         P("@paid",  r["paid"]),              P("@tot",   r["total"]),
                         P("@disc",  r["discount_amount"]),   P("@discp", r["discount_pct"]),
-                        P("@pay",   r["payment_id"]),         P("@svf",   r["custom_svc_fee"]),
+                        P("@pay",   centralPayId2),           P("@svf",   r["custom_svc_fee"]),
                         P("@svt",   r["custom_svc_type"]),   P("@note",  r["order_note"]),
-                        P("@p2",    r["payment2_id"]),        P("@p2a",   r["payment2_amount"]),
+                        P("@p2",    centralPay2Id2),          P("@p2a",   r["payment2_amount"]),
+                        P("@cust",  centralCustId2),          P("@custn", r["customer_name"]),
+                        P("@dph",   r["delivery_phone"]),    P("@dadr",  r["delivery_address"]),
+                        P("@isdel", r["is_delivery"]),
                         P("@cid",   centralId.Value));
                 }
 
@@ -1595,13 +1603,19 @@ namespace WindowsFormsApp1.services
                 Exec(central,
                     "UPDATE [order] SET paid=@paid,total=@tot,discount_amount=@disc," +
                     "  discount_pct=@discp,payment_id=@pay,custom_svc_fee=@svf," +
-                    "  custom_svc_type=@svt,order_note=@note,payment2_id=@p2,payment2_amount=@p2a " +
+                    "  custom_svc_type=@svt,order_note=@note,payment2_id=@p2,payment2_amount=@p2a," +
+                    "  customer_id=@cust,customer_name=@custn," +
+                    "  delivery_phone=@dph,delivery_address=@dadr,is_delivery=@isdel " +
                     "WHERE id=@cid",
                     P("@paid",r["paid"]),P("@tot",r["total"]),P("@disc",r["discount_amount"]),
                     P("@discp",r["discount_pct"]),P("@pay",centralPayId),
                     P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
                     P("@note",r["order_note"]),P("@p2",centralPay2Id),
-                    P("@p2a",r["payment2_amount"]),P("@cid",centralId.Value));
+                    P("@p2a",r["payment2_amount"]),
+                    P("@cust",centralCustId),P("@custn",r["customer_name"]),
+                    P("@dph",r["delivery_phone"]),P("@dadr",r["delivery_address"]),
+                    P("@isdel",r["is_delivery"]),
+                    P("@cid",centralId.Value));
             }
 
             Exec(local, $"UPDATE [order] SET is_synced=1, central_id={centralId} WHERE id={localId}");

@@ -334,6 +334,10 @@ namespace WindowsFormsApp1.services
                         // [order] — payment2 va sync_token
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='payment2_id') ALTER TABLE [order] ADD payment2_id INT NULL",
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='payment2_amount') ALTER TABLE [order] ADD payment2_amount DECIMAL(18,2) NULL",
+                        // [order] — yetkazib berish fieldlari
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='delivery_phone') ALTER TABLE [order] ADD delivery_phone NVARCHAR(50) NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='delivery_address') ALTER TABLE [order] ADD delivery_address NVARCHAR(500) NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='is_delivery') ALTER TABLE [order] ADD is_delivery BIT NULL DEFAULT 0",
 
                         // order_payments — sync uchun kerakli ustunlar
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order_payments' AND COLUMN_NAME='sync_token') BEGIN ALTER TABLE order_payments ADD sync_token UNIQUEIDENTIFIER NULL DEFAULT NEWID(); UPDATE order_payments SET sync_token=NEWID() WHERE sync_token IS NULL END",
