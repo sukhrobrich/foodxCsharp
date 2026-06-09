@@ -1871,18 +1871,24 @@ namespace WindowsFormsApp1.services
             int count = 0;
             DataTable rows = ReadAll(central,
                 "SELECT f.id, f.order_id, f.food_id, f.quantity," +
-                "  ISNULL(f.note,'') AS note, ISNULL(f.sync_token,NEWID()) AS sync_token" +
+                "  ISNULL(f.note,'') AS note, f.sync_token" +
                 " FROM order_food f" +
                 " JOIN [order] o ON o.id=f.order_id" +
-                " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())");
+                " WHERE o.created_at >= DATEADD(YEAR,-1,GETDATE())" +
+                "   AND f.sync_token IS NOT NULL");
             foreach (DataRow r in rows.Rows)
             {
-                int cid = Convert.ToInt32(r["id"]);
-                int? lid = ScalarOrNull(local, "SELECT id FROM order_food WHERE id=@c", "@c", cid);
+                int cid     = Convert.ToInt32(r["id"]);
+                Guid tok    = (Guid)r["sync_token"];
                 int orderId = Convert.ToInt32(r["order_id"]);
-                // FK: order local da bo'lishi kerak
-                int? orderLid = ScalarOrNull(local, "SELECT id FROM [order] WHERE id=@c", "@c", orderId);
+                int? orderLid = ScalarOrNull(local,
+                    "SELECT id FROM [order] WHERE central_id=@c OR id=@c", "@c", orderId);
                 if (orderLid == null) continue;
+
+                // sync_token bo'yicha tekshir (lokal ID != central ID bo'lishi mumkin)
+                int? lid = ScalarOrNull(local, "SELECT id FROM order_food WHERE sync_token=@c", "@c", tok);
+                if (lid == null)
+                    lid = ScalarOrNull(local, "SELECT id FROM order_food WHERE id=@c", "@c", cid);
 
                 if (lid != null)
                     Exec(local,
@@ -1895,8 +1901,8 @@ namespace WindowsFormsApp1.services
                         "INSERT INTO order_food(id,order_id,food_id,quantity,note,sync_token,is_synced)" +
                         " VALUES(@id,@oid,@fid,@qty,@note,@tok,1);" +
                         "SET IDENTITY_INSERT order_food OFF",
-                        P("@id",cid),P("@oid",orderId),P("@fid",r["food_id"]),
-                        P("@qty",r["quantity"]),P("@note",r["note"]),P("@tok",r["sync_token"]));
+                        P("@id",cid),P("@oid",orderLid.Value),P("@fid",r["food_id"]),
+                        P("@qty",r["quantity"]),P("@note",r["note"]),P("@tok",tok));
                 count++;
             }
             return count;
@@ -2232,22 +2238,27 @@ namespace WindowsFormsApp1.services
             int count = 0;
             DataTable rows = ReadAll(central,
                 "SELECT f.id, f.order_id, f.food_id, f.quantity," +
-                "  ISNULL(f.note,'') AS note, ISNULL(f.sync_token,NEWID()) AS sync_token" +
+                "  ISNULL(f.note,'') AS note, f.sync_token" +
                 " FROM order_food f" +
                 " JOIN [order] o ON o.id=f.order_id" +
-                " WHERE o.paid='NO' OR o.created_at >= DATEADD(HOUR,-48,GETDATE())");
+                " WHERE (o.paid='NO' OR o.created_at >= DATEADD(HOUR,-48,GETDATE()))" +
+                "   AND f.sync_token IS NOT NULL");
 
             foreach (DataRow r in rows.Rows)
             {
                 int cid     = Convert.ToInt32(r["id"]);
+                Guid tok    = (Guid)r["sync_token"];
                 int orderId = Convert.ToInt32(r["order_id"]);
 
-                // Bu orderni lokal bazada topamiz (central_id bo'yicha)
                 int? orderLid = ScalarOrNull(local,
                     "SELECT id FROM [order] WHERE central_id=@c OR id=@c", "@c", orderId);
                 if (orderLid == null) continue;
 
-                int? lid = ScalarOrNull(local, "SELECT id FROM order_food WHERE id=@c", "@c", cid);
+                // sync_token bo'yicha tekshir — lokal ID != central ID bo'lishi mumkin
+                int? lid = ScalarOrNull(local, "SELECT id FROM order_food WHERE sync_token=@c", "@c", tok);
+                if (lid == null)
+                    lid = ScalarOrNull(local, "SELECT id FROM order_food WHERE id=@c", "@c", cid);
+
                 if (lid != null)
                     Exec(local,
                         "UPDATE order_food SET food_id=@fid,quantity=@qty,note=@note,is_synced=1 WHERE id=@id",
@@ -2263,7 +2274,7 @@ namespace WindowsFormsApp1.services
                             " VALUES(@id,@oid,@fid,@qty,@note,@tok,1);" +
                             "SET IDENTITY_INSERT order_food OFF",
                             P("@id",cid),P("@oid",orderLid.Value),P("@fid",r["food_id"]),
-                            P("@qty",r["quantity"]),P("@note",r["note"]),P("@tok",r["sync_token"]));
+                            P("@qty",r["quantity"]),P("@note",r["note"]),P("@tok",tok));
                     }
                     catch { }
                 }

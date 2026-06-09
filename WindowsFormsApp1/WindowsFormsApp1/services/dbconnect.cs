@@ -274,6 +274,15 @@ namespace WindowsFormsApp1.services
                     // Lokal DB dagi duplikat food/food_category yozuvlarni tozalash
                     // (DownloadAll IDENTITY_INSERT qilgan lekin central_id o'rnatmagan yozuvlar)
                     string[] dupCleanup = {
+                        // order_food: sync_token bir xil bo'lib, ikki xil ID bilan saqlangan duplikatlarni o'chirish
+                        // (lokal ID kichik, central download ID katta — kattasini o'chiramiz)
+                        @"DELETE of1 FROM order_food of1
+                          WHERE of1.sync_token IS NOT NULL
+                            AND EXISTS (
+                                SELECT 1 FROM order_food of2
+                                WHERE of2.sync_token = of1.sync_token
+                                  AND of2.id < of1.id
+                            )",
                         // food_category: central_id bor va id != central_id bo'lgan yozuvlarni o'chirish
                         @"IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                             WHERE TABLE_NAME='food_category' AND COLUMN_NAME='central_id')
