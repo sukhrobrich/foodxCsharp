@@ -542,11 +542,39 @@ namespace WindowsFormsApp1.services
                 Guid tok = EnsureToken(local, "ingredient", r);
                 int? cid = r["central_id"] as int? ?? ScalarOrNull(central,
                     "SELECT id FROM ingredient WHERE sync_token=@t", "@t", tok);
+
+                // Nom bo'yicha fallback — central da xuddi shu nomli ingredient bo'lsa
+                if (!cid.HasValue)
+                {
+                    try
+                    {
+                        using (var cmd = new System.Data.SqlClient.SqlCommand(
+                            "SELECT TOP 1 id FROM ingredient WHERE name=@n " +
+                            "AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                        {
+                            cmd.Parameters.AddWithValue("@n", r["name"]);
+                            object val = cmd.ExecuteScalar();
+                            if (val != null && val != DBNull.Value)
+                            {
+                                cid = Convert.ToInt32(val);
+                                Exec(central, "UPDATE ingredient SET sync_token=@t WHERE id=@cid",
+                                    P("@t", tok), P("@cid", cid.Value));
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
                 if (cid.HasValue)
+                {
+                    // quantity ni overwrite qilmaymiz — SyncIngredientQuantities delta orqali hal qiladi
                     Exec(central,
-                        "UPDATE ingredient SET name=@n,unit=@u,quantity=@q,price_per_unit=@pp,min_quantity=@mq WHERE id=@cid",
-                        P("@n",r["name"]),P("@u",r["unit"]),P("@q",r["quantity"]),
+                        "UPDATE ingredient SET name=@n,unit=@u,price_per_unit=@pp,min_quantity=@mq WHERE id=@cid",
+                        P("@n",r["name"]),P("@u",r["unit"]),
                         P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]),P("@cid",cid.Value));
+                    Exec(local,"UPDATE ingredient SET central_id=@c WHERE id=@id",
+                        P("@c",cid.Value),P("@id",r["id"]));
+                }
                 else
                 {
                     object newId = Exec(central,
@@ -555,7 +583,9 @@ namespace WindowsFormsApp1.services
                         P("@n",r["name"]),P("@u",r["unit"]),P("@q",r["quantity"]),
                         P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]),P("@t",tok));
                     cid = Convert.ToInt32(newId);
-                    Exec(local,"UPDATE ingredient SET central_id=@c WHERE id=@id",
+                    // synced_qty bazasini o'rnatamiz — delta tracking to'g'ri ishlashi uchun
+                    Exec(local,
+                        "UPDATE ingredient SET central_id=@c, synced_qty=quantity WHERE id=@id",
                         P("@c",cid.Value),P("@id",r["id"]));
                 }
                 count++;
@@ -592,13 +622,18 @@ namespace WindowsFormsApp1.services
                 "LEFT JOIN ingredient i ON i.id=ip.ingredient_id " +
                 "WHERE ip.is_synced=0").Rows)
             {
-                Guid tok = (Guid)r["sync_token"];
-                // central_id yo'q bo'lsa ingredient hali sync bo'lmagan — keyinroq
-                if (r["ing_central_id"] == DBNull.Value)
+                // sync_token NULL bo'lsa (eski DB) — NEWID yaratib saqlaymiz
+                Guid tok;
+                if (r["sync_token"] == DBNull.Value || !(r["sync_token"] is Guid))
                 {
-                    Exec(local,"UPDATE ingredient_purchase SET is_synced=1 WHERE id=@id",P("@id",r["id"]));
-                    continue;
+                    tok = Guid.NewGuid();
+                    Exec(local, "UPDATE ingredient_purchase SET sync_token=@t WHERE id=@id",
+                        P("@t", tok), P("@id", r["id"]));
                 }
+                else tok = (Guid)r["sync_token"];
+
+                // central_id yo'q bo'lsa ingredient hali sync bo'lmagan — keyingi siklda qayta sinab ko'riladi
+                if (r["ing_central_id"] == DBNull.Value) continue;
                 int centralIngId = Convert.ToInt32(r["ing_central_id"]);
                 if (ScalarOrNull(central,"SELECT id FROM ingredient_purchase WHERE sync_token=@t","@t",tok) == null)
                     Exec(central,
@@ -619,7 +654,14 @@ namespace WindowsFormsApp1.services
                 "SELECT id,food_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token " +
                 "FROM food_purchase WHERE is_synced=0").Rows)
             {
-                Guid tok = (Guid)r["sync_token"];
+                Guid tok;
+                if (r["sync_token"] == DBNull.Value || !(r["sync_token"] is Guid))
+                {
+                    tok = Guid.NewGuid();
+                    Exec(local, "UPDATE food_purchase SET sync_token=@t WHERE id=@id",
+                        P("@t", tok), P("@id", r["id"]));
+                }
+                else tok = (Guid)r["sync_token"];
                 if (ScalarOrNull(central,"SELECT id FROM food_purchase WHERE sync_token=@t","@t",tok) == null)
                     Exec(central,
                         "INSERT INTO food_purchase(food_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token)" +
@@ -1320,6 +1362,10 @@ namespace WindowsFormsApp1.services
                 // 2. sync_token bo'yicha (WinForms yuklagan ingredient uchun)
                 if (lid == null && tok != Guid.Empty)
                     lid = ScalarOrNull(local, "SELECT id FROM ingredient WHERE sync_token=@t", "@t", tok);
+                // 3. nom bo'yicha fallback — mustaqil yaratilgan masalliqlar birlashtiriladi
+                if (lid == null)
+                    lid = ScalarOrNull(local,
+                        "SELECT TOP 1 id FROM ingredient WHERE name=@n AND central_id IS NULL", "@n", r["name"]);
 
                 if (lid != null)
                 {
