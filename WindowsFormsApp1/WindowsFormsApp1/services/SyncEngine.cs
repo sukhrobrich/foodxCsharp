@@ -586,15 +586,25 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,ingredient_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token " +
-                "FROM ingredient_purchase WHERE is_synced=0").Rows)
+                "SELECT ip.id, ip.ingredient_id, ip.quantity, ip.price_per_unit, ip.total_price," +
+                "  ip.purchased_at, ip.notes, ip.sync_token, i.central_id AS ing_central_id " +
+                "FROM ingredient_purchase ip " +
+                "LEFT JOIN ingredient i ON i.id=ip.ingredient_id " +
+                "WHERE ip.is_synced=0").Rows)
             {
                 Guid tok = (Guid)r["sync_token"];
+                // central_id yo'q bo'lsa ingredient hali sync bo'lmagan — keyinroq
+                if (r["ing_central_id"] == DBNull.Value)
+                {
+                    Exec(local,"UPDATE ingredient_purchase SET is_synced=1 WHERE id=@id",P("@id",r["id"]));
+                    continue;
+                }
+                int centralIngId = Convert.ToInt32(r["ing_central_id"]);
                 if (ScalarOrNull(central,"SELECT id FROM ingredient_purchase WHERE sync_token=@t","@t",tok) == null)
                     Exec(central,
                         "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token)" +
                         " VALUES(@iid,@q,@pp,@tp,@pa,@n,@tok)",
-                        P("@iid",r["ingredient_id"]),P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),
+                        P("@iid",centralIngId),P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),
                         P("@tp",r["total_price"]),P("@pa",r["purchased_at"]),P("@n",r["notes"]),P("@tok",tok));
                 Exec(local,"UPDATE ingredient_purchase SET is_synced=1 WHERE id=@id",P("@id",r["id"]));
                 count++;
@@ -1277,7 +1287,7 @@ namespace WindowsFormsApp1.services
 
         private static int DlIngredients(SqlConnection local, SqlConnection central)
         {
-            // synced_qty ustunini yaratish (agar mavjud bo'lmasa) — EXEC orqali runtime compile
+            // synced_qty ustunini yaratish (agar mavjud bo'lmasa)
             try
             {
                 using (var cmd = new SqlCommand(
@@ -1290,39 +1300,63 @@ namespace WindowsFormsApp1.services
             }
             catch { }
 
-            // synced_qty ustuni hozir mavjudmi?
             bool hasSyncedQty;
             using (var chk = new SqlCommand(
                 "SELECT COUNT(1) FROM sys.columns WHERE object_id=OBJECT_ID('ingredient') AND name='synced_qty'", local))
                 hasSyncedQty = Convert.ToInt32(chk.ExecuteScalar()) > 0;
 
             int count = 0;
+            // sync_token ham olamiz — WinForms dan yuklangan ingredientlar uchun matching
             DataTable rows = ReadAll(central,
-                "SELECT id,name,unit,quantity,price_per_unit,min_quantity FROM ingredient");
+                "SELECT id,name,unit,quantity,price_per_unit,min_quantity," +
+                "ISNULL(sync_token,'00000000-0000-0000-0000-000000000000') AS sync_token FROM ingredient");
             foreach (DataRow r in rows.Rows)
             {
-                if (hasSyncedQty)
-                    Exec(local,
-                        "IF EXISTS(SELECT 1 FROM ingredient WHERE id=@id)" +
-                        " UPDATE ingredient SET name=@n,unit=@u,quantity=@q,synced_qty=@q," +
-                        "   price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
-                        " ELSE BEGIN SET IDENTITY_INSERT ingredient ON;" +
-                        " INSERT INTO ingredient(id,name,unit,quantity,synced_qty,price_per_unit,min_quantity)" +
-                        "   VALUES(@id,@n,@u,@q,@q,@pp,@mq);" +
-                        " SET IDENTITY_INSERT ingredient OFF END",
-                        P("@id",r["id"]),P("@n",r["name"]),P("@u",r["unit"]),
-                        P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]));
+                int  cid = Convert.ToInt32(r["id"]);
+                Guid tok = (Guid)r["sync_token"];
+
+                // 1. central_id bo'yicha qidirish (eng ishonchli)
+                int? lid = ScalarOrNull(local, "SELECT id FROM ingredient WHERE central_id=@c", "@c", cid);
+                // 2. sync_token bo'yicha (WinForms yuklagan ingredient uchun)
+                if (lid == null && tok != Guid.Empty)
+                    lid = ScalarOrNull(local, "SELECT id FROM ingredient WHERE sync_token=@t", "@t", tok);
+
+                if (lid != null)
+                {
+                    // Mavjud ingredient yangilash
+                    if (hasSyncedQty)
+                        Exec(local,
+                            "UPDATE ingredient SET name=@n,unit=@u,quantity=@q,synced_qty=@q," +
+                            " price_per_unit=@pp,min_quantity=@mq,central_id=@cid WHERE id=@lid",
+                            P("@n",r["name"]),P("@u",r["unit"]),P("@q",r["quantity"]),
+                            P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]),
+                            P("@cid",cid),P("@lid",lid.Value));
+                    else
+                        Exec(local,
+                            "UPDATE ingredient SET name=@n,unit=@u,quantity=@q," +
+                            " price_per_unit=@pp,min_quantity=@mq,central_id=@cid WHERE id=@lid",
+                            P("@n",r["name"]),P("@u",r["unit"]),P("@q",r["quantity"]),
+                            P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]),
+                            P("@cid",cid),P("@lid",lid.Value));
+                }
                 else
-                    Exec(local,
-                        "IF EXISTS(SELECT 1 FROM ingredient WHERE id=@id)" +
-                        " UPDATE ingredient SET name=@n,unit=@u,quantity=@q," +
-                        "   price_per_unit=@pp,min_quantity=@mq WHERE id=@id" +
-                        " ELSE BEGIN SET IDENTITY_INSERT ingredient ON;" +
-                        " INSERT INTO ingredient(id,name,unit,quantity,price_per_unit,min_quantity)" +
-                        "   VALUES(@id,@n,@u,@q,@pp,@mq);" +
-                        " SET IDENTITY_INSERT ingredient OFF END",
-                        P("@id",r["id"]),P("@n",r["name"]),P("@u",r["unit"]),
-                        P("@q",r["quantity"]),P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]));
+                {
+                    // Yangi ingredient (webdan yaratilgan) — IDENTITY_INSERT yo'q, central_id saqlaymiz
+                    if (hasSyncedQty)
+                        Exec(local,
+                            "INSERT INTO ingredient(name,unit,quantity,synced_qty,price_per_unit,min_quantity,central_id,sync_token)" +
+                            " VALUES(@n,@u,@q,@q,@pp,@mq,@cid,@tok)",
+                            P("@n",r["name"]),P("@u",r["unit"]),P("@q",r["quantity"]),
+                            P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]),
+                            P("@cid",cid),P("@tok",tok));
+                    else
+                        Exec(local,
+                            "INSERT INTO ingredient(name,unit,quantity,price_per_unit,min_quantity,central_id,sync_token)" +
+                            " VALUES(@n,@u,@q,@pp,@mq,@cid,@tok)",
+                            P("@n",r["name"]),P("@u",r["unit"]),P("@q",r["quantity"]),
+                            P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]),
+                            P("@cid",cid),P("@tok",tok));
+                }
                 count++;
             }
             return count;
@@ -1364,17 +1398,21 @@ namespace WindowsFormsApp1.services
             int count = 0;
             DataTable rows = ReadAll(local,
                 "SELECT id, quantity, ISNULL(synced_qty, quantity) AS synced_qty, " +
-                "price_per_unit, min_quantity FROM ingredient");
+                "price_per_unit, min_quantity, central_id FROM ingredient");
 
             foreach (DataRow r in rows.Rows)
             {
-                int     ingId     = Convert.ToInt32(r["id"]);
+                int     localId   = Convert.ToInt32(r["id"]);
                 decimal localQty  = Convert.ToDecimal(r["quantity"]);
                 decimal syncedQty = Convert.ToDecimal(r["synced_qty"]);
                 decimal delta     = localQty - syncedQty;
 
+                // central_id mavjud bo'lmasa — hali sync bo'lmagan, skip
+                if (r["central_id"] == DBNull.Value) continue;
+                int centralId = Convert.ToInt32(r["central_id"]);
+
                 int? exists = ScalarOrNull(central,
-                    "SELECT id FROM ingredient WHERE id=@id", "@id", ingId);
+                    "SELECT id FROM ingredient WHERE id=@id", "@id", centralId);
 
                 if (exists != null)
                 {
@@ -1383,16 +1421,16 @@ namespace WindowsFormsApp1.services
                         "UPDATE ingredient SET " +
                         "  quantity = CASE WHEN quantity + @d < 0 THEN 0 ELSE quantity + @d END, " +
                         "  price_per_unit=@pp, min_quantity=@mq " +
-                        "WHERE id=@id",
+                        "WHERE id=@cid",
                         P("@d",  delta),
                         P("@pp", r["price_per_unit"]),
                         P("@mq", r["min_quantity"]),
-                        P("@id", ingId));
+                        P("@cid", centralId));
 
                     // Lokal synced_qty ni joriy quantity ga tenglaymiz
                     Exec(local,
                         "UPDATE ingredient SET synced_qty=quantity WHERE id=@id",
-                        P("@id", ingId));
+                        P("@id", localId));
                     count++;
                 }
             }
@@ -2084,7 +2122,18 @@ namespace WindowsFormsApp1.services
             foreach (DataRow r in rows.Rows)
             {
                 int cid = Convert.ToInt32(r["id"]);
-                int? lid = ScalarOrNull(local, "SELECT id FROM ingredient_purchase WHERE id=@c", "@c", cid);
+                int centralIngId = Convert.ToInt32(r["ingredient_id"]);
+                Guid tok = (Guid)r["sync_token"];
+
+                // ingredient_id ni lokal IDga moslashtirish
+                int? localIngId = ScalarOrNull(local,
+                    "SELECT id FROM ingredient WHERE central_id=@c", "@c", centralIngId);
+                if (localIngId == null) continue; // lokal da bu ingredient yo'q, skip
+
+                // sync_token bo'yicha qidirish
+                int? lid = ScalarOrNull(local,
+                    "SELECT id FROM ingredient_purchase WHERE sync_token=@t", "@t", tok);
+
                 if (lid != null)
                     Exec(local,
                         "UPDATE ingredient_purchase SET quantity=@qty,price_per_unit=@pp," +
@@ -2092,15 +2141,14 @@ namespace WindowsFormsApp1.services
                         P("@qty",r["quantity"]),P("@pp",r["price_per_unit"]),
                         P("@tp",r["total_price"]),P("@nt",r["notes"]),P("@id",lid.Value));
                 else
+                    // IDENTITY_INSERT yo'q — lokal ingredient_id ishlatiladi, central_id saqlanadi
                     Exec(local,
-                        "SET IDENTITY_INSERT ingredient_purchase ON;" +
-                        "INSERT INTO ingredient_purchase(id,ingredient_id,quantity,price_per_unit," +
+                        "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit," +
                         "  total_price,purchased_at,notes,sync_token,is_synced)" +
-                        " VALUES(@id,@iid,@qty,@pp,@tp,@pat,@nt,@tok,1);" +
-                        "SET IDENTITY_INSERT ingredient_purchase OFF",
-                        P("@id",cid),P("@iid",r["ingredient_id"]),P("@qty",r["quantity"]),
+                        " VALUES(@iid,@qty,@pp,@tp,@pat,@nt,@tok,1)",
+                        P("@iid",localIngId.Value),P("@qty",r["quantity"]),
                         P("@pp",r["price_per_unit"]),P("@tp",r["total_price"]),
-                        P("@pat",r["purchased_at"]),P("@nt",r["notes"]),P("@tok",r["sync_token"]));
+                        P("@pat",r["purchased_at"]),P("@nt",r["notes"]),P("@tok",tok));
                 count++;
             }
             return count;

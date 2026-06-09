@@ -445,6 +445,14 @@ namespace WindowsFormsApp1.services
                     "UPDATE order_debt SET is_synced=1 " +
                     "WHERE ISNULL(amount,0)=0 AND ISNULL(is_paid,0)=0 " +
                     "  AND EXISTS(SELECT 1 FROM [order] o WHERE o.id=order_debt.order_id AND o.paid='NO')",
+
+                    // Eski DlIngredients IDENTITY_INSERT bilan yaratgan dublikat ingredientlarni o'chirish
+                    // Bu row lar: central_id=NULL, id = boshqa row ning central_id si (ya'ni fake duplicate)
+                    "DELETE FROM ingredient " +
+                    "WHERE central_id IS NULL " +
+                    "  AND id IN (SELECT central_id FROM ingredient WHERE central_id IS NOT NULL) " +
+                    "  AND id NOT IN (SELECT ISNULL(ingredient_id,0) FROM recipe_ingredient) " +
+                    "  AND id NOT IN (SELECT ISNULL(ingredient_id,0) FROM ingredient_purchase)",
                     };
                     foreach (string sql in fixes)
                     {
