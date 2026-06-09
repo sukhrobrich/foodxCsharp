@@ -601,8 +601,8 @@ namespace WindowsFormsApp1.forms.warehouse
             uc.Controls.Add(stats);
             uc.Controls.Add(hdr);
 
-            float[] pcts = { .22f, .12f, .16f, .16f, .18f, .16f };
-            string[] xCols = { "Masalliq", "Miqdor", "Narx/birlik", "Jami", "Sana", "Izoh" };
+            float[] pcts = { .18f, .10f, .13f, .13f, .16f, .10f, .20f };
+            string[] xCols = { "Masalliq", "Miqdor", "Narx/birlik", "Jami", "Sana", "Izoh", "Amal" };
 
             // Rebuild headers whenever column header panel is resized
             colHdr.Resize += (s, e) => { if (colHdr.Width > 0) BuildColHdr(colHdr, xCols, pcts); };
@@ -640,6 +640,7 @@ namespace WindowsFormsApp1.forms.warehouse
                     int y = 0;
                     foreach (DataRow r in dt.Rows)
                     {
+                        int _id = Convert.ToInt32(r["id"]);
                         string iname = r["iname"].ToString(); string unit = r["unit"].ToString();
                         decimal qty  = Convert.ToDecimal(r["quantity"]);
                         decimal ppu  = Convert.ToDecimal(r["price_per_unit"]);
@@ -654,13 +655,40 @@ namespace WindowsFormsApp1.forms.warehouse
                         Action<int> build = (w) =>
                         {
                             row.Controls.Clear();
-                            // Width trimmed by 16 so name label ends exactly where next column starts (no overlap)
-                            row.Controls.Add(RLbl(_i,   Gx(w,pcts,0)+16, Gw(w,pcts,0)-16, TextDark, FontStyle.Bold, row.Height));
+                            row.Controls.Add(RLbl(_i, Gx(w,pcts,0)+16, Gw(w,pcts,0)-16, TextDark, FontStyle.Bold, row.Height));
                             row.Controls.Add(RLbl(Fn(_q)+" "+_u, Gx(w,pcts,1), Gw(w,pcts,1), TextDark, FontStyle.Regular, row.Height));
                             row.Controls.Add(RLbl(_p.ToString("N0")+" so'm", Gx(w,pcts,2), Gw(w,pcts,2), TextMuted, FontStyle.Regular, row.Height));
                             row.Controls.Add(RLbl(_t.ToString("N0")+" so'm", Gx(w,pcts,3), Gw(w,pcts,3), Gold, FontStyle.Bold, row.Height));
                             row.Controls.Add(RLbl(_d.ToString("dd.MM.yy HH:mm"), Gx(w,pcts,4), Gw(w,pcts,4), TextMuted, FontStyle.Regular, row.Height));
                             row.Controls.Add(RLbl(_n, Gx(w,pcts,5), Gw(w,pcts,5), TextMuted, FontStyle.Regular, row.Height));
+                            int bx = Gx(w,pcts,6); int bw2 = Math.Max((Gw(w,pcts,6)-6)/2, 30);
+                            Button btnE = new Button { Text="✎", FlatStyle=FlatStyle.Flat, BackColor=Blue, ForeColor=Color.White,
+                                Location=new Point(bx+2,9), Width=bw2, Height=30, Font=new Font("Segoe UI",11), Cursor=Cursors.Hand };
+                            btnE.FlatAppearance.BorderSize=0;
+                            btnE.Click += (s3,e3) => { using (var fe=new PurchaseForm(_id,true)) if (fe.ShowDialog()==DialogResult.OK) load(); };
+                            row.Controls.Add(btnE);
+                            Button btnX = new Button { Text="✕", FlatStyle=FlatStyle.Flat, BackColor=Color.FromArgb(220,38,38), ForeColor=Color.White,
+                                Location=new Point(bx+bw2+4,9), Width=bw2, Height=30, Font=new Font("Segoe UI",11), Cursor=Cursors.Hand };
+                            btnX.FlatAppearance.BorderSize=0;
+                            btnX.Click += (s3,e3) =>
+                            {
+                                if (MessageBox.Show("Bu xaridni o'chirmoqchimisiz?","Tasdiqlash",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes) return;
+                                try {
+                                    var db3=new dbconnect(); db3.OpenCon();
+                                    decimal delQty=0; int localIng=0; int cPid=0;
+                                    using (var c3=new SqlCommand("SELECT quantity,ingredient_id,ISNULL(central_id,0) FROM ingredient_purchase WHERE id=@id",db3.GetCon()))
+                                    { c3.Parameters.AddWithValue("@id",_id); using(var r3=c3.ExecuteReader()) if(r3.Read()){delQty=Convert.ToDecimal(r3[0]);localIng=Convert.ToInt32(r3[1]);cPid=Convert.ToInt32(r3[2]);} }
+                                    using (var c3=new SqlCommand("DELETE FROM ingredient_purchase WHERE id=@id",db3.GetCon()))
+                                    { c3.Parameters.AddWithValue("@id",_id); c3.ExecuteNonQuery(); }
+                                    using (var c3=new SqlCommand("UPDATE ingredient SET quantity=ISNULL(quantity,0)-@q WHERE id=@iid",db3.GetCon()))
+                                    { c3.Parameters.AddWithValue("@q",delQty); c3.Parameters.AddWithValue("@iid",localIng); c3.ExecuteNonQuery(); }
+                                    db3.CloseCon();
+                                    if (cPid>0) SyncQueueHelper.Add("PurchaseDelete",cPid,"Delete");
+                                    System.Threading.Tasks.Task.Run(()=>SyncEngine.ProcessSyncQueue());
+                                    load();
+                                } catch(Exception ex3){MessageBox.Show("O'chirishda xatolik: "+ex3.Message);}
+                            };
+                            row.Controls.Add(btnX);
                         };
                         row.SetBounds(0, y, Math.Max(rows.ClientSize.Width, 400), 50);
                         row.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;

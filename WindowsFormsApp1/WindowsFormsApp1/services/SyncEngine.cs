@@ -1586,6 +1586,19 @@ namespace WindowsFormsApp1.services
                                     Exec(central, "DELETE FROM ingredient WHERE id=@id", P("@id", entityId));
                                 } catch { }
                                 break;
+                            case "PurchaseDelete":
+                                // entityId = central_id of ingredient_purchase
+                                try {
+                                    var purIngId = ScalarOrNull(central, "SELECT ingredient_id FROM ingredient_purchase WHERE id=@id", "@id", entityId);
+                                    var purQty   = ScalarOrNull(central, "SELECT quantity FROM ingredient_purchase WHERE id=@id", "@id", entityId);
+                                    if (purIngId != null) {
+                                        Exec(central, "DELETE FROM ingredient_purchase WHERE id=@id", P("@id", entityId));
+                                        if (purQty != null)
+                                            Exec(central, "UPDATE ingredient SET quantity=ISNULL(quantity,0)-@q WHERE id=@iid",
+                                                P("@q", Convert.ToDecimal(purQty)), P("@iid", Convert.ToInt32(purIngId)));
+                                    }
+                                } catch { }
+                                break;
                         }
 
                         Exec(local,
@@ -1848,16 +1861,24 @@ namespace WindowsFormsApp1.services
 
         private static void SyncSingleIngredientPurchase(SqlConnection local, SqlConnection central, int localId)
         {
-            DataTable rows = ReadAll(local, $"SELECT * FROM ingredient_purchase WHERE id={localId}");
+            DataTable rows = ReadAll(local, $"SELECT ip.*, i.central_id AS ing_central_id FROM ingredient_purchase ip JOIN ingredient i ON i.id=ip.ingredient_id WHERE ip.id={localId}");
             if (rows.Rows.Count == 0) return;
             DataRow r = rows.Rows[0];
+            if (r["sync_token"] == DBNull.Value) return;
             Guid tok = (Guid)r["sync_token"];
-            if (ScalarOrNull(central, "SELECT id FROM ingredient_purchase WHERE sync_token=@t", "@t", tok) == null)
+            var ingCentralId = r["ing_central_id"] == DBNull.Value ? (int?)null : Convert.ToInt32(r["ing_central_id"]);
+            if (ingCentralId == null) return; // ingredient henuz sync bo'lmagan, keyinroq urinadi
+            var existId = ScalarOrNull(central, "SELECT id FROM ingredient_purchase WHERE sync_token=@t", "@t", tok);
+            if (existId == null)
                 Exec(central,
                     "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit,total_price,purchased_at,notes,sync_token)" +
                     " VALUES(@iid,@qty,@pp,@tp,@pa,@n,@tok)",
-                    P("@iid",r["ingredient_id"]),P("@qty",r["quantity"]),P("@pp",r["price_per_unit"]),
+                    P("@iid",ingCentralId.Value),P("@qty",r["quantity"]),P("@pp",r["price_per_unit"]),
                     P("@tp",r["total_price"]),P("@pa",r["purchased_at"]),P("@n",r["notes"]),P("@tok",tok));
+            else
+                Exec(central,
+                    "UPDATE ingredient_purchase SET quantity=@qty,price_per_unit=@pp,total_price=@tp,notes=@n WHERE sync_token=@tok",
+                    P("@qty",r["quantity"]),P("@pp",r["price_per_unit"]),P("@tp",r["total_price"]),P("@n",r["notes"]),P("@tok",tok));
             Exec(local, $"UPDATE ingredient_purchase SET is_synced=1 WHERE id={localId}");
         }
 

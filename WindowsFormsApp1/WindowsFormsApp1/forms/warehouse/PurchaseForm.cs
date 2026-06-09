@@ -16,21 +16,41 @@ namespace WindowsFormsApp1.forms.warehouse
         private static readonly Color Border    = Color.FromArgb(229, 231, 235);
         private static readonly Color Success   = Color.FromArgb(22, 163, 74);
 
-        private readonly int _preselectedId;
+        private readonly int _preselectedId;  // ingredient id (yangi qo'shish uchun)
+        private readonly int _purchaseId;     // purchase id (tahrirlash uchun, 0 = yangi)
+        private decimal      _oldQty;         // tahrirlashda eski miqdor (delta uchun)
+
         private ComboBox      cboIngredient;
         private NumericUpDown numQty, numPrice;
         private TextBox       txtNotes;
         private Label         lblTotal;
 
+        // Yangi xarid: preselectedIngredientId = ingredient id (yoki 0)
         public PurchaseForm(int preselectedIngredientId)
         {
             _preselectedId = preselectedIngredientId;
+            _purchaseId    = 0;
+            InitForm();
+            LoadIngredients();
+        }
+
+        // Tahrirlash: purchaseId = ingredient_purchase.id
+        public PurchaseForm(int purchaseId, bool isEdit)
+        {
+            _purchaseId    = purchaseId;
+            _preselectedId = 0;
+            InitForm();
+            LoadIngredients();
+            if (isEdit) LoadPurchase(purchaseId);
+        }
+
+        private void InitForm()
+        {
             this.FormBorderStyle = FormBorderStyle.None;
             this.Size            = new Size(460, 440);
             this.StartPosition   = FormStartPosition.CenterParent;
             this.BackColor       = Color.White;
             BuildUI();
-            LoadIngredients();
         }
 
         private void BuildUI()
@@ -44,7 +64,7 @@ namespace WindowsFormsApp1.forms.warehouse
 
             main.Controls.Add(new Label
             {
-                Text = "Xarid qo'shish",
+                Text = _purchaseId > 0 ? "Xaridni tahrirlash" : "Xarid qo'shish",
                 Font = new Font("Segoe UI", 14, FontStyle.Bold),
                 ForeColor = TextDark, AutoSize = true, Location = new Point(0, y)
             });
@@ -104,7 +124,7 @@ namespace WindowsFormsApp1.forms.warehouse
             // Buttons
             Button btnSave = new Button
             {
-                Text = "Xaridni saqlash",
+                Text = _purchaseId > 0 ? "Yangilash" : "Xaridni saqlash",
                 Location = new Point(0, y), Width = 200, Height = 40,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Success, ForeColor = Color.White,
@@ -154,8 +174,6 @@ namespace WindowsFormsApp1.forms.warehouse
                             break;
                         }
                     }
-
-                    // Pre-fill last known price
                     try
                     {
                         db.OpenCon();
@@ -173,71 +191,125 @@ namespace WindowsFormsApp1.forms.warehouse
             catch (Exception ex) { MessageBox.Show("Masalliqlarni yuklashda xatolik: " + ex.Message); }
         }
 
+        private void LoadPurchase(int purchaseId)
+        {
+            try
+            {
+                var db = new dbconnect();
+                db.OpenCon();
+                using (var cmd = new SqlCommand(
+                    "SELECT ingredient_id,quantity,price_per_unit,ISNULL(notes,'') AS notes FROM ingredient_purchase WHERE id=@id",
+                    db.GetCon()))
+                {
+                    cmd.Parameters.AddWithValue("@id", purchaseId);
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        if (r.Read())
+                        {
+                            int ingId = Convert.ToInt32(r["ingredient_id"]);
+                            _oldQty   = Convert.ToDecimal(r["quantity"]);
+                            numQty.Value   = _oldQty;
+                            numPrice.Value = Convert.ToDecimal(r["price_per_unit"]);
+                            txtNotes.Text  = r["notes"].ToString();
+
+                            foreach (DataRowView row in cboIngredient.Items)
+                            {
+                                if (Convert.ToInt32(row["id"]) == ingId)
+                                { cboIngredient.SelectedItem = row; break; }
+                            }
+                            // Tahrirlashda masalliqni o'zgartirib bo'lmaydi
+                            cboIngredient.Enabled = false;
+                        }
+                    }
+                }
+                db.CloseCon();
+            }
+            catch (Exception ex) { MessageBox.Show("Yuklashda xatolik: " + ex.Message); }
+        }
+
         private void UpdateTotal(object sender, EventArgs e)
         {
-            decimal total = numQty.Value * numPrice.Value;
-            lblTotal.Text = total.ToString("N0") + " so'm";
+            lblTotal.Text = (numQty.Value * numPrice.Value).ToString("N0") + " so'm";
         }
 
         private void BtnSave_Click(object sender, EventArgs e)
         {
             if (cboIngredient.SelectedValue == null)
-            {
-                MessageBox.Show("Masalliqni tanlang.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+            { MessageBox.Show("Masalliqni tanlang.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             if (numQty.Value <= 0)
-            {
-                MessageBox.Show("Miqdorni kiriting.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                numQty.Focus();
-                return;
-            }
+            { MessageBox.Show("Miqdorni kiriting.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Warning); numQty.Focus(); return; }
             if (numPrice.Value <= 0)
-            {
-                MessageBox.Show("Narxni kiriting.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                numPrice.Focus();
-                return;
-            }
+            { MessageBox.Show("Narxni kiriting.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Warning); numPrice.Focus(); return; }
 
-            int    ingId = Convert.ToInt32(cboIngredient.SelectedValue);
-            decimal qty  = numQty.Value;
-            decimal ppu  = numPrice.Value;
-            decimal tot  = qty * ppu;
-            string notes = txtNotes.Text.Trim();
+            int     ingId = Convert.ToInt32(cboIngredient.SelectedValue);
+            decimal qty   = numQty.Value;
+            decimal ppu   = numPrice.Value;
+            decimal tot   = qty * ppu;
+            string  notes = txtNotes.Text.Trim();
 
             try
             {
                 var db = new dbconnect();
                 db.OpenCon();
 
-                int newPurchaseId;
-                using (var cmd = new SqlCommand(
-                    "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit,total_price,notes) OUTPUT INSERTED.id VALUES(@i,@q,@p,@t,@n)",
-                    db.GetCon()))
+                if (_purchaseId == 0)
                 {
-                    cmd.Parameters.AddWithValue("@i", ingId);
-                    cmd.Parameters.AddWithValue("@q", qty);
-                    cmd.Parameters.AddWithValue("@p", ppu);
-                    cmd.Parameters.AddWithValue("@t", tot);
-                    cmd.Parameters.AddWithValue("@n", string.IsNullOrEmpty(notes) ? (object)DBNull.Value : notes);
-                    newPurchaseId = (int)cmd.ExecuteScalar();
+                    // Yangi xarid
+                    int newId;
+                    using (var cmd = new SqlCommand(
+                        "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit,total_price,notes) OUTPUT INSERTED.id VALUES(@i,@q,@p,@t,@n)",
+                        db.GetCon()))
+                    {
+                        cmd.Parameters.AddWithValue("@i", ingId);
+                        cmd.Parameters.AddWithValue("@q", qty);
+                        cmd.Parameters.AddWithValue("@p", ppu);
+                        cmd.Parameters.AddWithValue("@t", tot);
+                        cmd.Parameters.AddWithValue("@n", string.IsNullOrEmpty(notes) ? (object)DBNull.Value : notes);
+                        newId = (int)cmd.ExecuteScalar();
+                    }
+                    using (var cmd = new SqlCommand(
+                        "UPDATE ingredient SET quantity=quantity+@q, price_per_unit=@p WHERE id=@i", db.GetCon()))
+                    {
+                        cmd.Parameters.AddWithValue("@q", qty);
+                        cmd.Parameters.AddWithValue("@p", ppu);
+                        cmd.Parameters.AddWithValue("@i", ingId);
+                        cmd.ExecuteNonQuery();
+                    }
+                    db.CloseCon();
+                    SyncQueueHelper.Add(SyncQueueHelper.IngredientPurchases, newId, "Insert");
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
+                }
+                else
+                {
+                    // Xaridni tahrirlash — miqdor deltasi
+                    decimal delta = qty - _oldQty;
+                    using (var cmd = new SqlCommand(
+                        "UPDATE ingredient_purchase SET quantity=@q,price_per_unit=@p,total_price=@t,notes=@n WHERE id=@id",
+                        db.GetCon()))
+                    {
+                        cmd.Parameters.AddWithValue("@q",  qty);
+                        cmd.Parameters.AddWithValue("@p",  ppu);
+                        cmd.Parameters.AddWithValue("@t",  tot);
+                        cmd.Parameters.AddWithValue("@n",  string.IsNullOrEmpty(notes) ? (object)DBNull.Value : notes);
+                        cmd.Parameters.AddWithValue("@id", _purchaseId);
+                        cmd.ExecuteNonQuery();
+                    }
+                    if (delta != 0)
+                    {
+                        using (var cmd = new SqlCommand(
+                            "UPDATE ingredient SET quantity=quantity+@d, price_per_unit=@p WHERE id=@i", db.GetCon()))
+                        {
+                            cmd.Parameters.AddWithValue("@d", delta);
+                            cmd.Parameters.AddWithValue("@p", ppu);
+                            cmd.Parameters.AddWithValue("@i", ingId);
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                    db.CloseCon();
+                    SyncQueueHelper.Add(SyncQueueHelper.IngredientPurchases, _purchaseId, "Update");
+                    System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
                 }
 
-                // Update stock and price
-                using (var cmd = new SqlCommand(
-                    "UPDATE ingredient SET quantity=quantity+@q, price_per_unit=@p WHERE id=@i",
-                    db.GetCon()))
-                {
-                    cmd.Parameters.AddWithValue("@q", qty);
-                    cmd.Parameters.AddWithValue("@p", ppu);
-                    cmd.Parameters.AddWithValue("@i", ingId);
-                    cmd.ExecuteNonQuery();
-                }
-
-                db.CloseCon();
-                // Darhol sync trigger
-                SyncQueueHelper.Add(SyncQueueHelper.IngredientPurchases, newPurchaseId, "Insert");
-                System.Threading.Tasks.Task.Run(() => SyncEngine.SyncAll());
                 DialogResult = DialogResult.OK;
                 Close();
             }
