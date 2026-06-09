@@ -105,9 +105,8 @@ namespace WindowsFormsApp1.services
                 // Web dan taom/kategoriya o'zgarishlarini yuklab olish (create/update/delete)
                 TryDl(() => DlFoodCategories(local, central),         result);
                 TryDl(() => DlFoodsWithDelete(local, central),        result);
-                // Web dan masalliq va xaridlarni yuklab olish (quantity delta saqlab)
+                // Web dan masalliqlarni yuklab olish (quantity delta saqlab)
                 TryDl(() => DlIngredients(local, central),            result);
-                TryDl(() => DlIngredientPurchases(local, central),    result);
             }
             catch (Exception ex)
             {
@@ -2194,13 +2193,16 @@ namespace WindowsFormsApp1.services
         private static int DlIngredientPurchases(SqlConnection local, SqlConnection central)
         {
             int count = 0;
+            // Faqat sync_token mavjud bo'lgan yozuvlarni yuklaymiz — NULL sync_token
+            // dublikat keltirib chiqaradi (NEWID() har safar yangi GUID → doim INSERT)
             DataTable rows = ReadAll(central,
                 "SELECT id, ingredient_id, ISNULL(quantity,0) AS quantity," +
                 "  ISNULL(price_per_unit,0) AS price_per_unit, ISNULL(total_price,0) AS total_price," +
                 "  ISNULL(purchased_at,GETDATE()) AS purchased_at," +
-                "  ISNULL(notes,'') AS notes, ISNULL(sync_token,NEWID()) AS sync_token" +
+                "  ISNULL(notes,'') AS notes, sync_token" +
                 " FROM ingredient_purchase" +
-                " WHERE purchased_at >= DATEADD(YEAR,-1,GETDATE())");
+                " WHERE purchased_at >= DATEADD(YEAR,-1,GETDATE())" +
+                "   AND sync_token IS NOT NULL");
             foreach (DataRow r in rows.Rows)
             {
                 int cid = Convert.ToInt32(r["id"]);
@@ -2210,27 +2212,32 @@ namespace WindowsFormsApp1.services
                 // ingredient_id ni lokal IDga moslashtirish
                 int? localIngId = ScalarOrNull(local,
                     "SELECT id FROM ingredient WHERE central_id=@c", "@c", centralIngId);
-                if (localIngId == null) continue; // lokal da bu ingredient yo'q, skip
+                if (localIngId == null) continue;
 
-                // sync_token bo'yicha qidirish
+                // 1. central_id bo'yicha qidirish (eng ishonchli)
                 int? lid = ScalarOrNull(local,
-                    "SELECT id FROM ingredient_purchase WHERE sync_token=@t", "@t", tok);
+                    "SELECT id FROM ingredient_purchase WHERE central_id=@c", "@c", cid);
+                // 2. sync_token bo'yicha fallback
+                if (lid == null)
+                    lid = ScalarOrNull(local,
+                        "SELECT id FROM ingredient_purchase WHERE sync_token=@t", "@t", tok);
 
                 if (lid != null)
                     Exec(local,
                         "UPDATE ingredient_purchase SET quantity=@qty,price_per_unit=@pp," +
-                        "  total_price=@tp,notes=@nt,is_synced=1 WHERE id=@id",
+                        "  total_price=@tp,notes=@nt,central_id=@cid,is_synced=1 WHERE id=@id",
                         P("@qty",r["quantity"]),P("@pp",r["price_per_unit"]),
-                        P("@tp",r["total_price"]),P("@nt",r["notes"]),P("@id",lid.Value));
+                        P("@tp",r["total_price"]),P("@nt",r["notes"]),
+                        P("@cid",cid),P("@id",lid.Value));
                 else
-                    // IDENTITY_INSERT yo'q — lokal ingredient_id ishlatiladi, central_id saqlanadi
                     Exec(local,
                         "INSERT INTO ingredient_purchase(ingredient_id,quantity,price_per_unit," +
-                        "  total_price,purchased_at,notes,sync_token,is_synced)" +
-                        " VALUES(@iid,@qty,@pp,@tp,@pat,@nt,@tok,1)",
+                        "  total_price,purchased_at,notes,sync_token,central_id,is_synced)" +
+                        " VALUES(@iid,@qty,@pp,@tp,@pat,@nt,@tok,@cid,1)",
                         P("@iid",localIngId.Value),P("@qty",r["quantity"]),
                         P("@pp",r["price_per_unit"]),P("@tp",r["total_price"]),
-                        P("@pat",r["purchased_at"]),P("@nt",r["notes"]),P("@tok",tok));
+                        P("@pat",r["purchased_at"]),P("@nt",r["notes"]),
+                        P("@tok",tok),P("@cid",cid));
                 count++;
             }
             return count;

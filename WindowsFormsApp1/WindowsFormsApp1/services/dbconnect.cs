@@ -380,6 +380,9 @@ namespace WindowsFormsApp1.services
                         "EXEC('UPDATE food_purchase SET sync_token=NEWID() WHERE sync_token IS NULL')",
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='food_purchase' AND COLUMN_NAME='is_synced') ALTER TABLE food_purchase ADD is_synced BIT NOT NULL DEFAULT 0",
 
+                        // ingredient_purchase.central_id — DlIngredientPurchases dublikat oldini oladi
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ingredient_purchase' AND COLUMN_NAME='central_id') ALTER TABLE ingredient_purchase ADD central_id INT NULL",
+
                         // place_out va place_in uchun central_id (UPDATE/DELETE sync uchun)
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='place_out' AND COLUMN_NAME='central_id') ALTER TABLE place_out ADD central_id INT NULL",
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='place_in' AND COLUMN_NAME='central_id') ALTER TABLE place_in ADD central_id INT NULL",
@@ -455,12 +458,19 @@ namespace WindowsFormsApp1.services
                     "  AND EXISTS(SELECT 1 FROM [order] o WHERE o.id=order_debt.order_id AND o.paid='NO')",
 
                     // Eski DlIngredients IDENTITY_INSERT bilan yaratgan dublikat ingredientlarni o'chirish
-                    // Bu row lar: central_id=NULL, id = boshqa row ning central_id si (ya'ni fake duplicate)
                     "DELETE FROM ingredient " +
                     "WHERE central_id IS NULL " +
                     "  AND id IN (SELECT central_id FROM ingredient WHERE central_id IS NOT NULL) " +
                     "  AND id NOT IN (SELECT ISNULL(ingredient_id,0) FROM recipe_ingredient) " +
                     "  AND id NOT IN (SELECT ISNULL(ingredient_id,0) FROM ingredient_purchase)",
+
+                    // DlIngredientPurchases NEWID() bilan yaratgan dublikat xaridlarni tozalash
+                    // Bir xil (ingredient_id, purchased_at, quantity, price_per_unit) bo'lsa — eski yozuvni saqlaydi
+                    "DELETE FROM ingredient_purchase " +
+                    "WHERE id NOT IN ( " +
+                    "  SELECT MIN(id) FROM ingredient_purchase " +
+                    "  GROUP BY ingredient_id, purchased_at, quantity, price_per_unit " +
+                    ")",
                     };
                     foreach (string sql in fixes)
                     {
