@@ -1832,6 +1832,24 @@ namespace WindowsFormsApp1.forms.order
             return grand - discAmt;
         }
 
+        private void SetPaidReadOnly()
+        {
+            // Yopilgan buyurtmani o'zgartirib bo'lmaydi
+            _canEditItems = false;
+
+            _btnMijoz.Enabled     = false;
+            _btnDelivery.Enabled  = false;
+            _btnBoshqalar.Enabled = false;
+            _btnPayment.Enabled   = false;
+            if (btnCloseOrder != null) btnCloseOrder.Visible = false;
+
+            // btnSave ni yopilgan ko'rinishga o'zgartiramiz
+            btnSave.Enabled   = false;
+            btnSave.Text      = "✓  Bu buyurtma yopilgan";
+            btnSave.BackColor = Color.FromArgb(22, 163, 74);
+            btnSave.ForeColor = Color.White;
+        }
+
         private void RecalcTotal()
         {
             decimal food      = GetFoodTotal();
@@ -1963,7 +1981,8 @@ namespace WindowsFormsApp1.forms.order
                                ISNULL(order_note,'') AS order_note,
                                ISNULL(custom_svc_fee,0) AS custom_svc_fee,
                                ISNULL(custom_svc_type,'%') AS custom_svc_type,
-                               ISNULL(discount_pct,0) AS discount_pct
+                               ISNULL(discount_pct,0) AS discount_pct,
+                               ISNULL(paid,'NO') AS paid
                         FROM [order] WHERE id=@oid", db.GetCon()))
                     {
                         pc.Parameters.AddWithValue("@oid", orderId);
@@ -1995,6 +2014,10 @@ namespace WindowsFormsApp1.forms.order
                                 if (string.IsNullOrEmpty(_customSvcType)) _customSvcType = "%";
 
                                 _discountPct   = dr2["discount_pct"] == DBNull.Value ? 0m : Convert.ToDecimal(dr2["discount_pct"]);
+
+                                // Yopilgan buyurtma — faqat ko'rish rejimi
+                                if (dr2["paid"].ToString().ToUpper() == "YES")
+                                    SetPaidReadOnly();
                             }
                         }
                     }
