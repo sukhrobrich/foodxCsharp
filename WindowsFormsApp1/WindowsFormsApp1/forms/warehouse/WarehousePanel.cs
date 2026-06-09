@@ -303,9 +303,21 @@ namespace WindowsFormsApp1.forms.warehouse
                                 try
                                 {
                                     var db2 = new dbconnect(); db2.OpenCon();
+                                    // central_id ni oldindan olamiz — SyncQueue uchun
+                                    int? centralId = null;
+                                    using (var chk = new SqlCommand("SELECT central_id FROM ingredient WHERE id=@id", db2.GetCon()))
+                                    {
+                                        chk.Parameters.AddWithValue("@id", _id);
+                                        object v = chk.ExecuteScalar();
+                                        if (v != null && v != DBNull.Value) centralId = Convert.ToInt32(v);
+                                    }
                                     using (var cmd = new SqlCommand("DELETE FROM ingredient WHERE id=@id", db2.GetCon()))
                                     { cmd.Parameters.AddWithValue("@id", _id); cmd.ExecuteNonQuery(); }
-                                    db2.CloseCon(); load();
+                                    db2.CloseCon();
+                                    // Central DB dan ham o'chirish uchun SyncQueue ga yozamiz
+                                    if (centralId.HasValue)
+                                        SyncQueueHelper.Add(SyncQueueHelper.IngredientDelete, centralId.Value, "Delete");
+                                    load();
                                 }
                                 catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
                             };

@@ -21,6 +21,7 @@ namespace WindowsFormsApp1.services
         public const string FoodPurchases        = "FoodPurchases";
         public const string Ingredients          = "Ingredients";
         public const string Foods                = "Foods";
+        public const string IngredientDelete     = "IngredientDelete";
         public const string Users                = "Users";
 
         /// <summary>
