@@ -2346,17 +2346,22 @@ namespace WindowsFormsApp1.forms.order
                     }
                 }
 
-                // Qarz ma'lumotlarini saqlash (hali yopilmagan order uchun vaqtinchalik)
+                // Qarz ma'lumotlarini saqlash (hali yopilmagan order uchun draft)
+                // is_synced=1: draft central ga ketmasin — faqat CloseOrder da real sync bo'ladi
                 if (!string.IsNullOrEmpty(_debtName))
                 {
                     SqlCommand dSave = new SqlCommand(@"
-                        DELETE FROM order_debt WHERE order_id=@oid AND ISNULL(is_paid,0)=0;
-                        INSERT INTO order_debt(order_id,debtor_name,debtor_phone,debt_note,amount,created_at,is_paid)
-                        VALUES(@oid,@name,@phone,@note,0,GETDATE(),0)", db.GetCon(), tr);
+                        IF EXISTS(SELECT 1 FROM order_debt WHERE order_id=@oid AND ISNULL(is_paid,0)=0)
+                            UPDATE order_debt SET debtor_name=@name,debtor_phone=@phone,debt_note=@note,amount=@amt,is_synced=1
+                            WHERE order_id=@oid AND ISNULL(is_paid,0)=0
+                        ELSE
+                            INSERT INTO order_debt(order_id,debtor_name,debtor_phone,debt_note,amount,created_at,is_paid,is_synced)
+                            VALUES(@oid,@name,@phone,@note,@amt,GETDATE(),0,1)", db.GetCon(), tr);
                     dSave.Parameters.AddWithValue("@oid",   orderId);
                     dSave.Parameters.AddWithValue("@name",  _debtName);
                     dSave.Parameters.AddWithValue("@phone", string.IsNullOrEmpty(_debtPhone) ? (object)DBNull.Value : _debtPhone);
                     dSave.Parameters.AddWithValue("@note",  string.IsNullOrEmpty(_debtNote)  ? (object)DBNull.Value : _debtNote);
+                    dSave.Parameters.AddWithValue("@amt",   total);
                     dSave.ExecuteNonQuery();
                 }
                 else
@@ -2607,31 +2612,48 @@ namespace WindowsFormsApp1.forms.order
                 }
 
                 // Save debt record if debtor name is set
+                // UPDATE-or-INSERT: sync_token saqlanadi → central da dublikat bo'lmaydi
+                int debtLocalId = 0;
                 if (!string.IsNullOrEmpty(_debtName))
                 {
                     decimal debtAmt = qarzAmt > 0 ? qarzAmt : finalTotal;
                     using (SqlCommand cmd = new SqlCommand(@"
-                        DELETE FROM order_debt WHERE order_id=@oid;
-                        INSERT INTO order_debt(order_id,debtor_name,debtor_phone,debt_note,amount,created_at,is_paid)
-                        VALUES(@oid,@name,@phone,@note,@amt,GETDATE(),0)", db.GetCon()))
+                        IF EXISTS(SELECT 1 FROM order_debt WHERE order_id=@oid AND ISNULL(is_paid,0)=0)
+                        BEGIN
+                            UPDATE order_debt SET debtor_name=@name,debtor_phone=@phone,debt_note=@note,
+                                amount=@amt,is_synced=0
+                            WHERE order_id=@oid AND ISNULL(is_paid,0)=0;
+                            SELECT TOP 1 id FROM order_debt WHERE order_id=@oid AND ISNULL(is_paid,0)=0
+                        END
+                        ELSE
+                        BEGIN
+                            INSERT INTO order_debt(order_id,debtor_name,debtor_phone,debt_note,amount,created_at,is_paid)
+                            VALUES(@oid,@name,@phone,@note,@amt,GETDATE(),0);
+                            SELECT SCOPE_IDENTITY()
+                        END", db.GetCon()))
                     {
                         cmd.Parameters.AddWithValue("@oid",   orderId);
                         cmd.Parameters.AddWithValue("@name",  _debtName);
                         cmd.Parameters.AddWithValue("@phone", string.IsNullOrEmpty(_debtPhone) ? (object)DBNull.Value : _debtPhone);
                         cmd.Parameters.AddWithValue("@note",  string.IsNullOrEmpty(_debtNote)  ? (object)DBNull.Value : _debtNote);
                         cmd.Parameters.AddWithValue("@amt",   debtAmt);
-                        cmd.ExecuteNonQuery();
+                        object res = cmd.ExecuteScalar();
+                        if (res != null && res != DBNull.Value) debtLocalId = Convert.ToInt32(res);
                     }
                 }
 
                 db.CloseCon();
 
-                // To'lov SyncQueue ga — orders + food + payments
-                SyncQueueHelper.AddBatch(
+                // To'lov SyncQueue ga — orders + food + payments + debt
+                var syncItems = new System.Collections.Generic.List<(string, int, string)>
+                {
                     (SyncQueueHelper.Orders,        orderId, "Update"),
                     (SyncQueueHelper.OrderFood,     orderId, "Update"),
-                    (SyncQueueHelper.OrderPayments, orderId, "Update")
-                );
+                    (SyncQueueHelper.OrderPayments, orderId, "Update"),
+                };
+                if (debtLocalId > 0)
+                    syncItems.Add((SyncQueueHelper.OrderDebts, debtLocalId, "Insert"));
+                SyncQueueHelper.AddBatch(syncItems.ToArray());
             }
             catch (Exception ex)
             {

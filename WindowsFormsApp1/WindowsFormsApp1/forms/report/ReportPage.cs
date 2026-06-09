@@ -794,11 +794,13 @@ namespace WindowsFormsApp1.forms.report
                             ISNULL((SELECT SUM(op.amount) FROM order_payments op
                                     JOIN [order] o2 ON o2.id=op.order_id AND o2.paid='YES'
                                     AND CAST(o2.created_at AS DATE) BETWEEN @d1 AND @d2
-                                    WHERE op.payment_id=p.id), 0) +
+                                    WHERE op.payment_id=p.id AND op.amount > 0), 0) +
                             ISNULL((SELECT SUM(o3.total) FROM [order] o3
                                     WHERE o3.payment_id=p.id AND o3.paid='YES'
                                     AND CAST(o3.created_at AS DATE) BETWEEN @d1 AND @d2
-                                    AND NOT EXISTS(SELECT 1 FROM order_payments op2 WHERE op2.order_id=o3.id)), 0) AS tot
+                                    AND NOT EXISTS(
+                                        SELECT 1 FROM order_payments op2
+                                        WHERE op2.order_id=o3.id AND op2.amount > 0)), 0) AS tot
                         FROM payment p
                         ORDER BY tot DESC", db.GetCon());
                     cmd.Parameters.AddWithValue("@d1", D1()); cmd.Parameters.AddWithValue("@d2", D2());

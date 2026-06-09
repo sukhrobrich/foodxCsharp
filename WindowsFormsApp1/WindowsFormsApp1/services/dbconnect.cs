@@ -440,6 +440,11 @@ namespace WindowsFormsApp1.services
                         "  EXEC('ALTER TABLE food_purchase DROP CONSTRAINT ['+@cn5+']'); " +
                         "  ALTER TABLE food_purchase ADD DEFAULT 0 FOR is_synced " +
                         "END",
+
+                    // Eski draft qarz yozuvlari (amount=0, yopilmagan order) — central ga ketmasin
+                    "UPDATE order_debt SET is_synced=1 " +
+                    "WHERE ISNULL(amount,0)=0 AND ISNULL(is_paid,0)=0 " +
+                    "  AND EXISTS(SELECT 1 FROM [order] o WHERE o.id=order_debt.order_id AND o.paid='NO')",
                     };
                     foreach (string sql in fixes)
                     {
