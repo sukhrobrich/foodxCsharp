@@ -105,6 +105,9 @@ namespace WindowsFormsApp1.services
                 // Web dan taom/kategoriya o'zgarishlarini yuklab olish (create/update/delete)
                 TryDl(() => DlFoodCategories(local, central),         result);
                 TryDl(() => DlFoodsWithDelete(local, central),        result);
+                // Web dan masalliq va xaridlarni yuklab olish (quantity delta saqlab)
+                TryDl(() => DlIngredients(local, central),            result);
+                TryDl(() => DlIngredientPurchases(local, central),    result);
             }
             catch (Exception ex)
             {
@@ -1369,11 +1372,15 @@ namespace WindowsFormsApp1.services
 
                 if (lid != null)
                 {
-                    // Mavjud ingredient yangilash
+                    // Mavjud ingredient yangilash.
+                    // Lokal delta bo'lsa (synced_qty != quantity) quantity ustidan YOZMAYMIZ —
+                    // u SyncIngredientQuantities dan keyinroq yuklanganda to'g'rilanadi.
                     if (hasSyncedQty)
                         Exec(local,
-                            "UPDATE ingredient SET name=@n,unit=@u,quantity=@q,synced_qty=@q," +
-                            " price_per_unit=@pp,min_quantity=@mq,central_id=@cid WHERE id=@lid",
+                            "UPDATE ingredient SET name=@n,unit=@u,price_per_unit=@pp,min_quantity=@mq,central_id=@cid," +
+                            " quantity   =CASE WHEN ISNULL(synced_qty,quantity)=quantity THEN @q ELSE quantity    END," +
+                            " synced_qty =CASE WHEN ISNULL(synced_qty,quantity)=quantity THEN @q ELSE synced_qty  END" +
+                            " WHERE id=@lid",
                             P("@n",r["name"]),P("@u",r["unit"]),P("@q",r["quantity"]),
                             P("@pp",r["price_per_unit"]),P("@mq",r["min_quantity"]),
                             P("@cid",cid),P("@lid",lid.Value));
