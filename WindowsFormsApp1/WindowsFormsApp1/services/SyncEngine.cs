@@ -1578,7 +1578,7 @@ namespace WindowsFormsApp1.services
                                         Exec(central, "DELETE FROM food WHERE id=@id", P("@id", entityId));
                                 } catch { }
                                 break;
-                            case SyncQueueHelper.IngredientDelete:
+                            case "IngredientDelete":
                                 // entityId = central_id. recipe_ingredient va ingredient_purchase da yo'q bo'lsa o'chiradi
                                 try {
                                     int riRefs = Convert.ToInt32(ScalarOrNull(central,

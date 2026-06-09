@@ -316,7 +316,7 @@ namespace WindowsFormsApp1.forms.warehouse
                                     db2.CloseCon();
                                     // Central DB dan ham o'chirish uchun SyncQueue ga yozamiz
                                     if (centralId.HasValue)
-                                        SyncQueueHelper.Add(SyncQueueHelper.IngredientDelete, centralId.Value, "Delete");
+                                        SyncQueueHelper.Add("IngredientDelete", centralId.Value, "Delete");
                                     load();
                                 }
                                 catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
