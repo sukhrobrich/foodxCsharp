@@ -291,18 +291,19 @@ namespace WindowsFormsApp1.forms.place
                                 cmd.ExecuteNonQuery();
                             }
                             // Agar nom o'zgardi va online bo'lsa — central da ham yangilaymiz
-                            if (oldName != n && Session.IsOnline && Session.TenantId > 0)
+                            if (Session.IsOnline && Session.TenantId > 0)
                             {
                                 try
                                 {
                                     using (var central = dbconnect.OpenCentralForSync(Session.TenantId))
                                     using (var cmd = new SqlCommand(
-                                        "UPDATE place_out SET name=@n,serviceFee=@sf,price=@pr WHERE name=@old " +
+                                        "UPDATE place_out SET name=@n,serviceFee=@sf,price=@pr,price_type=@pt WHERE name=@old " +
                                         "AND tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
                                     {
                                         cmd.Parameters.AddWithValue("@n",   n);
                                         cmd.Parameters.AddWithValue("@sf",  sf);
                                         cmd.Parameters.AddWithValue("@pr",  pr);
+                                        cmd.Parameters.AddWithValue("@pt",  pt);
                                         cmd.Parameters.AddWithValue("@old", oldName);
                                         cmd.ExecuteNonQuery();
                                     }

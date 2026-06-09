@@ -395,7 +395,7 @@ namespace WindowsFormsApp1.services
                 "SELECT po.id, po.name, " +
                 "(SELECT COUNT(*) FROM place_in WHERE place_out_id=po.id) AS place_count, " +
                 "po.created_at, po.updated_at, " +
-                "po.serviceFee, po.price, po.sort_order, pc.name AS cat_name" +
+                "po.serviceFee, po.price, ISNULL(po.price_type,'UZS') AS price_type, po.sort_order, pc.name AS cat_name" +
                 (hasCentralId ? ", po.central_id" : ", CAST(NULL AS INT) AS central_id") +
                 " FROM place_out po LEFT JOIN place_category pc ON pc.id=po.place_category_id";
 
@@ -414,20 +414,20 @@ namespace WindowsFormsApp1.services
                 if (cid.HasValue)
                 {
                     Exec(central,
-                        "UPDATE place_out SET name=@n,place_count=@cnt,serviceFee=@sf,price=@pr," +
+                        "UPDATE place_out SET name=@n,place_count=@cnt,serviceFee=@sf,price=@pr,price_type=@pt," +
                         "sort_order=@so,updated_at=@ua WHERE id=@cid",
                         P("@n",r["name"]),P("@cnt",r["place_count"]),P("@sf",r["serviceFee"]),
-                        P("@pr",r["price"]),P("@so",r["sort_order"]),
+                        P("@pr",r["price"]),P("@pt",r["price_type"]),P("@so",r["sort_order"]),
                         P("@ua",r["updated_at"]),P("@cid",cid.Value));
                 }
                 else
                 {
                     object newId = Exec(central,
-                        "INSERT INTO place_out(place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order)" +
-                        " OUTPUT INSERTED.id VALUES(@catid,@n,@cnt,@ca,@ua,@sf,@pr,@so)",
+                        "INSERT INTO place_out(place_category_id,name,place_count,created_at,updated_at,serviceFee,price,price_type,sort_order)" +
+                        " OUTPUT INSERTED.id VALUES(@catid,@n,@cnt,@ca,@ua,@sf,@pr,@pt,@so)",
                         P("@catid",centralCatId),P("@n",r["name"]),P("@cnt",r["place_count"]),
                         P("@ca",r["created_at"]),P("@ua",r["updated_at"]),P("@sf",r["serviceFee"]),
-                        P("@pr",r["price"]),P("@so",r["sort_order"]));
+                        P("@pr",r["price"]),P("@pt",r["price_type"]),P("@so",r["sort_order"]));
                     cid = Convert.ToInt32(newId);
                 }
                 // central_id ni lokal DB ga saqlash (ustun mavjud bo'lsa)
@@ -1264,22 +1264,22 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             DataTable rows = ReadAll(central,
-                "SELECT id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order FROM place_out");
+                "SELECT id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,ISNULL(price_type,'UZS') AS price_type,sort_order FROM place_out");
             foreach (DataRow r in rows.Rows)
             {
                 Exec(local,
                     "IF EXISTS (SELECT 1 FROM place_out WHERE id=@id) " +
                     "  UPDATE place_out SET place_category_id=@pc,name=@n,place_count=@cnt," +
-                    "    updated_at=@ua,serviceFee=@sf,price=@pr,sort_order=@so WHERE id=@id " +
+                    "    updated_at=@ua,serviceFee=@sf,price=@pr,price_type=@pt,sort_order=@so WHERE id=@id " +
                     "ELSE BEGIN " +
                     "  SET IDENTITY_INSERT place_out ON; " +
-                    "  INSERT INTO place_out(id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,sort_order) " +
-                    "  VALUES(@id,@pc,@n,@cnt,@ca,@ua,@sf,@pr,@so); " +
+                    "  INSERT INTO place_out(id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,price_type,sort_order) " +
+                    "  VALUES(@id,@pc,@n,@cnt,@ca,@ua,@sf,@pr,@pt,@so); " +
                     "  SET IDENTITY_INSERT place_out OFF " +
                     "END",
                     P("@id", r["id"]), P("@pc", r["place_category_id"]), P("@n", r["name"]),
                     P("@cnt", r["place_count"]), P("@ca", r["created_at"]), P("@ua", r["updated_at"]),
-                    P("@sf", r["serviceFee"]), P("@pr", r["price"]), P("@so", r["sort_order"]));
+                    P("@sf", r["serviceFee"]), P("@pr", r["price"]), P("@pt", r["price_type"]), P("@so", r["sort_order"]));
                 count++;
             }
             return count;
