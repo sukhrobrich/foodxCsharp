@@ -1770,8 +1770,12 @@ namespace WindowsFormsApp1.forms.order
                     if (row != null && row["name"].ToString().Equals("Qarz", StringComparison.OrdinalIgnoreCase))
                     {
                         comboPayment.SelectedIndex = i;
+                        int qarzPayId = Convert.ToInt32(row["id"]);
                         _btnPayment.Text = "◈\nQarz";
                         _btnPayment.BackColor = Color.FromArgb(254, 226, 226);
+                        // _paymentEntries yangilash — amount 0 (CloseOrder da finalTotal bilan to'ldiriladi)
+                        _paymentEntries.Clear();
+                        _paymentEntries.Add((qarzPayId, "Qarz", 0m));
                         return;
                     }
                 }
@@ -2292,6 +2296,15 @@ namespace WindowsFormsApp1.forms.order
                 updTotal.Parameters.AddWithValue("@dpct",   _discountPct);
                 updTotal.ExecuteNonQuery();
 
+                // Qarz to'lov: amount=0 bo'lsa total bilan to'ldirish
+                if (_paymentEntries.Count == 1
+                    && _paymentEntries[0].amount == 0m
+                    && _paymentEntries[0].name.Equals("Qarz", StringComparison.OrdinalIgnoreCase))
+                {
+                    var e0 = _paymentEntries[0];
+                    _paymentEntries[0] = (e0.id, e0.name, total);
+                }
+
                 // Save payment entries to order_payments
                 using (var del2 = new SqlCommand("DELETE FROM order_payments WHERE order_id=@oid", db.GetCon(), tr))
                 { del2.Parameters.AddWithValue("@oid", orderId); del2.ExecuteNonQuery(); }
@@ -2491,6 +2504,15 @@ namespace WindowsFormsApp1.forms.order
                 decimal grand    = food + CalcPlaceAmount(food) + svcAmt;
                 decimal discAmt  = Math.Round(grand * _discountPct / 100, 0);
                 decimal finalTotal = grand - discAmt;
+
+                // Qarz to'lov: faqat bitta Qarz entry, amount=0 → finalTotal bilan to'ldirish
+                if (_paymentEntries.Count == 1
+                    && _paymentEntries[0].amount == 0m
+                    && _paymentEntries[0].name.Equals("Qarz", StringComparison.OrdinalIgnoreCase))
+                {
+                    var e0 = _paymentEntries[0];
+                    _paymentEntries[0] = (e0.id, e0.name, finalTotal);
+                }
 
                 // To'lov yozuvlari mavjud bo'lsa, ularning jami buyurtma summasiga teng ekanligini tekshiramiz.
                 // Agar mos kelmasa (masalan, chegirma qo'shilgandan keyin to'lov yangilanmagan bo'lsa),
