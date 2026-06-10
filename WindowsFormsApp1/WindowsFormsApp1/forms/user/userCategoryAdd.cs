@@ -322,11 +322,16 @@ namespace WindowsFormsApp1.forms.user
             dbconnect db = new dbconnect();
             try
             {
+                db.OpenCon();
+                int? centralCatId = null;
+                using (var cid = new SqlCommand("SELECT central_id FROM user_category WHERE id=@id", db.GetCon()))
+                { cid.Parameters.AddWithValue("@id", id); object v = cid.ExecuteScalar(); if (v != null && v != DBNull.Value) centralCatId = Convert.ToInt32(v); }
                 SqlCommand cmd = new SqlCommand("DELETE FROM user_category WHERE id=@id", db.GetCon());
                 cmd.Parameters.AddWithValue("@id", id);
-                db.OpenCon();
                 cmd.ExecuteNonQuery();
                 db.CloseCon();
+                if (centralCatId.HasValue && Session.IsOnline && Session.TenantId > 0)
+                    SyncQueueHelper.Add("UserCategoryDelete", centralCatId.Value, "Delete");
             }
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
         }

@@ -712,12 +712,17 @@ namespace WindowsFormsApp1.forms.user
                 if (MessageBox.Show(msg, "Tasdiqlash", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
                 db.OpenCon();
+                int? centralUserId = null;
+                using (var cid = new SqlCommand("SELECT central_id FROM [user] WHERE id=@id", db.GetCon()))
+                { cid.Parameters.AddWithValue("@id", editingUserId); object v = cid.ExecuteScalar(); if (v != null && v != DBNull.Value) centralUserId = Convert.ToInt32(v); }
                 // Unlink orders first to avoid FK violation
                 using (SqlCommand ul = new SqlCommand("UPDATE [order] SET user_id=NULL WHERE user_id=@id", db.GetCon()))
                 { ul.Parameters.AddWithValue("@id", editingUserId); ul.ExecuteNonQuery(); }
                 using (SqlCommand cmd = new SqlCommand("DELETE FROM [user] WHERE id=@id", db.GetCon()))
                 { cmd.Parameters.AddWithValue("@id", editingUserId); cmd.ExecuteNonQuery(); }
                 db.CloseCon();
+                if (centralUserId.HasValue && Session.IsOnline && Session.TenantId > 0)
+                    SyncQueueHelper.Add("UserDelete", centralUserId.Value, "Delete");
                 userEditPanel.Visible = false;
                 ClearUserForm(); LoadUsers();
             }

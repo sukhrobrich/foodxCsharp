@@ -100,6 +100,9 @@ namespace WindowsFormsApp1.services
                 TryUl(() => SyncIngredientQuantities(local, central), result);
                 // FIX: Oflayn o'zgartirilgan sozlamalarni central ga yuklash
                 TryUl(() => SyncSettings(local, central),             result);
+                // Web dan xodim/kategoriya o'zgarishlarini yuklab olish (create/update/delete)
+                TryDl(() => DlUserCategoriesWithDelete(local, central), result);
+                TryDl(() => DlUsersWithDelete(local, central),          result);
                 // Web/mobil dan qo'shilgan kassa yozuvlarini yuklab olish
                 TryDl(() => DlCashTransactions(local, central),       result);
                 // Web dan taom/kategoriya o'zgarishlarini yuklab olish (create/update/delete)
@@ -1157,6 +1160,45 @@ namespace WindowsFormsApp1.services
             return count;
         }
 
+        private static int DlUserCategoriesWithDelete(SqlConnection local, SqlConnection central)
+        {
+            int count = DlUserCategories(local, central);
+
+            DataTable centralIds = ReadAll(central, "SELECT id FROM user_category");
+            if (centralIds.Rows.Count == 0) return count;
+
+            var ids = new System.Text.StringBuilder();
+            foreach (DataRow r in centralIds.Rows) { if (ids.Length > 0) ids.Append(','); ids.Append(r["id"]); }
+
+            // Foydalanuvchisi qolmagan va markaziy DBda yo'q kategoriyalarni o'chir
+            Exec(local,
+                $"DELETE FROM user_category WHERE central_id IS NOT NULL " +
+                $"AND central_id NOT IN ({ids}) " +
+                $"AND id NOT IN (SELECT DISTINCT user_category_id FROM [user] WHERE user_category_id IS NOT NULL)");
+
+            return count;
+        }
+
+        private static int DlUsersWithDelete(SqlConnection local, SqlConnection central)
+        {
+            int count = DlUsers(local, central);
+
+            DataTable centralIds = ReadAll(central, "SELECT id FROM [user]");
+            if (centralIds.Rows.Count == 0) return count;
+
+            var ids = new System.Text.StringBuilder();
+            foreach (DataRow r in centralIds.Rows) { if (ids.Length > 0) ids.Append(','); ids.Append(r["id"]); }
+
+            // Markaziy DBda yo'q xodimlarni lokaldan o'chir
+            Exec(local,
+                $"UPDATE [order] SET user_id=NULL WHERE user_id IN " +
+                $"  (SELECT id FROM [user] WHERE central_id IS NOT NULL AND central_id NOT IN ({ids}))");
+            Exec(local,
+                $"DELETE FROM [user] WHERE central_id IS NOT NULL AND central_id NOT IN ({ids})");
+
+            return count;
+        }
+
         private static int DlFoodCategories(SqlConnection local, SqlConnection central)
         {
             int count = 0;
@@ -1647,6 +1689,22 @@ namespace WindowsFormsApp1.services
                                 break;
                             case SyncQueueHelper.FoodPurchases:
                                 SyncSingleFoodPurchase(local, central, entityId);
+                                break;
+                            case "UserDelete":
+                                // entityId = central_id
+                                try {
+                                    Exec(central, "UPDATE [order] SET user_id=NULL WHERE user_id=@id", P("@id", entityId));
+                                    Exec(central, "DELETE FROM [user] WHERE id=@id", P("@id", entityId));
+                                } catch { }
+                                break;
+                            case "UserCategoryDelete":
+                                // entityId = central_id. Ichida xodim bo'lmasa o'chiradi
+                                try {
+                                    int ucRefs = Convert.ToInt32(ScalarOrNull(central,
+                                        "SELECT COUNT(*) FROM [user] WHERE user_category_id=@id", "@id", entityId) ?? 0);
+                                    if (ucRefs == 0)
+                                        Exec(central, "DELETE FROM user_category WHERE id=@id", P("@id", entityId));
+                                } catch { }
                                 break;
                             case "FoodCategoryDelete":
                                 // entityId = central_id. Ichida taom bo'lmasa o'chiradi
