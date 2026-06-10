@@ -448,9 +448,18 @@ namespace WindowsFormsApp1.forms.food
                         MessageBox.Show($"Bu kategoriyada {foodCnt} ta taom bor. Avval taomlarni o'chiring yoki boshqa kategoriyaga o'tkazing.", "Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
+                    int? centralCatId = null;
+                    using (var cid = new SqlCommand("SELECT central_id FROM food_category WHERE id=@id", db.GetCon()))
+                    {
+                        cid.Parameters.AddWithValue("@id", id);
+                        object v = cid.ExecuteScalar();
+                        if (v != null && v != DBNull.Value) centralCatId = Convert.ToInt32(v);
+                    }
                     SqlCommand cmd = new SqlCommand("DELETE FROM food_category WHERE id=@id", db.GetCon());
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.ExecuteNonQuery(); db.CloseCon();
+                    if (centralCatId.HasValue && Session.IsOnline && Session.TenantId > 0)
+                        SyncQueueHelper.Add("FoodCategoryDelete", centralCatId.Value, "Delete");
                     LoadCategories(GetSearchText());
                 }
                 catch (Exception ex) { MessageBox.Show("O'chirishda xatolik: " + ex.Message); }
