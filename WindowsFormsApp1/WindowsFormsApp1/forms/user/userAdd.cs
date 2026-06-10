@@ -669,7 +669,7 @@ namespace WindowsFormsApp1.forms.user
                 else
                 {
                     var setParts = new System.Collections.Generic.List<string>
-                        { "name=@n","login=@l","phone_number=@ph","user_category_id=@c" };
+                        { "name=@n","login=@l","phone_number=@ph","user_category_id=@c","updated_at=GETDATE()" };
                     if (!string.IsNullOrEmpty(pin))   setParts.Add("password=@p");
                     if (!string.IsNullOrEmpty(appPw)) setParts.Add("app_password=@ap");
                     string sql = "UPDATE [user] SET " + string.Join(",", setParts) + " WHERE id=@id";

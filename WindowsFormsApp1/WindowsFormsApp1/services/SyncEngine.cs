@@ -215,7 +215,8 @@ namespace WindowsFormsApp1.services
                 if (cid.HasValue)
                     Exec(central,
                         "UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw," +
-                        "app_password=@ap,phone_number=@ph,updated_at=@ua,sort_order=@so WHERE id=@cid",
+                        "app_password=@ap,phone_number=@ph,updated_at=@ua,sort_order=@so " +
+                        "WHERE id=@cid AND ISNULL(updated_at,'1900-01-01') <= @ua",
                         P("@n",r["name"]),P("@uc",catCid),P("@l",r["login"]),P("@pw",r["password"]),
                         P("@ap",r["app_password"]),P("@ph",r["phone_number"]),P("@ua",r["updated_at"]),
                         P("@so",r["sort_order"]),P("@cid",cid.Value));
