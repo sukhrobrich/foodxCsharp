@@ -1371,9 +1371,10 @@ namespace WindowsFormsApp1.services
                 "SELECT id,place_out_id,room_name,empty,created_at,user_id,price FROM place_in");
             foreach (DataRow r in rows.Rows)
             {
+                // UPDATE da user_id va empty yangilanmaydi — lokal WinForms boshqaradi
                 Exec(local,
                     "IF EXISTS (SELECT 1 FROM place_in WHERE id=@id) " +
-                    "  UPDATE place_in SET place_out_id=@po,room_name=@rn,user_id=@uid,price=@pr WHERE id=@id " +
+                    "  UPDATE place_in SET place_out_id=@po,room_name=@rn,price=@pr WHERE id=@id " +
                     "ELSE BEGIN " +
                     "  SET IDENTITY_INSERT place_in ON; " +
                     "  INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,user_id,price) " +
