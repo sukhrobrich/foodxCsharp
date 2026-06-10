@@ -688,7 +688,7 @@ namespace WindowsFormsApp1.services
         {
             int count = 0;
             DataTable rows = ReadAll(local,
-                "SELECT id, name, phone, notes, created_at, sync_token FROM customer WHERE is_synced = 0");
+                "SELECT id, name, phone, notes, login, password, created_at, sync_token FROM customer WHERE is_synced = 0");
 
             foreach (DataRow r in rows.Rows)
             {
@@ -708,13 +708,22 @@ namespace WindowsFormsApp1.services
                 if (centralId == null)
                 {
                     object inserted = Exec(central,
-                        "INSERT INTO customer (name, phone, notes, created_at, sync_token) " +
+                        "INSERT INTO customer (name, phone, notes, login, password, created_at, sync_token) " +
                         "OUTPUT INSERTED.id " +
-                        "VALUES (@n, @p, @no, @c, @t)",
+                        "VALUES (@n, @p, @no, @lg, @pw, @c, @t)",
                         P("@n",  r["name"]),       P("@p",  r["phone"]),
-                        P("@no", r["notes"]),       P("@c",  r["created_at"]),
+                        P("@no", r["notes"]),       P("@lg", r["login"]),
+                        P("@pw", r["password"]),   P("@c",  r["created_at"]),
                         P("@t",  tok));
                     centralId = Convert.ToInt32(inserted);
+                }
+                else
+                {
+                    Exec(central,
+                        "UPDATE customer SET name=@n, phone=@p, notes=@no, login=@lg, password=ISNULL(NULLIF(@pw,''),password) WHERE id=@cid",
+                        P("@n",  r["name"]),     P("@p",  r["phone"]),
+                        P("@no", r["notes"]),    P("@lg", r["login"]),
+                        P("@pw", r["password"]), P("@cid", centralId));
                 }
 
                 Exec(local,
@@ -1994,15 +2003,17 @@ namespace WindowsFormsApp1.services
             if (centralId == null)
             {
                 object inserted = Exec(central,
-                    "INSERT INTO customer(name,phone,notes,created_at,sync_token)" +
-                    " OUTPUT INSERTED.id VALUES(@n,@ph,@nt,@cat,@tok)",
+                    "INSERT INTO customer(name,phone,notes,login,password,created_at,sync_token)" +
+                    " OUTPUT INSERTED.id VALUES(@n,@ph,@nt,@lg,@pw,@cat,@tok)",
                     P("@n",r["name"]),P("@ph",r["phone"]),P("@nt",r["notes"]),
+                    P("@lg",r["login"]),P("@pw",r["password"]),
                     P("@cat",r["created_at"]),P("@tok",tok));
                 centralId = Convert.ToInt32(inserted);
             }
             else
-                Exec(central, "UPDATE customer SET name=@n,phone=@ph,notes=@nt WHERE sync_token=@tok",
-                    P("@n",r["name"]),P("@ph",r["phone"]),P("@nt",r["notes"]),P("@tok",tok));
+                Exec(central, "UPDATE customer SET name=@n,phone=@ph,notes=@nt,login=@lg,password=ISNULL(NULLIF(@pw,''),password) WHERE sync_token=@tok",
+                    P("@n",r["name"]),P("@ph",r["phone"]),P("@nt",r["notes"]),
+                    P("@lg",r["login"]),P("@pw",r["password"]),P("@tok",tok));
             Exec(local, $"UPDATE customer SET is_synced=1, central_id={centralId} WHERE id={localId}");
         }
 
@@ -2051,10 +2062,11 @@ namespace WindowsFormsApp1.services
         private static int DlCustomers(SqlConnection local, SqlConnection central)
         {
             int count = 0;
-            // Central API: name, phone, notes — email/address yo'q
             DataTable rows = ReadAll(central,
                 "SELECT id, ISNULL(name,'') AS name, ISNULL(phone,'') AS phone, " +
-                "  ISNULL(notes,'') AS notes, ISNULL(created_at,GETDATE()) AS created_at," +
+                "  ISNULL(notes,'') AS notes, ISNULL(login,'') AS login," +
+                "  ISNULL(password,'') AS password," +
+                "  ISNULL(created_at,GETDATE()) AS created_at," +
                 "  ISNULL(sync_token,NEWID()) AS sync_token " +
                 "FROM customer");
             foreach (DataRow r in rows.Rows)
@@ -2064,16 +2076,19 @@ namespace WindowsFormsApp1.services
                         ?? ScalarOrNull(local, "SELECT id FROM customer WHERE id=@c", "@c", cid);
                 if (lid != null)
                     Exec(local,
-                        "UPDATE customer SET name=@n,phone=@ph,notes=@nt,central_id=@cid,is_synced=1 WHERE id=@id",
+                        "UPDATE customer SET name=@n,phone=@ph,notes=@nt,login=@lg," +
+                        "password=ISNULL(NULLIF(@pw,''),password),central_id=@cid,is_synced=1 WHERE id=@id",
                         P("@n",r["name"]),P("@ph",r["phone"]),P("@nt",r["notes"]),
+                        P("@lg",r["login"]),P("@pw",r["password"]),
                         P("@cid",cid),P("@id",lid.Value));
                 else
                     Exec(local,
                         "SET IDENTITY_INSERT customer ON;" +
-                        "INSERT INTO customer(id,name,phone,notes,created_at,sync_token,is_synced,central_id)" +
-                        " VALUES(@id,@n,@ph,@nt,@cat,@tok,1,@id);" +
+                        "INSERT INTO customer(id,name,phone,notes,login,password,created_at,sync_token,is_synced,central_id)" +
+                        " VALUES(@id,@n,@ph,@nt,@lg,@pw,@cat,@tok,1,@id);" +
                         "SET IDENTITY_INSERT customer OFF",
                         P("@id",cid),P("@n",r["name"]),P("@ph",r["phone"]),P("@nt",r["notes"]),
+                        P("@lg",r["login"]),P("@pw",r["password"]),
                         P("@cat",r["created_at"]),P("@tok",r["sync_token"]));
                 count++;
             }

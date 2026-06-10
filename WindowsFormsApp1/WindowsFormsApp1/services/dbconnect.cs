@@ -386,6 +386,10 @@ namespace WindowsFormsApp1.services
                         // place_out va place_in uchun central_id (UPDATE/DELETE sync uchun)
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='place_out' AND COLUMN_NAME='central_id') ALTER TABLE place_out ADD central_id INT NULL",
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='place_in' AND COLUMN_NAME='central_id') ALTER TABLE place_in ADD central_id INT NULL",
+
+                        // customer uchun login va password (mijoz hisobi)
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='customer' AND COLUMN_NAME='login') ALTER TABLE customer ADD login NVARCHAR(100) NULL",
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='customer' AND COLUMN_NAME='password') ALTER TABLE customer ADD password NVARCHAR(200) NULL",
                     };
                     foreach (string sql in schemaMigrations)
                         using (var cmd = new SqlCommand(sql, c))

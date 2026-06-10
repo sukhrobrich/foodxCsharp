@@ -55,7 +55,7 @@ namespace WindowsFormsApp1.forms.customer
                 ForeColor = Color.White, Font = new Font("Segoe UI", 10, FontStyle.Bold), Cursor = Cursors.Hand
             };
             btnAdd.FlatAppearance.BorderSize = 0;
-            btnAdd.Click += (s, e) => ShowEditDialog(0, "", "", "");
+            btnAdd.Click += (s, e) => ShowEditDialog(0, "", "", "", "", "");
 
             bar.Controls.Add(txtSearch);
             bar.Controls.Add(btnAdd);
@@ -129,6 +129,7 @@ namespace WindowsFormsApp1.forms.customer
             {
                 var db = new dbconnect();
                 string sql = @"SELECT id, name, ISNULL(phone,'') AS phone, ISNULL(notes,'') AS notes,
+                               ISNULL(login,'') AS login,
                                FORMAT(created_at,'dd.MM.yyyy') AS sana
                                FROM customer
                                WHERE (@f='' OR name LIKE '%'+@f+'%' OR phone LIKE '%'+@f+'%')
@@ -140,11 +141,12 @@ namespace WindowsFormsApp1.forms.customer
                     da.Fill(dt);
                 }
                 grid.DataSource = dt;
-                if (grid.Columns.Contains("id")) grid.Columns["id"].Visible = false;
-                if (grid.Columns.Contains("name"))  { grid.Columns["name"].HeaderText  = "Ism";       grid.Columns["name"].FillWeight  = 30; }
-                if (grid.Columns.Contains("phone")) { grid.Columns["phone"].HeaderText = "Telefon";   grid.Columns["phone"].FillWeight = 25; }
-                if (grid.Columns.Contains("notes")) { grid.Columns["notes"].HeaderText = "Izoh";      grid.Columns["notes"].FillWeight = 30; }
-                if (grid.Columns.Contains("sana"))  { grid.Columns["sana"].HeaderText  = "Qo'shilgan"; grid.Columns["sana"].FillWeight = 15; }
+                if (grid.Columns.Contains("id"))    grid.Columns["id"].Visible = false;
+                if (grid.Columns.Contains("name"))  { grid.Columns["name"].HeaderText  = "Ism";       grid.Columns["name"].FillWeight  = 28; }
+                if (grid.Columns.Contains("phone")) { grid.Columns["phone"].HeaderText = "Telefon";   grid.Columns["phone"].FillWeight = 22; }
+                if (grid.Columns.Contains("login")) { grid.Columns["login"].HeaderText = "Login";     grid.Columns["login"].FillWeight = 20; }
+                if (grid.Columns.Contains("notes")) { grid.Columns["notes"].HeaderText = "Izoh";      grid.Columns["notes"].FillWeight = 20; }
+                if (grid.Columns.Contains("sana"))  { grid.Columns["sana"].HeaderText  = "Qo'shilgan"; grid.Columns["sana"].FillWeight = 10; }
             }
             catch { }
         }
@@ -157,7 +159,9 @@ namespace WindowsFormsApp1.forms.customer
             ShowEditDialog(id,
                 row.Cells["name"].Value?.ToString() ?? "",
                 row.Cells["phone"].Value?.ToString() ?? "",
-                row.Cells["notes"].Value?.ToString() ?? "");
+                row.Cells["notes"].Value?.ToString() ?? "",
+                row.Cells["login"].Value?.ToString() ?? "",
+                "");
         }
 
         private void DeleteSelected()
@@ -204,29 +208,37 @@ namespace WindowsFormsApp1.forms.customer
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
         }
 
-        private void ShowEditDialog(int id, string name, string phone, string notes)
+        private void ShowEditDialog(int id, string name, string phone, string notes, string login, string password)
         {
             bool isNew = id == 0;
             Form dlg = new Form
             {
                 Text = isNew ? "Yangi mijoz" : "Mijozni tahrirlash",
-                Width = 360, Height = 280,
+                Width = 380, Height = 420,
                 StartPosition = FormStartPosition.CenterParent,
                 FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
                 BackColor = Color.FromArgb(249, 249, 251)
             };
 
             void Lbl(string t, int y) => dlg.Controls.Add(new Label { Text = t, Location = new Point(14, y), AutoSize = true, Font = new Font("Segoe UI", 9), ForeColor = TextMuted });
-            TextBox Txt(string val, int y) { var t = new TextBox { Text = val, Location = new Point(14, y), Width = 308, Height = 30, Font = new Font("Segoe UI", 10), BorderStyle = BorderStyle.FixedSingle }; dlg.Controls.Add(t); return t; }
+            TextBox Txt(string val, int y, bool pw = false)
+            {
+                var t = new TextBox { Text = val, Location = new Point(14, y), Width = 330, Height = 30, Font = new Font("Segoe UI", 10), BorderStyle = BorderStyle.FixedSingle };
+                if (pw) t.PasswordChar = '●';
+                dlg.Controls.Add(t);
+                return t;
+            }
 
-            Lbl("Ism *", 14);   var txtName  = Txt(name,  32);
-            Lbl("Telefon", 72); var txtPhone = Txt(phone, 90);
-            Lbl("Izoh",   130); var txtNotes = Txt(notes, 148);
+            Lbl("Ism *", 14);                                                       var txtName  = Txt(name,  32);
+            Lbl("Telefon", 72);                                                     var txtPhone = Txt(phone, 90);
+            Lbl("Izoh",   130);                                                     var txtNotes = Txt(notes, 148);
+            Lbl("Login",  188);                                                     var txtLogin = Txt(login, 206);
+            Lbl(isNew ? "Parol" : "Parol (bo'sh qoldiring — o'zgarmaydi)", 246);   var txtPwd   = Txt("",    264, pw: true);
 
             var btnOk = new Button
             {
                 Text = isNew ? "Qo'shish" : "Saqlash",
-                Location = new Point(14, 192), Width = 308, Height = 42,
+                Location = new Point(14, 310), Width = 330, Height = 42,
                 FlatStyle = FlatStyle.Flat, BackColor = Gold, ForeColor = Color.White,
                 Font = new Font("Segoe UI", 10, FontStyle.Bold)
             };
@@ -238,30 +250,37 @@ namespace WindowsFormsApp1.forms.customer
                 {
                     var db = new dbconnect(); db.OpenCon();
                     int savedId = id;
+                    string loginVal = txtLogin.Text.Trim();
+                    string pwPlain  = txtPwd.Text.Trim();
+                    string pwHashed = string.IsNullOrEmpty(pwPlain) ? null : Session.HashPin(pwPlain);
+
                     if (isNew)
                     {
                         var insCmd = new SqlCommand(
-                            "INSERT INTO customer(name,phone,notes) OUTPUT INSERTED.id VALUES(@n,@p,@nt)",
+                            "INSERT INTO customer(name,phone,notes,login,password) OUTPUT INSERTED.id VALUES(@n,@p,@nt,@lg,@pw)",
                             db.GetCon());
                         insCmd.Parameters.AddWithValue("@n",  txtName.Text.Trim());
                         insCmd.Parameters.AddWithValue("@p",  string.IsNullOrEmpty(txtPhone.Text.Trim()) ? (object)DBNull.Value : txtPhone.Text.Trim());
                         insCmd.Parameters.AddWithValue("@nt", string.IsNullOrEmpty(txtNotes.Text.Trim()) ? (object)DBNull.Value : txtNotes.Text.Trim());
+                        insCmd.Parameters.AddWithValue("@lg", string.IsNullOrEmpty(loginVal) ? (object)DBNull.Value : loginVal);
+                        insCmd.Parameters.AddWithValue("@pw", pwHashed == null ? (object)DBNull.Value : pwHashed);
                         savedId = (int)insCmd.ExecuteScalar();
                     }
                     else
                     {
-                        // UPDATE: is_synced=0 — centralga qayta yuboriladi
+                        string pwSql = pwHashed != null ? ", password=@pw" : "";
                         var updCmd = new SqlCommand(
-                            "UPDATE customer SET name=@n, phone=@p, notes=@nt, is_synced=0 WHERE id=@id",
+                            $"UPDATE customer SET name=@n, phone=@p, notes=@nt, login=@lg{pwSql}, is_synced=0 WHERE id=@id",
                             db.GetCon());
                         updCmd.Parameters.AddWithValue("@n",  txtName.Text.Trim());
                         updCmd.Parameters.AddWithValue("@p",  string.IsNullOrEmpty(txtPhone.Text.Trim()) ? (object)DBNull.Value : txtPhone.Text.Trim());
                         updCmd.Parameters.AddWithValue("@nt", string.IsNullOrEmpty(txtNotes.Text.Trim()) ? (object)DBNull.Value : txtNotes.Text.Trim());
+                        updCmd.Parameters.AddWithValue("@lg", string.IsNullOrEmpty(loginVal) ? (object)DBNull.Value : loginVal);
+                        if (pwHashed != null) updCmd.Parameters.AddWithValue("@pw", pwHashed);
                         updCmd.Parameters.AddWithValue("@id", id);
                         updCmd.ExecuteNonQuery();
                     }
                     db.CloseCon();
-                    // Darhol sync trigger (5 soniyada markaziy bazaga tushadi)
                     SyncQueueHelper.Add(SyncQueueHelper.Customers, savedId, isNew ? "Insert" : "Update");
                     dlg.DialogResult = DialogResult.OK;
                     LoadData(txtSearch.Text);
@@ -271,5 +290,6 @@ namespace WindowsFormsApp1.forms.customer
             dlg.Controls.Add(btnOk);
             dlg.ShowDialog(this.FindForm());
         }
+
     }
 }
