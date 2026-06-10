@@ -395,14 +395,8 @@ namespace WindowsFormsApp1.services
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='is_customer_order') ALTER TABLE [order] ADD is_customer_order BIT NOT NULL DEFAULT 0",
 
                         // order.user_id va place_id — mijoz orderlari uchun NULL qabul qilsin
-                        @"DECLARE @col NVARCHAR(50)='user_id'
-                          IF EXISTS(SELECT 1 FROM sys.columns c JOIN sys.objects o ON o.id=c.object_id
-                                    WHERE o.name='order' AND c.name=@col AND c.is_nullable=0)
-                              ALTER TABLE [order] ALTER COLUMN user_id INT NULL",
-                        @"DECLARE @col2 NVARCHAR(50)='place_id'
-                          IF EXISTS(SELECT 1 FROM sys.columns c JOIN sys.objects o ON o.id=c.object_id
-                                    WHERE o.name='order' AND c.name=@col2 AND c.is_nullable=0)
-                              ALTER TABLE [order] ALTER COLUMN place_id INT NULL",
+                        "IF EXISTS(SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[order]') AND name='user_id'  AND is_nullable=0) EXEC('ALTER TABLE [order] ALTER COLUMN user_id  INT NULL')",
+                        "IF EXISTS(SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[order]') AND name='place_id' AND is_nullable=0) EXEC('ALTER TABLE [order] ALTER COLUMN place_id INT NULL')",
                     };
                     foreach (string sql in schemaMigrations)
                         using (var cmd = new SqlCommand(sql, c))
