@@ -1895,7 +1895,7 @@ namespace WindowsFormsApp1.forms.order
                     {
                         c.Parameters.AddWithValue("@oid", orderId);
                         object r = c.ExecuteScalar();
-                        if (r != null) pid = Convert.ToInt32(r);
+                        if (r != null && r != DBNull.Value) pid = Convert.ToInt32(r);
                     }
                     db.CloseCon();
                 }
@@ -2491,12 +2491,13 @@ namespace WindowsFormsApp1.forms.order
                 dbconnect db = new dbconnect();
                 db.OpenCon();
 
-                // Get place_id
+                // Get place_id (mijoz orderlari uchun NULL bo'lishi mumkin)
                 int pid = 0;
                 using (SqlCommand cmd = new SqlCommand("SELECT place_id FROM [order] WHERE id=@id", db.GetCon()))
                 {
                     cmd.Parameters.AddWithValue("@id", orderId);
-                    pid = Convert.ToInt32(cmd.ExecuteScalar());
+                    var rawPid = cmd.ExecuteScalar();
+                    pid = (rawPid != null && rawPid != DBNull.Value) ? Convert.ToInt32(rawPid) : 0;
                 }
 
                 int payId = 0;
