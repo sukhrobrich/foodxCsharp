@@ -105,6 +105,9 @@ namespace WindowsFormsApp1.services
                 // Web dan taom/kategoriya o'zgarishlarini yuklab olish (create/update/delete)
                 TryDl(() => DlFoodCategoriesWithDelete(local, central), result);
                 TryDl(() => DlFoodsWithDelete(local, central),          result);
+                // Web dan stollar/zonalar o'zgarishlarini yuklab olish (create/update/delete)
+                TryDl(() => DlPlaceInsWithDelete(local, central),     result);
+                TryDl(() => DlPlaceOutsWithDelete(local, central),    result);
                 // Web dan masalliqlarni yuklab olish (quantity delta saqlab)
                 TryDl(() => DlIngredients(local, central),            result);
             }
@@ -1330,6 +1333,52 @@ namespace WindowsFormsApp1.services
                     P("@uid", r["user_id"]), P("@pr", r["price"]));
                 count++;
             }
+            return count;
+        }
+
+        private static int DlPlaceInsWithDelete(SqlConnection local, SqlConnection central)
+        {
+            int count = DlPlaceIns(local, central);
+
+            // Markaziy DBda o'chirilgan place_in larni lokaldan ham o'chirish
+            DataTable centralIds = ReadAll(central, "SELECT id FROM place_in");
+            if (centralIds.Rows.Count == 0) return count;
+
+            var ids = new System.Text.StringBuilder();
+            foreach (DataRow r in centralIds.Rows)
+            {
+                if (ids.Length > 0) ids.Append(',');
+                ids.Append(r["id"]);
+            }
+
+            // Aktiv (to'lanmagan) buyurtmasi yo'q va markaziy DBda yo'q place_in larni o'chir
+            Exec(local,
+                $"DELETE FROM place_in WHERE id NOT IN ({ids}) " +
+                $"AND id NOT IN (SELECT DISTINCT place_id FROM [order] WHERE paid='NO' AND place_id IS NOT NULL)");
+
+            return count;
+        }
+
+        private static int DlPlaceOutsWithDelete(SqlConnection local, SqlConnection central)
+        {
+            int count = DlPlaceOuts(local, central);
+
+            // Markaziy DBda o'chirilgan place_out larni lokaldan ham o'chirish
+            DataTable centralIds = ReadAll(central, "SELECT id FROM place_out");
+            if (centralIds.Rows.Count == 0) return count;
+
+            var ids = new System.Text.StringBuilder();
+            foreach (DataRow r in centralIds.Rows)
+            {
+                if (ids.Length > 0) ids.Append(',');
+                ids.Append(r["id"]);
+            }
+
+            // Ichida joy (place_in) qolmagan va markaziy DBda yo'q place_out larni o'chir
+            Exec(local,
+                $"DELETE FROM place_out WHERE id NOT IN ({ids}) " +
+                $"AND id NOT IN (SELECT DISTINCT place_out_id FROM place_in WHERE place_out_id IS NOT NULL)");
+
             return count;
         }
 
