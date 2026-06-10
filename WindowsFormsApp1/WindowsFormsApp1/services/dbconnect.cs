@@ -390,6 +390,9 @@ namespace WindowsFormsApp1.services
                         // customer uchun login va password (mijoz hisobi)
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='customer' AND COLUMN_NAME='login') ALTER TABLE customer ADD login NVARCHAR(100) NULL",
                         "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='customer' AND COLUMN_NAME='password') ALTER TABLE customer ADD password NVARCHAR(200) NULL",
+
+                        // order.is_customer_order — mobil mijoz buyurtmalari belgisi
+                        "IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order' AND COLUMN_NAME='is_customer_order') ALTER TABLE [order] ADD is_customer_order BIT NOT NULL DEFAULT 0",
                     };
                     foreach (string sql in schemaMigrations)
                         using (var cmd = new SqlCommand(sql, c))

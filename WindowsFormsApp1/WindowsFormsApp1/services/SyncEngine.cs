@@ -2111,6 +2111,7 @@ namespace WindowsFormsApp1.services
                 "  ISNULL(custom_svc_fee,0) AS custom_svc_fee," +
                 "  ISNULL(custom_svc_type,'pct') AS custom_svc_type," +
                 "  payment2_id, ISNULL(payment2_amount,0) AS payment2_amount," +
+                "  ISNULL(is_customer_order,0) AS is_customer_order," +
                 "  ISNULL(sync_token,NEWID()) AS sync_token" +
                 " FROM [order]" +
                 " WHERE created_at >= DATEADD(YEAR,-1,GETDATE())");
@@ -2124,21 +2125,22 @@ namespace WindowsFormsApp1.services
                         "UPDATE [order] SET paid=@paid,total=@tot,discount_amount=@disc," +
                         "  discount_pct=@discp,payment_id=@pay,custom_svc_fee=@svf," +
                         "  custom_svc_type=@svt,payment2_id=@p2,payment2_amount=@p2a," +
-                        "  order_note=@note,central_id=@cid,is_synced=1 WHERE id=@id",
+                        "  order_note=@note,is_customer_order=@isco,central_id=@cid,is_synced=1 WHERE id=@id",
                         P("@paid",r["paid"]),P("@tot",r["total"]),P("@disc",r["discount_amount"]),
                         P("@discp",r["discount_pct"]),P("@pay",r["payment_id"]),
                         P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
                         P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
-                        P("@note",r["order_note"]),P("@cid",cid),P("@id",lid.Value));
+                        P("@note",r["order_note"]),P("@isco",r["is_customer_order"]),
+                        P("@cid",cid),P("@id",lid.Value));
                 else
                     Exec(local,
                         "SET IDENTITY_INSERT [order] ON;" +
                         "INSERT INTO [order](id,user_id,place_id,payment_id,created_at,paid,total," +
                         "  discount_amount,discount_pct,customer_id,customer_name,delivery_phone," +
                         "  delivery_address,is_delivery,order_note,custom_svc_fee,custom_svc_type," +
-                        "  payment2_id,payment2_amount,sync_token,is_synced,central_id)" +
+                        "  payment2_id,payment2_amount,is_customer_order,sync_token,is_synced,central_id)" +
                         " VALUES(@id,@uid,@plid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
-                        "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@tok,1,@id);" +
+                        "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@isco,@tok,1,@id);" +
                         "SET IDENTITY_INSERT [order] OFF",
                         P("@id",cid),P("@uid",r["user_id"]),P("@plid",r["place_id"]),
                         P("@pay",r["payment_id"]),P("@cat",r["created_at"]),
@@ -2149,7 +2151,7 @@ namespace WindowsFormsApp1.services
                         P("@isdel",r["is_delivery"]),P("@note",r["order_note"]),
                         P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
                         P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
-                        P("@tok",r["sync_token"]));
+                        P("@isco",r["is_customer_order"]),P("@tok",r["sync_token"]));
                 count++;
             }
             return count;

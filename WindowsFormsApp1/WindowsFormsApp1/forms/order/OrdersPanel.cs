@@ -18,15 +18,16 @@ namespace WindowsFormsApp1.forms.order
         private string _statusFilter = "NO"; // NO=ochiq, YES=yopilgan, ALL=barchasi
         private string _lastSnapshot = null; // state hash for smart diff
 
-        private static readonly Color Gold      = Color.FromArgb(217, 119, 6);
-        private static readonly Color BgMain    = Color.FromArgb(248, 248, 250);
-        private static readonly Color CardBg    = Color.White;
-        private static readonly Color Success   = Color.FromArgb(22, 163, 74);
-        private static readonly Color Danger    = Color.FromArgb(220, 38, 38);
-        private static readonly Color TextDark  = Color.FromArgb(17, 24, 39);
-        private static readonly Color TextMuted = Color.FromArgb(107, 114, 128);
-        private static readonly Color Border    = Color.FromArgb(229, 231, 235);
-        private static readonly Color BtnNorm   = Color.FromArgb(243, 244, 246);
+        private static readonly Color Gold         = Color.FromArgb(217, 119, 6);
+        private static readonly Color BgMain       = Color.FromArgb(248, 248, 250);
+        private static readonly Color CardBg       = Color.White;
+        private static readonly Color CardBgCust   = Color.FromArgb(255, 251, 235); // mijoz kartochkasi — sariq fon
+        private static readonly Color Success      = Color.FromArgb(22, 163, 74);
+        private static readonly Color Danger       = Color.FromArgb(220, 38, 38);
+        private static readonly Color TextDark     = Color.FromArgb(17, 24, 39);
+        private static readonly Color TextMuted    = Color.FromArgb(107, 114, 128);
+        private static readonly Color Border       = Color.FromArgb(229, 231, 235);
+        private static readonly Color BtnNorm      = Color.FromArgb(243, 244, 246);
 
         public OrdersPanel()
         {
@@ -197,6 +198,8 @@ namespace WindowsFormsApp1.forms.order
                         ISNULL(u.name, '') AS waiter_name,
                         ISNULL(pi.room_name, '—') AS table_name,
                         ISNULL(po.name, '—') AS zone_name,
+                        ISNULL(o.is_customer_order, 0) AS is_customer_order,
+                        ISNULL(o.customer_name, '') AS customer_name,
                         (SELECT COUNT(*) FROM order_food WHERE order_id = o.id) AS items_count
                     FROM [order] o
                     LEFT JOIN [user] u ON u.id = o.user_id
@@ -229,6 +232,7 @@ namespace WindowsFormsApp1.forms.order
                       .Append(row["paid"]).Append('|')
                       .Append(t).Append('|')
                       .Append(row["items_count"]).Append('|')
+                      .Append(row["is_customer_order"]).Append('|')
                       .Append(row["waiter_name"]).Append(';');
                 }
                 string snapshot = _statusFilter + sb.ToString();
@@ -294,17 +298,19 @@ namespace WindowsFormsApp1.forms.order
 
         private Panel CreateOrderCard(DataRow row)
         {
-            int orderId    = Convert.ToInt32(row["order_id"]);
-            decimal total  = Convert.ToDecimal(row["total"]);
+            int orderId      = Convert.ToInt32(row["order_id"]);
+            decimal total    = Convert.ToDecimal(row["total"]);
             DateTime created = Convert.ToDateTime(row["created_at"]);
-            string waiter  = row["waiter_name"].ToString();
-            string table   = row["table_name"].ToString();
-            string zone    = row["zone_name"].ToString();
-            int items      = Convert.ToInt32(row["items_count"]);
-            bool isClosed  = row["paid"].ToString() == "YES";
-            string payName = row["pay_name"].ToString();
+            string waiter    = row["waiter_name"].ToString();
+            string table     = row["table_name"].ToString();
+            string zone      = row["zone_name"].ToString();
+            int items        = Convert.ToInt32(row["items_count"]);
+            bool isClosed    = row["paid"].ToString() == "YES";
+            string payName   = row["pay_name"].ToString();
+            bool isCustomer  = Convert.ToInt32(row["is_customer_order"]) == 1;
+            string custName  = row["customer_name"].ToString();
 
-            Color stripe = isClosed ? Success : Gold;
+            Color stripe = isClosed ? Success : (isCustomer ? Gold : Gold);
 
             string timeStr;
             Color  timeColor;
@@ -320,7 +326,8 @@ namespace WindowsFormsApp1.forms.order
                 timeColor = el.TotalMinutes > 30 ? Danger : el.TotalMinutes > 15 ? Gold : Success;
             }
 
-            Panel card = new Panel { Width = 280, Height = 210, Margin = new Padding(8), BackColor = CardBg, Cursor = Cursors.Hand };
+            Color cardBg = isCustomer ? CardBgCust : CardBg;
+            Panel card = new Panel { Width = 280, Height = 210, Margin = new Padding(8), BackColor = cardBg, Cursor = Cursors.Hand };
 
             card.Paint += (s, e) =>
             {
@@ -336,13 +343,30 @@ namespace WindowsFormsApp1.forms.order
                 }
             };
 
-            // Zone — Table
+            // Zone — Table (yoki Mijoz buyurtmasi)
+            string topLabel = isCustomer
+                ? (string.IsNullOrEmpty(custName) ? "Mijoz buyurtmasi" : custName)
+                : $"{zone}  —  {table}";
+            int badgeCount = (isClosed ? 1 : 0) + (isCustomer ? 1 : 0);
             card.Controls.Add(new Label
             {
-                Text = $"{zone}  —  {table}",
+                Text = topLabel,
                 Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = TextDark,
-                Width = isClosed ? 176 : 252, Height = 22, Location = new Point(14, 16), AutoSize = false
+                Width = badgeCount == 0 ? 252 : badgeCount == 1 ? 176 : 108, Height = 22,
+                Location = new Point(14, 16), AutoSize = false
             });
+
+            // "MIJOZ" badge — sariq
+            if (isCustomer)
+                card.Controls.Add(new Label
+                {
+                    Text = "MIJOZ",
+                    Font = new Font("Segoe UI", 7, FontStyle.Bold),
+                    ForeColor = Color.White, BackColor = Gold,
+                    AutoSize = false, Width = 52, Height = 18,
+                    Location = new Point(badgeCount == 2 ? 124 : 198, 17),
+                    TextAlign = ContentAlignment.MiddleCenter
+                });
 
             // "YOPILGAN" badge
             if (isClosed)
@@ -355,11 +379,15 @@ namespace WindowsFormsApp1.forms.order
                     Location = new Point(198, 17), TextAlign = ContentAlignment.MiddleCenter
                 });
 
-            // Waiter
+            // Xodim nomi satri
+            string workerLine = isCustomer
+                ? "Mijoz buyurtmasi"
+                : ("Ofitsiant: " + waiter);
             card.Controls.Add(new Label
             {
-                Text = "Ofitsiant: " + waiter, Font = new Font("Segoe UI", 9),
-                ForeColor = TextMuted, Width = 252, Height = 16, Location = new Point(14, 42), AutoSize = false
+                Text = workerLine, Font = new Font("Segoe UI", 9),
+                ForeColor = isCustomer ? Gold : TextMuted,
+                Width = 252, Height = 16, Location = new Point(14, 42), AutoSize = false
             });
 
             // Separator
@@ -411,8 +439,10 @@ namespace WindowsFormsApp1.forms.order
                 card.Controls.Add(btnClose);
             }
 
-            Color normalBg = CardBg;
-            Color hoverBg  = isClosed ? Color.FromArgb(240, 253, 244) : Color.FromArgb(252, 252, 255);
+            Color normalBg = cardBg;
+            Color hoverBg  = isCustomer ? Color.FromArgb(254, 243, 199)
+                           : isClosed   ? Color.FromArgb(240, 253, 244)
+                                        : Color.FromArgb(252, 252, 255);
             card.MouseEnter += (s, e) => { card.BackColor = hoverBg; card.Refresh(); };
             card.MouseLeave += (s, e) => { card.BackColor = normalBg; card.Refresh(); };
 

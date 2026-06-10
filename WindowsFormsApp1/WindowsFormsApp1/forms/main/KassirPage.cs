@@ -21,6 +21,7 @@ namespace WindowsFormsApp1.forms.main
         static readonly Color NavAct   = Color.FromArgb(22, 163, 74);
         static readonly Color BgPage   = Color.FromArgb(245, 246, 250);
         static readonly Color BgCard   = Color.White;
+        static readonly Color BgCust   = Color.FromArgb(255, 251, 235); // mijoz — sariq fon
         static readonly Color TxtDark  = Color.FromArgb(17, 24, 39);
         static readonly Color TxtMuted = Color.FromArgb(107, 114, 128);
         static readonly Color Gold     = Color.FromArgb(217, 119, 6);
@@ -237,12 +238,15 @@ namespace WindowsFormsApp1.forms.main
                     string where = f == "ALL" ? "" : $"AND o.paid='{f}'";
                     string sql = $@"
                         SELECT o.id, o.total, o.created_at, o.paid,
-                               pi.room_name, po.name AS zone,
+                               ISNULL(pi.room_name,'—') AS room_name,
+                               ISNULL(po.name,'—') AS zone,
                                (SELECT COUNT(*) FROM order_food WHERE order_id=o.id) AS items,
-                               u.fullname AS waiter
+                               ISNULL(u.name,'') AS waiter,
+                               ISNULL(o.is_customer_order,0) AS is_customer_order,
+                               ISNULL(o.customer_name,'') AS customer_name
                         FROM [order] o
-                        JOIN place_in pi ON pi.id = o.place_id
-                        JOIN place_out po ON po.id = pi.place_out_id
+                        LEFT JOIN place_in pi ON pi.id = o.place_id
+                        LEFT JOIN place_out po ON po.id = pi.place_out_id
                         LEFT JOIN [user] u ON u.id = o.user_id
                         WHERE 1=1 {where}
                         ORDER BY o.paid ASC, o.created_at DESC";
@@ -270,19 +274,22 @@ namespace WindowsFormsApp1.forms.main
                     {
                         foreach (DataRow row in dt.Rows)
                         {
-                            int    oid    = Convert.ToInt32(row["id"]);
-                            decimal total = Convert.ToDecimal(row["total"]);
-                            DateTime dt2  = Convert.ToDateTime(row["created_at"]);
-                            bool   paid   = row["paid"].ToString() == "YES";
-                            string place  = row["zone"].ToString() + " — " + row["room_name"].ToString();
-                            int    items  = Convert.ToInt32(row["items"]);
-                            string waiter = row["waiter"].ToString();
-                            Color  clr    = paid ? Green : Gold;
+                            int    oid        = Convert.ToInt32(row["id"]);
+                            decimal total     = Convert.ToDecimal(row["total"]);
+                            DateTime dt2      = Convert.ToDateTime(row["created_at"]);
+                            bool   paid       = row["paid"].ToString() == "YES";
+                            string place      = row["zone"].ToString() + " — " + row["room_name"].ToString();
+                            int    items      = Convert.ToInt32(row["items"]);
+                            string waiter     = row["waiter"].ToString();
+                            bool   isCust     = Convert.ToInt32(row["is_customer_order"]) == 1;
+                            string custName   = row["customer_name"].ToString();
+                            Color  clr        = paid ? Green : Gold;
+                            Color  cardBg     = isCust ? BgCust : BgCard;
 
                             Panel card = new Panel
                             {
                                 Width = 270, Height = paid ? 150 : 186,
-                                Margin = new Padding(8), BackColor = BgCard, Cursor = Cursors.Hand
+                                Margin = new Padding(8), BackColor = cardBg, Cursor = Cursors.Hand
                             };
                             card.Paint += (s2, e2) =>
                             {
@@ -290,10 +297,14 @@ namespace WindowsFormsApp1.forms.main
                                 e2.Graphics.FillRectangle(new SolidBrush(clr), 0, 0, card.Width, 4);
                             };
 
-                            Lbl(card, place, 14, 12, 242, new Font("Segoe UI", 11, FontStyle.Bold), TxtDark);
-                            Lbl(card, paid ? "✓ Yopilgan" : "● Ochiq", 14, 38, 0, new Font("Segoe UI", 9, FontStyle.Bold), clr, true);
+                            string topLine = isCust
+                                ? (string.IsNullOrEmpty(custName) ? "Mijoz buyurtmasi" : custName)
+                                : place;
+                            Lbl(card, topLine, 14, 12, 242, new Font("Segoe UI", 11, FontStyle.Bold), TxtDark);
+                            string statusLine = paid ? "✓ Yopilgan" : (isCust ? "● Mijoz  •  Ochiq" : "● Ochiq");
+                            Lbl(card, statusLine, 14, 38, 0, new Font("Segoe UI", 9, FontStyle.Bold), isCust && !paid ? Gold : clr, true);
                             Lbl(card, items + " ta taom  •  " + dt2.ToString("dd.MM.yyyy  HH:mm"), 14, 58, 242, new Font("Segoe UI", 9), TxtMuted);
-                            if (!string.IsNullOrWhiteSpace(waiter))
+                            if (!isCust && !string.IsNullOrWhiteSpace(waiter))
                                 Lbl(card, "Ofitsiant: " + waiter, 14, 76, 242, new Font("Segoe UI", 8), TxtMuted);
                             Lbl(card, total.ToString("N0") + " so'm", 14, 98, 242, new Font("Segoe UI", 15, FontStyle.Bold), clr);
 
