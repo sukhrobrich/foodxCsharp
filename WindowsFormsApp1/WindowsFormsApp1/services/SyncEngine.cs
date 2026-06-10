@@ -103,8 +103,8 @@ namespace WindowsFormsApp1.services
                 // Web/mobil dan qo'shilgan kassa yozuvlarini yuklab olish
                 TryDl(() => DlCashTransactions(local, central),       result);
                 // Web dan taom/kategoriya o'zgarishlarini yuklab olish (create/update/delete)
-                TryDl(() => DlFoodCategories(local, central),         result);
-                TryDl(() => DlFoodsWithDelete(local, central),        result);
+                TryDl(() => DlFoodCategoriesWithDelete(local, central), result);
+                TryDl(() => DlFoodsWithDelete(local, central),          result);
                 // Web dan masalliqlarni yuklab olish (quantity delta saqlab)
                 TryDl(() => DlIngredients(local, central),            result);
             }
@@ -1175,6 +1175,30 @@ namespace WindowsFormsApp1.services
                     P("@pn", r["printer_name"]), P("@so", r["sort_order"]));
                 count++;
             }
+            return count;
+        }
+
+        private static int DlFoodCategoriesWithDelete(SqlConnection local, SqlConnection central)
+        {
+            int count = DlFoodCategories(local, central);
+
+            // Markaziy DB da o'chirilgan kategoriyalarni lokaldan ham o'chirish
+            DataTable centralIds = ReadAll(central, "SELECT id FROM food_category");
+            if (centralIds.Rows.Count == 0) return count;
+
+            var ids = new System.Text.StringBuilder();
+            foreach (DataRow r in centralIds.Rows)
+            {
+                if (ids.Length > 0) ids.Append(',');
+                ids.Append(r["id"]);
+            }
+
+            // Ichida taom bo'lmagan va central_id si markaziy DBda yo'q kategoriyalarni o'chir
+            Exec(local,
+                $"DELETE FROM food_category WHERE central_id IS NOT NULL " +
+                $"AND central_id NOT IN ({ids}) " +
+                $"AND id NOT IN (SELECT DISTINCT food_category_id FROM food WHERE food_category_id IS NOT NULL)");
+
             return count;
         }
 
