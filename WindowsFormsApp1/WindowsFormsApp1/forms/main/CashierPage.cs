@@ -274,22 +274,18 @@ namespace WindowsFormsApp1.forms.main
         void BuildJoylarView()
         {
             // ── Statistika satri ─────────────────────────────────────────────
-            Panel stats = new Panel { Dock = DockStyle.Top, Height = 84, BackColor = C_White };
-            stats.Paint += (s, e) => e.Graphics.DrawLine(new Pen(C_Border), 0, 83, stats.Width, 83);
-            _lblEmpty = null; _lblBusy = null;
+            _lblEmpty = null; _lblBusy = null; _lblOchiq = null; _lblSum = null;
             Label lblE, lblB, lblO, lblS;
-            Panel sc1 = StatChip("Bo'sh",     "—", C_Green,   out lblE);
-            Panel sc2 = StatChip("Band",      "—", C_Red,     out lblB);
+            Panel sc1 = StatChip("Bo'sh",      "—", C_Green,  out lblE);
+            Panel sc2 = StatChip("Band",       "—", C_Red,    out lblB);
             Panel sc3 = StatChip("Ochiq zakaz","—", C_Amber,  out lblO);
             Panel sc4 = StatChip("Jami summa", "—", C_Purple, out lblS);
-            _lblEmpty = lblE;
-            _lblBusy  = lblB;
-            _lblOchiq = lblO;
-            _lblSum   = lblS;
+            _lblEmpty = lblE; _lblBusy = lblB; _lblOchiq = lblO; _lblSum = lblS;
 
-            stats.Controls.AddRange(new Control[] { sc1, sc2, sc3, sc4 });
+            Panel stats = new Panel { Dock = DockStyle.Top, Height = 84, BackColor = C_White };
+            stats.Paint  += (s, e) => e.Graphics.DrawLine(new Pen(C_Border), 0, 83, stats.Width, 83);
             stats.Resize += (s, e) => LayoutStatChips(stats, sc1, sc2, sc3, sc4);
-            _pageArea.Controls.Add(stats);
+            stats.Controls.AddRange(new Control[] { sc1, sc2, sc3, sc4 });
 
             // ── Zone tabs ────────────────────────────────────────────────────
             Panel zoneBar = new Panel { Dock = DockStyle.Top, Height = 48, BackColor = C_White };
@@ -299,15 +295,13 @@ namespace WindowsFormsApp1.forms.main
                 e.Graphics.DrawLine(new Pen(C_Border), 0, 47, zoneBar.Width, 47);
             };
             _zoneTabs = zoneBar;
-            _pageArea.Controls.Add(zoneBar);
 
-            // ── Table grid ───────────────────────────────────────────────────
+            // ── Table grid (scroll) ──────────────────────────────────────────
             Panel scroll = new Panel { Dock = DockStyle.Fill, BackColor = C_Bg, AutoScroll = true };
+
             FlowLayoutPanel flp = new FlowLayoutPanel
             {
-                // Dock=Top + AutoSize WinForms da scroll buziladi — Width ni qo'lda boshqaramiz
-                Location      = new Point(0, 0),
-                Width         = 1000,
+                Dock          = DockStyle.Top,
                 AutoSize      = true,
                 AutoSizeMode  = AutoSizeMode.GrowAndShrink,
                 WrapContents  = true,
@@ -316,18 +310,28 @@ namespace WindowsFormsApp1.forms.main
                 Padding       = new Padding(18, 14, 18, 18)
             };
             scroll.Controls.Add(flp);
-            scroll.SizeChanged += (s, e) => { if (scroll.ClientSize.Width > 0) flp.Width = scroll.ClientSize.Width; };
-            _pageArea.Controls.Add(scroll);
+
+            // WrapContents ishlashi uchun MaximumSize cheklash KERAK (WinForms klassik yechim)
+            Action fixWidth = () =>
+            {
+                int w = scroll.ClientSize.Width;
+                if (w > 10) flp.MaximumSize = new Size(w, 0);
+            };
+            scroll.Resize += (s, e) => fixWidth();
+
+            // Controls.Add tartib: WinForms da Dock=Top — OXIRGI qo'shilgan ENG TEPAGA chiqadi
+            _pageArea.Controls.Add(scroll);   // Fill — birinchi qo'sh (eng pastga)
+            _pageArea.Controls.Add(zoneBar);  // Top — ikkinchi (stats ostida bo'ladi)
+            _pageArea.Controls.Add(stats);    // Top — oxirgi (eng tepada bo'ladi)
+
             _tableGrid = flp;
 
-            LoadZones(() =>
+            // BeginInvoke: layout tugagandan keyin ishga tush — scroll o'lchami to'g'ri bo'ladi
+            BeginInvoke(new Action(() =>
             {
-                BuildZoneTabs();
-                RefreshTables();
-            });
-
-            // Resize da stats layout
-            _pageArea.Resize += (s, e) => LayoutStatChips(stats, sc1, sc2, sc3, sc4);
+                fixWidth();
+                LoadZones(() => { BuildZoneTabs(); RefreshTables(); });
+            }));
         }
 
         void LoadZones(Action done)
@@ -391,6 +395,12 @@ namespace WindowsFormsApp1.forms.main
         void RefreshTables()
         {
             if (_tableGrid == null) return;
+
+            // MaximumSize ni scroll panelidan olish (WrapContents uchun)
+            var scrollPnl = _tableGrid.Parent as Panel;
+            if (scrollPnl != null && scrollPnl.ClientSize.Width > 10)
+                _tableGrid.MaximumSize = new Size(scrollPnl.ClientSize.Width, 0);
+
             _tableGrid.SuspendLayout();
             _tableGrid.Controls.Clear();
             try
@@ -604,11 +614,12 @@ namespace WindowsFormsApp1.forms.main
             Panel p = new Panel
             {
                 Height    = 44,
-                Width     = Math.Max(_tableGrid.Width - 36, 200),
+                Width     = Math.Max(_tableGrid.MaximumSize.Width > 0 ? _tableGrid.MaximumSize.Width - 36 : 800, 200),
                 Margin    = new Padding(0, 14, 0, 2),
                 BackColor = Color.Transparent
             };
-            _tableGrid.SizeChanged += (s, e) => p.Width = Math.Max(_tableGrid.Width - 36, 200);
+            _tableGrid.MaximumSizeChanged += (s, e) =>
+                p.Width = Math.Max(_tableGrid.MaximumSize.Width > 0 ? _tableGrid.MaximumSize.Width - 36 : 800, 200);
 
             p.Controls.Add(new Label
             {
