@@ -614,12 +614,12 @@ namespace WindowsFormsApp1.forms.main
             Panel p = new Panel
             {
                 Height    = 44,
-                Width     = Math.Max(_tableGrid.MaximumSize.Width > 0 ? _tableGrid.MaximumSize.Width - 36 : 800, 200),
+                Width     = Math.Max(_tableGrid.Width > 36 ? _tableGrid.Width - 36 : 800, 200),
                 Margin    = new Padding(0, 14, 0, 2),
                 BackColor = Color.Transparent
             };
-            _tableGrid.MaximumSizeChanged += (s, e) =>
-                p.Width = Math.Max(_tableGrid.MaximumSize.Width > 0 ? _tableGrid.MaximumSize.Width - 36 : 800, 200);
+            _tableGrid.Resize += (s, e) =>
+                p.Width = Math.Max(_tableGrid.Width > 36 ? _tableGrid.Width - 36 : 800, 200);
 
             p.Controls.Add(new Label
             {
