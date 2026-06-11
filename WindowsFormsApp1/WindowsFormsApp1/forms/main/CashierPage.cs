@@ -811,8 +811,7 @@ namespace WindowsFormsApp1.forms.main
                            ISNULL(po.name,'—')      AS zone,
                            (SELECT COUNT(*) FROM order_food WHERE order_id=o.id) AS items,
                            ISNULL(u.name,'')        AS waiter,
-                           ISNULL(o.is_customer_order,0) AS is_cust,
-                           ISNULL(o.customer_name,'')    AS cust_name
+                           ISNULL(o.customer_name,'') AS cust_name
                     FROM [order] o
                     LEFT JOIN place_in  pi ON pi.id = o.place_id
                     LEFT JOIN place_out po ON po.id = pi.place_out_id
@@ -836,9 +835,10 @@ namespace WindowsFormsApp1.forms.main
                         decimal total  = Convert.ToDecimal(r["total"]);
                         DateTime creat = Convert.ToDateTime(r["created_at"]);
                         bool    paid   = r["paid"].ToString() == "YES";
-                        bool    isCust = Convert.ToInt32(r["is_cust"]) == 1;
-                        string  place  = isCust
-                            ? (r["cust_name"].ToString() != "" ? r["cust_name"].ToString() : "Mijoz")
+                        string custName = r["cust_name"].ToString();
+                        bool   isCust  = !string.IsNullOrEmpty(custName);
+                        string place   = isCust
+                            ? custName
                             : (r["zone"] + " — " + r["room_name"]);
                         int    items   = Convert.ToInt32(r["items"]);
                         string waiter  = r["waiter"].ToString();
@@ -963,8 +963,7 @@ namespace WindowsFormsApp1.forms.main
                            ISNULL(pi.room_name,'—') AS room_name,
                            ISNULL(po.name,'—')      AS zone,
                            ISNULL(u.name,'')        AS waiter,
-                           ISNULL(o.is_customer_order,0) AS is_cust,
-                           ISNULL(o.customer_name,'')    AS cust_name
+                           ISNULL(o.customer_name,'') AS cust_name
                     FROM [order] o
                     LEFT JOIN place_in  pi ON pi.id = o.place_id
                     LEFT JOIN place_out po ON po.id = pi.place_out_id
@@ -978,10 +977,11 @@ namespace WindowsFormsApp1.forms.main
                 if (dt.Rows.Count == 0) { ShowDetailEmpty(); return; }
 
                 DataRow ro  = dt.Rows[0];
-                bool    paid = ro["paid"].ToString() == "YES";
-                bool    isCust = Convert.ToInt32(ro["is_cust"]) == 1;
-                string  place  = isCust
-                    ? (ro["cust_name"].ToString() != "" ? ro["cust_name"].ToString() : "Mijoz buyurtmasi")
+                bool    paid    = ro["paid"].ToString() == "YES";
+                string  custNm  = ro["cust_name"].ToString();
+                bool    isCust  = !string.IsNullOrEmpty(custNm);
+                string  place   = isCust
+                    ? custNm
                     : (ro["zone"] + " — " + ro["room_name"]);
                 decimal total  = Convert.ToDecimal(ro["total"]);
                 string  waiter = ro["waiter"].ToString();
@@ -990,7 +990,7 @@ namespace WindowsFormsApp1.forms.main
 
                 // Taomlar
                 DataTable foods = new DataTable();
-                string fsql = @"SELECT f.name, ofd.quantity, ofd.price
+                string fsql = @"SELECT f.name, ofd.quantity, f.selling_price AS price
                                 FROM order_food ofd JOIN food f ON f.id=ofd.food_id
                                 WHERE ofd.order_id=@oid ORDER BY ofd.id";
                 using (var da = new SqlDataAdapter(fsql, new dbconnect().GetCon()))
