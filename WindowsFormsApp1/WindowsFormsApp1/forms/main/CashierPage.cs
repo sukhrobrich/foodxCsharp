@@ -992,7 +992,7 @@ namespace WindowsFormsApp1.forms.main
 
                 // Taomlar
                 DataTable foods = new DataTable();
-                string fsql = @"SELECT f.name, of.quantity, of.price, ISNULL(of.note,'') AS note
+                string fsql = @"SELECT f.name, of.quantity, of.price
                                 FROM order_food of JOIN food f ON f.id=of.food_id
                                 WHERE of.order_id=@oid ORDER BY of.id";
                 using (var da = new SqlDataAdapter(fsql, new dbconnect().GetCon()))
@@ -1084,11 +1084,10 @@ namespace WindowsFormsApp1.forms.main
                     string fn  = fr["name"].ToString();
                     int    qty = Convert.ToInt32(fr["quantity"]);
                     decimal fp = Convert.ToDecimal(fr["price"]);
-                    string fnote = fr["note"].ToString();
 
                     foodsCard.Controls.Add(new Label
                     {
-                        Text      = $"× {qty}  {fn}{(fnote != "" ? "  (" + fnote + ")" : "")}",
+                        Text      = $"× {qty}  {fn}",
                         Font      = new Font("Segoe UI", 9),
                         ForeColor = C_Dark,
                         Location  = new Point(18, fy),
