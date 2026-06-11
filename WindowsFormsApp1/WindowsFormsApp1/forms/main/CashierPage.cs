@@ -1000,148 +1000,126 @@ namespace WindowsFormsApp1.forms.main
                 }
 
                 // ── Detail UI ─────────────────────────────────────────────────
-                Panel det = new Panel { Dock = DockStyle.Fill, BackColor = C_Bg, AutoScroll = true, Padding = new Padding(24, 20, 24, 20) };
+                // WinForms Dock=Top: oxirgi qo'shilgan eng tepaga chiqadi.
+                // Shuning uchun teskari tartibda qo'shamiz: pastki element birinchi.
+
+                Panel det = new Panel { Dock = DockStyle.Fill, BackColor = C_Bg, AutoScroll = true };
                 _orderDetail.Controls.Add(det);
 
-                // Sarlavha
-                Panel hdrPan = new Panel
+                det.SuspendLayout();
+
+                // 1. JAMI (eng oxirgi — vizual pastda bo'ladi, lekin birinchi qo'shiladi)
+                Panel totalCard = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = C_White };
+                totalCard.Paint += (s, e) =>
                 {
-                    Dock      = DockStyle.Top,
-                    Height    = 70,
-                    BackColor = C_White,
-                    Margin    = new Padding(0, 0, 0, 12)
+                    e.Graphics.DrawLine(new Pen(C_Border), 16, 0, totalCard.Width - 16, 0);
+                    using (var f  = new Font("Segoe UI", 14, FontStyle.Bold))
+                    using (var br = new SolidBrush(accent))
+                    using (var sf = new StringFormat { LineAlignment = StringAlignment.Center })
+                    {
+                        e.Graphics.DrawString("JAMI", new Font("Segoe UI", 9, FontStyle.Bold),
+                            new SolidBrush(C_Muted), new RectangleF(16, 0, 80, 56), sf);
+                        string ts = total.ToString("N0") + " so'm";
+                        SizeF  sz = e.Graphics.MeasureString(ts, f);
+                        e.Graphics.DrawString(ts, f, br,
+                            new RectangleF(totalCard.Width - sz.Width - 16, 0, sz.Width + 4, 56), sf);
+                    }
                 };
+                det.Controls.Add(totalCard);
+
+                // 2. TAOM QATORLARI (teskari tartibda qo'shamiz)
+                for (int fi = foods.Rows.Count - 1; fi >= 0; fi--)
+                {
+                    DataRow fr  = foods.Rows[fi];
+                    string  fn  = fr["name"].ToString();
+                    int     qty = Convert.ToInt32(fr["quantity"]);
+                    decimal fp  = Convert.ToDecimal(fr["price"]);
+
+                    Panel foodRow = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = C_White };
+                    foodRow.Paint += (s, e) =>
+                        e.Graphics.DrawLine(new Pen(Color.FromArgb(240, 240, 240)),
+                            16, foodRow.Height - 1, foodRow.Width - 16, foodRow.Height - 1);
+
+                    // Narx labeli — DockStyle.Right (birinchi qo'shiladi = ichki, lekin Right har doim o'ngda)
+                    Label lblP = new Label
+                    {
+                        Text      = (fp * qty).ToString("N0") + " so'm",
+                        Dock      = DockStyle.Right,
+                        Width     = 130,
+                        Font      = new Font("Segoe UI", 9),
+                        ForeColor = C_Muted,
+                        TextAlign = ContentAlignment.MiddleRight,
+                        Padding   = new Padding(0, 0, 16, 0)
+                    };
+                    // Nom labeli — DockStyle.Fill (ikkinchi qo'shiladi = qolgan joy)
+                    Label lblN = new Label
+                    {
+                        Text      = $"× {qty}  {fn}",
+                        Dock      = DockStyle.Fill,
+                        Font      = new Font("Segoe UI", 9),
+                        ForeColor = C_Dark,
+                        TextAlign = ContentAlignment.MiddleLeft,
+                        Padding   = new Padding(16, 0, 0, 0)
+                    };
+                    foodRow.Controls.Add(lblP);
+                    foodRow.Controls.Add(lblN);
+                    det.Controls.Add(foodRow);
+                }
+
+                // 3. TAOMLAR SARLAVHASI
+                Panel foodHdr = new Panel { Dock = DockStyle.Top, Height = 30, BackColor = C_Bg };
+                foodHdr.Controls.Add(new Label
+                {
+                    Text = "TAOMLAR", Dock = DockStyle.Fill,
+                    Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = C_Muted,
+                    TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(16, 0, 0, 0)
+                });
+                det.Controls.Add(foodHdr);
+
+                // 4. HEADER (eng oxirgi qo'shiladi = vizual eng tepada)
+                Panel hdrPan = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = C_White };
                 hdrPan.Paint += (s, e) =>
                 {
                     using (var br = new SolidBrush(accent))
-                        e.Graphics.FillRectangle(br, 0, 0, hdrPan.Width, 5);
-                    e.Graphics.DrawLine(new Pen(C_Border), 0, 69, hdrPan.Width, 69);
+                        e.Graphics.FillRectangle(br, 0, 0, hdrPan.Width, 4);
+                    e.Graphics.DrawLine(new Pen(C_Border), 0, 71, hdrPan.Width, 71);
                 };
+
+                // Title va meta absolute — hdrPan ichida
                 hdrPan.Controls.Add(new Label
                 {
-                    Text      = $"#{orderId} — {place}",
-                    Font      = new Font("Segoe UI", 13, FontStyle.Bold),
-                    ForeColor = C_Dark,
-                    Location  = new Point(18, 14),
-                    AutoSize  = true
+                    Text = $"#{orderId} — {place}",
+                    Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = C_Dark,
+                    Location = new Point(16, 10), AutoSize = true
                 });
                 hdrPan.Controls.Add(new Label
                 {
-                    Text      = $"{creat:dd.MM.yyyy  HH:mm}  •  {waiter}  •  {(paid ? "Yopilgan ✓" : "Ochiq")}",
-                    Font      = new Font("Segoe UI", 8),
-                    ForeColor = paid ? C_Green : C_Muted,
-                    Location  = new Point(18, 42),
-                    AutoSize  = true
+                    Text = $"{creat:dd.MM.yyyy  HH:mm}  •  {(string.IsNullOrEmpty(waiter) ? "" : waiter + "  •  ")}{(paid ? "✓ Yopilgan" : "Ochiq")}",
+                    Font = new Font("Segoe UI", 8), ForeColor = paid ? C_Green : C_Muted,
+                    Location = new Point(16, 40), AutoSize = true
                 });
 
                 if (!paid)
                 {
                     Button btnOpen = new Button
                     {
-                        Text      = "Tahrirlash →",
-                        AutoSize  = true, Height = 30,
-                        FlatStyle = FlatStyle.Flat,
-                        BackColor = accent, ForeColor = Color.White,
-                        Font      = new Font("Segoe UI", 9, FontStyle.Bold),
-                        Cursor    = Cursors.Hand
+                        Text = "Tahrirlash →", Height = 28, AutoSize = true,
+                        FlatStyle = FlatStyle.Flat, BackColor = accent, ForeColor = Color.White,
+                        Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand
                     };
                     btnOpen.FlatAppearance.BorderSize = 0;
-                    btnOpen.Location = new Point(0, 18);
-                    btnOpen.Click += (s, e) =>
+                    btnOpen.Location = new Point(hdrPan.Width > 200 ? hdrPan.Width - btnOpen.Width - 16 : 200, 22);
+                    hdrPan.Resize += (s2, e2) => btnOpen.Location = new Point(hdrPan.Width - btnOpen.Width - 16, 22);
+                    btnOpen.Click += (s2, e2) =>
                     {
                         new AddOrder(0, orderId, Session.Login).ShowDialog();
-                        _refreshLeft = 1;
-                        RefreshOrderList();
-                        ShowDetailEmpty();
+                        _refreshLeft = 1; RefreshOrderList(); ShowDetailEmpty();
                     };
-                    hdrPan.Resize += (s, e2) => btnOpen.Location = new Point(hdrPan.Width - btnOpen.Width - 18, 20);
                     hdrPan.Controls.Add(btnOpen);
                 }
                 det.Controls.Add(hdrPan);
 
-                // Taomlar ro'yxati — har qator alohida Panel ichida
-                Panel foodsCard = new Panel
-                {
-                    Dock      = DockStyle.Top,
-                    Height    = 36 + foods.Rows.Count * 32,
-                    BackColor = C_White
-                };
-                foodsCard.Paint += (s, e) =>
-                    e.Graphics.DrawLine(new Pen(C_Border), 0, foodsCard.Height - 1, foodsCard.Width, foodsCard.Height - 1);
-
-                foodsCard.Controls.Add(new Label
-                {
-                    Text      = "Taomlar",
-                    Font      = new Font("Segoe UI", 8, FontStyle.Bold),
-                    ForeColor = C_Muted,
-                    Location  = new Point(16, 10),
-                    AutoSize  = true
-                });
-
-                int fy = 32;
-                foreach (DataRow fr in foods.Rows)
-                {
-                    string  fn    = fr["name"].ToString();
-                    int     qty   = Convert.ToInt32(fr["quantity"]);
-                    decimal fp    = Convert.ToDecimal(fr["price"]);
-                    string  price = (fp * qty).ToString("N0") + " so'm";
-
-                    // Har bir qator uchun Panel — name va price to'g'ri joylashadi
-                    Panel foodRow = new Panel
-                    {
-                        Location  = new Point(0, fy),
-                        Height    = 30,
-                        BackColor = C_White
-                    };
-                    foodsCard.Resize += (s, e) => foodRow.Width = foodsCard.Width;
-                    foodRow.Width = 600;
-
-                    Label lblFoodName = new Label
-                    {
-                        Text      = $"× {qty}  {fn}",
-                        Font      = new Font("Segoe UI", 9),
-                        ForeColor = C_Dark,
-                        Location  = new Point(16, 6),
-                        AutoSize  = true
-                    };
-                    Label lblPrice = new Label
-                    {
-                        Text      = price,
-                        Font      = new Font("Segoe UI", 9),
-                        ForeColor = C_Muted,
-                        AutoSize  = true,
-                        Location  = new Point(500, 6)
-                    };
-                    foodRow.Controls.Add(lblFoodName);
-                    foodRow.Controls.Add(lblPrice);
-                    // Narxni o'ng tomonga qo'yish
-                    foodRow.Resize += (s, e) =>
-                        lblPrice.Location = new Point(foodRow.Width - lblPrice.Width - 16, 6);
-
-                    foodsCard.Controls.Add(foodRow);
-                    fy += 32;
-                }
-
-                det.Controls.Add(foodsCard);
-
-                // Jami
-                Panel totalCard = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = C_White, Margin = new Padding(0, 4, 0, 0) };
-                totalCard.Paint += (s, e) =>
-                {
-                    e.Graphics.DrawLine(new Pen(C_Border), 18, 0, totalCard.Width - 18, 0);
-                    using (var f  = new Font("Segoe UI", 14, FontStyle.Bold))
-                    using (var br = new SolidBrush(accent))
-                    using (var sf = new StringFormat { LineAlignment = StringAlignment.Center })
-                    {
-                        e.Graphics.DrawString("JAMI", new Font("Segoe UI", 9, FontStyle.Bold),
-                            new SolidBrush(C_Muted), new RectangleF(18, 0, 100, 56), sf);
-                        string ts = total.ToString("N0") + " so'm";
-                        SizeF sz = e.Graphics.MeasureString(ts, f);
-                        e.Graphics.DrawString(ts, f, br,
-                            new RectangleF(totalCard.Width - sz.Width - 18, 0, sz.Width + 4, 56), sf);
-                    }
-                };
-                det.Controls.Add(totalCard);
+                det.ResumeLayout();
             }
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
         }
