@@ -959,14 +959,12 @@ namespace WindowsFormsApp1.forms.main
             {
                 DataTable dt = new DataTable();
                 string sql = @"
-                    SELECT o.id, o.total, o.created_at, o.paid, o.note,
+                    SELECT o.id, o.total, o.created_at, o.paid,
                            ISNULL(pi.room_name,'—') AS room_name,
                            ISNULL(po.name,'—')      AS zone,
                            ISNULL(u.name,'')        AS waiter,
                            ISNULL(o.is_customer_order,0) AS is_cust,
-                           ISNULL(o.customer_name,'')    AS cust_name,
-                           ISNULL(o.delivery_phone,'')   AS dph,
-                           ISNULL(o.is_delivery,0)       AS isdel
+                           ISNULL(o.customer_name,'')    AS cust_name
                     FROM [order] o
                     LEFT JOIN place_in  pi ON pi.id = o.place_id
                     LEFT JOIN place_out po ON po.id = pi.place_out_id
