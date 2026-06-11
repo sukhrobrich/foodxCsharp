@@ -16,134 +16,150 @@ namespace WindowsFormsApp1.forms.main
         private int     _active = -1;
         private Timer   _autoRefresh;
 
-        static readonly Color Sidebar  = Color.FromArgb(24, 32, 48);
-        static readonly Color SideHov  = Color.FromArgb(38, 50, 72);
-        static readonly Color NavAct   = Color.FromArgb(22, 163, 74);
-        static readonly Color BgPage   = Color.FromArgb(245, 246, 250);
-        static readonly Color BgCard   = Color.White;
-        static readonly Color BgCust   = Color.FromArgb(255, 251, 235); // mijoz — sariq fon
-        static readonly Color TxtDark  = Color.FromArgb(17, 24, 39);
-        static readonly Color TxtMuted = Color.FromArgb(107, 114, 128);
-        static readonly Color Gold     = Color.FromArgb(217, 119, 6);
-        static readonly Color Green    = Color.FromArgb(22, 163, 74);
-        static readonly Color Red      = Color.FromArgb(220, 38, 38);
-        static readonly Color Blue     = Color.FromArgb(59, 130, 246);
-        static readonly Color Border   = Color.FromArgb(229, 231, 235);
+        // ── Rang palitasi ────────────────────────────────────────────────────
+        static readonly Color Sidebar    = Color.FromArgb(15, 23, 42);
+        static readonly Color SideHov    = Color.FromArgb(30, 41, 59);
+        static readonly Color SideActive = Color.FromArgb(20, 83, 45);
+        static readonly Color BgPage     = Color.FromArgb(241, 245, 249);
+        static readonly Color BgCard     = Color.White;
+        static readonly Color TxtDark    = Color.FromArgb(15, 23, 42);
+        static readonly Color TxtMuted   = Color.FromArgb(100, 116, 139);
+        static readonly Color Border     = Color.FromArgb(226, 232, 240);
+        static readonly Color Green      = Color.FromArgb(22, 163, 74);
+        static readonly Color GreenBg    = Color.FromArgb(240, 253, 244);
+        static readonly Color Red        = Color.FromArgb(220, 38, 38);
+        static readonly Color RedBg      = Color.FromArgb(254, 242, 242);
+        static readonly Color Gold       = Color.FromArgb(217, 119, 6);
+        static readonly Color GoldBg     = Color.FromArgb(255, 251, 235);
+        static readonly Color Blue       = Color.FromArgb(37, 99, 235);
+        static readonly Color BlueBg     = Color.FromArgb(239, 246, 255);
 
         public KassirPage() { Build(); }
 
         // ════════════════════════════════════════════════════════════════════
-        // LAYOUT
+        // ASOSIY LAYOUT
         // ════════════════════════════════════════════════════════════════════
         void Build()
         {
-            WindowState = FormWindowState.Maximized;
+            WindowState     = FormWindowState.Maximized;
             FormBorderStyle = FormBorderStyle.None;
-            BackColor = BgPage;
-            Text = "FoodX — Kassir";
+            BackColor       = BgPage;
+            Text            = "FoodX — Kassir";
 
-            Panel sidebar = new Panel { Width = 220, Dock = DockStyle.Left, BackColor = Sidebar };
-            this.Controls.Add(sidebar);
+            Panel sidebar = new Panel { Width = 240, Dock = DockStyle.Left, BackColor = Sidebar };
+            Controls.Add(sidebar);
 
             _content = new Panel { Dock = DockStyle.Fill, BackColor = BgPage };
-            this.Controls.Add(_content);
+            Controls.Add(_content);
             _content.BringToFront();
 
             BuildSidebar(sidebar);
-            this.Load += (s, e) => GoTo(1);   // default: Joylar
+            Load += (s, e) => GoTo(1);
         }
 
         void BuildSidebar(Panel sb)
         {
-            // ── Logo ─────────────────────────────────────────────────────────
-            Panel logo = new Panel { Height = 68, Dock = DockStyle.Top, BackColor = Sidebar };
-            logo.Paint += (s, e) =>
-                e.Graphics.DrawLine(new Pen(Color.FromArgb(45, 58, 80)), 0, 67, sb.Width, 67);
+            // Logo
+            Panel logo = new Panel { Height = 72, Dock = DockStyle.Top, BackColor = Color.FromArgb(10, 15, 30) };
             logo.Controls.Add(new Label
             {
-                Text = "FoodX", Font = new Font("Segoe UI", 20, FontStyle.Bold),
-                ForeColor = Green, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter
+                Text = "FoodX",
+                Font = new Font("Segoe UI", 22, FontStyle.Bold),
+                ForeColor = Green, Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter
             });
             sb.Controls.Add(logo);
 
-            // ── Bottom: user + logout ─────────────────────────────────────────
-            Panel bottom = new Panel { Height = 108, Dock = DockStyle.Bottom, BackColor = Sidebar };
+            // Pastki qism — foydalanuvchi + chiqish
+            Panel bottom = new Panel { Height = 100, Dock = DockStyle.Bottom, BackColor = Color.FromArgb(10, 15, 30) };
             bottom.Paint += (s, e) =>
-                e.Graphics.DrawLine(new Pen(Color.FromArgb(45, 58, 80)), 0, 0, sb.Width, 0);
+                e.Graphics.DrawLine(new Pen(Color.FromArgb(30, 41, 59)), 16, 0, sb.Width - 16, 0);
 
-            // avatar circle
-            Panel av = new Panel { Width = 36, Height = 36, Location = new Point(14, 12), BackColor = Color.Transparent };
+            Panel av = new Panel { Width = 42, Height = 42, Location = new Point(16, 16), BackColor = Color.Transparent };
             av.Paint += (s, e) =>
             {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                e.Graphics.FillEllipse(new SolidBrush(Color.FromArgb(50, 63, 90)), 0, 0, 35, 35);
+                using (var br = new SolidBrush(Color.FromArgb(30, 41, 59)))
+                    e.Graphics.FillEllipse(br, 0, 0, 41, 41);
                 string ini = Session.UserName.Length >= 2
                     ? Session.UserName.Substring(0, 2).ToUpper()
                     : Session.UserName.ToUpper();
-                using (var f  = new Font("Segoe UI", 11, FontStyle.Bold))
+                using (var f  = new Font("Segoe UI", 13, FontStyle.Bold))
                 using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                    e.Graphics.DrawString(ini, f, Brushes.White, new RectangleF(0, 0, 35, 35), sf);
+                    e.Graphics.DrawString(ini, f, Brushes.White, new RectangleF(0, 0, 41, 41), sf);
             };
             bottom.Controls.Add(av);
+
             bottom.Controls.Add(new Label
             {
-                Text = Session.UserName, Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = Color.FromArgb(220, 220, 235), Location = new Point(58, 12), AutoSize = true
+                Text = Session.UserName,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = Color.FromArgb(226, 232, 240),
+                Location = new Point(68, 14), AutoSize = true
             });
             bottom.Controls.Add(new Label
             {
-                Text = "Kassir", Font = new Font("Segoe UI", 8),
-                ForeColor = Green, Location = new Point(58, 30), AutoSize = true
+                Text = "Kassir",
+                Font = new Font("Segoe UI", 8),
+                ForeColor = Green,
+                Location = new Point(68, 34), AutoSize = true
             });
 
-            Button btnOut = SbBtn("  ⏻  Chiqish", 62);
-            btnOut.ForeColor = TxtMuted;
-            btnOut.MouseEnter += (s, e) => { btnOut.BackColor = Color.FromArgb(190, 30, 30); btnOut.ForeColor = Color.White; };
-            btnOut.MouseLeave += (s, e) => { btnOut.BackColor = Color.Transparent; btnOut.ForeColor = TxtMuted; };
-            btnOut.Click += (s, e) => { Session.Clear(); Hide(); new Form1().Show(); };
-            sb.Resize += (s, e) => btnOut.Width = sb.Width;
+            Button btnOut = new Button
+            {
+                Text      = "⏻  Chiqish",
+                Location  = new Point(14, 66),
+                Width     = sb.Width - 28, Height = 28,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(30, 41, 59),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Font      = new Font("Segoe UI", 9),
+                Cursor    = Cursors.Hand,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            btnOut.FlatAppearance.BorderSize = 0;
+            btnOut.MouseEnter += (s, e) => { btnOut.BackColor = Color.FromArgb(185, 28, 28); btnOut.ForeColor = Color.White; };
+            btnOut.MouseLeave += (s, e) => { btnOut.BackColor = Color.FromArgb(30, 41, 59);  btnOut.ForeColor = Color.FromArgb(148, 163, 184); };
+            btnOut.Click      += (s, e) => { Session.Clear(); Hide(); new Form1().Show(); };
+            sb.Resize         += (s, e) => btnOut.Width = sb.Width - 28;
             bottom.Controls.Add(btnOut);
             sb.Controls.Add(bottom);
 
-            // ── Nav buttons (absolute so both always visible) ─────────────────
-            string[] labels = { "≡  Buyurtmalar", "⊞  Joylar" };
-            _navBtns = new Button[2];
-
+            // Nav menyu
             Panel navArea = new Panel { Dock = DockStyle.Fill, BackColor = Sidebar };
             sb.Controls.Add(navArea);
 
-            for (int i = 0; i < 2; i++)
+            string[] labels = { "≡   Buyurtmalar", "⊞   Joylar" };
+            _navBtns = new Button[labels.Length];
+            int y = 20;
+            for (int i = 0; i < labels.Length; i++)
             {
                 int idx = i;
-                Button b = SbBtn(labels[i], i * 52);
-                b.ForeColor = Color.FromArgb(190, 200, 220);
-                b.Click += (s, e) => GoTo(idx);
-                navArea.Resize += (s, e) => b.Width = navArea.Width;
+                Button b = new Button
+                {
+                    Text      = labels[i],
+                    Location  = new Point(8, y),
+                    Width     = sb.Width - 16, Height = 50,
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.Transparent,
+                    ForeColor = Color.FromArgb(148, 163, 184),
+                    Font      = new Font("Segoe UI", 10),
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Padding   = new Padding(14, 0, 0, 0),
+                    Cursor    = Cursors.Hand
+                };
+                b.FlatAppearance.BorderSize = 0;
+                b.FlatAppearance.MouseOverBackColor = SideHov;
+                b.Click    += (s, e) => GoTo(idx);
+                navArea.Resize += (s, e) => b.Width = navArea.Width - 16;
                 navArea.Controls.Add(b);
                 _navBtns[i] = b;
+                y += 56;
             }
         }
 
-        Button SbBtn(string text, int y)
-        {
-            Button b = new Button
-            {
-                Text = text, Location = new Point(0, y),
-                Width = 220, Height = 50,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.Transparent,
-                Font = new Font("Segoe UI", 10),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Cursor = Cursors.Hand
-            };
-            b.FlatAppearance.BorderSize = 0;
-            b.FlatAppearance.MouseOverBackColor = SideHov;
-            b.FlatAppearance.MouseDownBackColor = NavAct;
-            return b;
-        }
-
         // ════════════════════════════════════════════════════════════════════
-        // NAVIGATION
+        // NAVIGATSIYA
         // ════════════════════════════════════════════════════════════════════
         void GoTo(int tab)
         {
@@ -153,17 +169,18 @@ namespace WindowsFormsApp1.forms.main
 
             for (int i = 0; i < _navBtns.Length; i++)
             {
-                bool on = i == tab;
-                _navBtns[i].BackColor = on ? NavAct : Color.Transparent;
-                _navBtns[i].ForeColor = on ? Color.White : Color.FromArgb(190, 200, 220);
+                bool on = (i == tab);
+                _navBtns[i].BackColor = on ? SideActive : Color.Transparent;
+                _navBtns[i].ForeColor = on ? Color.White : Color.FromArgb(148, 163, 184);
                 _navBtns[i].Font      = new Font("Segoe UI", 10, on ? FontStyle.Bold : FontStyle.Regular);
-                _navBtns[i].FlatAppearance.MouseOverBackColor = on ? NavAct : SideHov;
+                _navBtns[i].FlatAppearance.MouseOverBackColor = on ? SideActive : SideHov;
+                _navBtns[i].Padding = new Padding(on ? 10 : 14, 0, 0, 0);
             }
 
             _active = tab;
             _content.Controls.Clear();
 
-            Control page = tab == 0 ? BuildBuyurtmalar() : BuildJoylar();
+            Control page = (tab == 0) ? BuildBuyurtmalar() : BuildJoylar();
             if (page == null) return;
             page.Dock = DockStyle.Fill;
             _content.Controls.Add(page);
@@ -176,58 +193,74 @@ namespace WindowsFormsApp1.forms.main
         {
             var uc = new UserControl { BackColor = BgPage };
 
-            // Header
-            Panel hdr = Hdr("Buyurtmalar", uc);
+            // ── Header ───────────────────────────────────────────────────────
+            Panel hdr = MkPageHeader("Buyurtmalar", uc, out Button btnRefHdr);
+            btnRefHdr.Font = new Font("Segoe UI", 14);
 
-            // Stats row
-            Panel statsRow = new Panel { Dock = DockStyle.Top, Height = 84, BackColor = BgPage };
-            Label lblOpenVal = null, lblSumVal = null;
-            Panel sc1 = MkStat("Ochiq zakaslar",      "0",        Gold,  out lblOpenVal);
-            Panel sc2 = MkStat("Kutilayotgan summa",  "0 so'm",   Green, out lblSumVal);
-            sc1.Location = new Point(20, 14); sc1.Width = 210;
-            sc2.Location = new Point(244, 14); sc2.Width = 260;
-            statsRow.Controls.Add(sc1);
-            statsRow.Controls.Add(sc2);
+            // ── Statistika satri ─────────────────────────────────────────────
+            Panel statsRow = new Panel { Dock = DockStyle.Top, Height = 100, BackColor = BgPage };
+            Label lblOpenVal = null, lblSumVal = null, lblTodayVal = null;
+            Panel st1 = MkStatCard("Ochiq buyurtmalar", "0",        Gold,  GoldBg,  out lblOpenVal);
+            Panel st2 = MkStatCard("Kutilayotgan summa", "0 so'm",  Green, GreenBg, out lblSumVal);
+            Panel st3 = MkStatCard("Bugun yopilgan",     "0 ta",    Blue,  BlueBg,  out lblTodayVal);
+            statsRow.Controls.Add(st1);
+            statsRow.Controls.Add(st2);
+            statsRow.Controls.Add(st3);
+            statsRow.Resize += (s, e) =>
+            {
+                int gap = 12;
+                int total = statsRow.Width - gap * 4;
+                int w = total / 3;
+                st1.SetBounds(gap,           12, w, 76);
+                st2.SetBounds(gap * 2 + w,   12, w, 76);
+                st3.SetBounds(gap * 3 + w*2, 12, w, 76);
+            };
             uc.Controls.Add(statsRow);
 
-            // Filter bar
-            Panel fBar = new Panel { Dock = DockStyle.Top, Height = 52, BackColor = BgCard };
-            fBar.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Border), 0, 51, fBar.Width, 51);
+            // ── Filter paneli ─────────────────────────────────────────────────
+            Panel fBar = new Panel { Dock = DockStyle.Top, Height = 58, BackColor = BgCard };
+            fBar.Paint += (s, e) =>
+            {
+                e.Graphics.DrawLine(new Pen(Border), 0, 0,  fBar.Width, 0);
+                e.Graphics.DrawLine(new Pen(Border), 0, 57, fBar.Width, 57);
+            };
+
             string[] fLabels = { "Barchasi", "Ochiq", "Yopilgan" };
             string[] fVals   = { "ALL", "NO", "YES" };
-            string filter    = "NO";
+            string   filter  = "NO";
             Button[] fBtns   = new Button[3];
-            int fx = 16;
+            int      fx      = 20;
             for (int i = 0; i < 3; i++)
             {
                 Button fb = new Button
                 {
-                    Text = fLabels[i], Location = new Point(fx, 11),
-                    Width = (i == 0 ? 90 : 76), Height = 30,
+                    Text      = fLabels[i],
+                    Location  = new Point(fx, 14),
+                    Width     = 100, Height = 30,
                     FlatStyle = FlatStyle.Flat,
-                    Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand
+                    Font      = new Font("Segoe UI", 9, FontStyle.Bold),
+                    Cursor    = Cursors.Hand
                 };
                 fb.FlatAppearance.BorderSize = 1;
-                fb.FlatAppearance.BorderColor = Border;
                 fBtns[i] = fb;
                 fBar.Controls.Add(fb);
-                fx += fb.Width + 6;
+                fx += 108;
             }
             uc.Controls.Add(fBar);
 
-            // Cards scroll area
+            // ── Kartalar joyi ─────────────────────────────────────────────────
             Panel scroll = new Panel { Dock = DockStyle.Fill, BackColor = BgPage, AutoScroll = true };
             FlowLayoutPanel flp = new FlowLayoutPanel
             {
-                Dock = DockStyle.Top, AutoSize = true,
+                Dock         = DockStyle.Top, AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 WrapContents = true, FlowDirection = FlowDirection.LeftToRight,
-                BackColor = BgPage, Padding = new Padding(10)
+                BackColor    = BgPage, Padding = new Padding(12)
             };
             scroll.Controls.Add(flp);
             uc.Controls.Add(scroll);
 
-            // Load
+            // ── Ma'lumot yuklash ──────────────────────────────────────────────
             Action<string> load = null;
             load = (f) =>
             {
@@ -235,19 +268,46 @@ namespace WindowsFormsApp1.forms.main
                 flp.Controls.Clear();
                 try
                 {
+                    // Statistika uchun alohida so'rov (filterga bog'liq emas)
+                    using (var db = new dbconnect())
+                    {
+                        db.OpenCon();
+                        string statSql = @"
+                            SELECT
+                                SUM(CASE WHEN paid='NO'  THEN 1 ELSE 0 END) AS open_cnt,
+                                SUM(CASE WHEN paid='NO'  THEN total ELSE 0 END) AS open_sum,
+                                SUM(CASE WHEN paid='YES' AND CAST(created_at AS DATE)=CAST(GETDATE() AS DATE)
+                                    THEN 1 ELSE 0 END) AS today_closed
+                            FROM [order]";
+                        using (var cmd = new SqlCommand(statSql, db.GetCon()))
+                        using (var dr = cmd.ExecuteReader())
+                        {
+                            if (dr.Read())
+                            {
+                                lblOpenVal.Text  = dr["open_cnt"]    == DBNull.Value ? "0" : dr["open_cnt"].ToString();
+                                lblSumVal.Text   = dr["open_sum"]    == DBNull.Value ? "0 so'm"
+                                    : Convert.ToDecimal(dr["open_sum"]).ToString("N0") + " so'm";
+                                lblTodayVal.Text = dr["today_closed"] == DBNull.Value ? "0 ta"
+                                    : dr["today_closed"].ToString() + " ta";
+                            }
+                        }
+                        db.CloseCon();
+                    }
+
+                    // Buyurtmalar ro'yxati
                     string where = f == "ALL" ? "" : $"AND o.paid='{f}'";
                     string sql = $@"
                         SELECT o.id, o.total, o.created_at, o.paid,
                                ISNULL(pi.room_name,'—') AS room_name,
-                               ISNULL(po.name,'—') AS zone,
+                               ISNULL(po.name,'—')      AS zone,
                                (SELECT COUNT(*) FROM order_food WHERE order_id=o.id) AS items,
-                               ISNULL(u.name,'') AS waiter,
+                               ISNULL(u.name,'')         AS waiter,
                                ISNULL(o.is_customer_order,0) AS is_customer_order,
-                               ISNULL(o.customer_name,'') AS customer_name
+                               ISNULL(o.customer_name,'')    AS customer_name
                         FROM [order] o
-                        LEFT JOIN place_in pi ON pi.id = o.place_id
+                        LEFT JOIN place_in  pi ON pi.id = o.place_id
                         LEFT JOIN place_out po ON po.id = pi.place_out_id
-                        LEFT JOIN [user] u ON u.id = o.user_id
+                        LEFT JOIN [user]     u ON u.id  = o.user_id
                         WHERE 1=1 {where}
                         ORDER BY o.paid ASC, o.created_at DESC";
 
@@ -255,68 +315,33 @@ namespace WindowsFormsApp1.forms.main
                     using (var da = new SqlDataAdapter(sql, new dbconnect().GetCon()))
                         da.Fill(dt);
 
-                    // stats
-                    int openCnt = 0; decimal openSum = 0;
-                    foreach (DataRow dr in dt.Rows)
-                        if (dr["paid"].ToString() == "NO") { openCnt++; openSum += Convert.ToDecimal(dr["total"]); }
-                    lblOpenVal.Text = openCnt.ToString();
-                    lblSumVal.Text  = openSum.ToString("N0") + " so'm";
-
                     if (dt.Rows.Count == 0)
                     {
-                        flp.Controls.Add(new Label
+                        var empty = new Label
                         {
-                            Text = "Buyurtmalar topilmadi", AutoSize = true, Margin = new Padding(40),
-                            Font = new Font("Segoe UI", 12), ForeColor = TxtMuted
-                        });
+                            Text = "Buyurtmalar topilmadi", AutoSize = true,
+                            Margin = new Padding(50),
+                            Font = new Font("Segoe UI", 14), ForeColor = TxtMuted
+                        };
+                        flp.Controls.Add(empty);
                     }
                     else
                     {
                         foreach (DataRow row in dt.Rows)
                         {
-                            int    oid        = Convert.ToInt32(row["id"]);
-                            decimal total     = Convert.ToDecimal(row["total"]);
-                            DateTime dt2      = Convert.ToDateTime(row["created_at"]);
-                            bool   paid       = row["paid"].ToString() == "YES";
-                            string place      = row["zone"].ToString() + " — " + row["room_name"].ToString();
-                            int    items      = Convert.ToInt32(row["items"]);
-                            string waiter     = row["waiter"].ToString();
-                            bool   isCust     = Convert.ToInt32(row["is_customer_order"]) == 1;
-                            string custName   = row["customer_name"].ToString();
-                            Color  clr        = paid ? Green : Gold;
-                            Color  cardBg     = isCust ? BgCust : BgCard;
+                            int     oid      = Convert.ToInt32(row["id"]);
+                            decimal total    = Convert.ToDecimal(row["total"]);
+                            DateTime created = Convert.ToDateTime(row["created_at"]);
+                            bool    paid     = row["paid"].ToString() == "YES";
+                            string  place    = row["zone"] + " — " + row["room_name"];
+                            int     items    = Convert.ToInt32(row["items"]);
+                            string  waiter   = row["waiter"].ToString();
+                            bool    isCust   = Convert.ToInt32(row["is_customer_order"]) == 1;
+                            string  custName = row["customer_name"].ToString();
 
-                            Panel card = new Panel
-                            {
-                                Width = 270, Height = paid ? 150 : 186,
-                                Margin = new Padding(8), BackColor = cardBg, Cursor = Cursors.Hand
-                            };
-                            card.Paint += (s2, e2) =>
-                            {
-                                e2.Graphics.DrawRectangle(new Pen(Border), 0, 0, card.Width - 1, card.Height - 1);
-                                e2.Graphics.FillRectangle(new SolidBrush(clr), 0, 0, card.Width, 4);
-                            };
-
-                            string topLine = isCust
-                                ? (string.IsNullOrEmpty(custName) ? "Mijoz buyurtmasi" : custName)
-                                : place;
-                            Lbl(card, topLine, 14, 12, 242, new Font("Segoe UI", 11, FontStyle.Bold), TxtDark);
-                            string statusLine = paid ? "✓ Yopilgan" : (isCust ? "● Mijoz  •  Ochiq" : "● Ochiq");
-                            Lbl(card, statusLine, 14, 38, 0, new Font("Segoe UI", 9, FontStyle.Bold), isCust && !paid ? Gold : clr, true);
-                            Lbl(card, items + " ta taom  •  " + dt2.ToString("dd.MM.yyyy  HH:mm"), 14, 58, 242, new Font("Segoe UI", 9), TxtMuted);
-                            if (!isCust && !string.IsNullOrWhiteSpace(waiter))
-                                Lbl(card, "Ofitsiant: " + waiter, 14, 76, 242, new Font("Segoe UI", 8), TxtMuted);
-                            Lbl(card, total.ToString("N0") + " so'm", 14, 98, 242, new Font("Segoe UI", 15, FontStyle.Bold), clr);
-
-                            if (!paid)
-                            {
-                                Button bv = CardBtn("Ko'rish / Tahrirlash", Blue, 14, 136, 242, 34);
-                                int oId = oid;
-                                bv.Click += (s2, e2) => { new AddOrder(0, oId, Session.Login).ShowDialog(); load(filter); };
-                                card.Controls.Add(bv);
-                            }
-
-                            flp.Controls.Add(card);
+                            flp.Controls.Add(
+                                BuildOrderCard(oid, total, created, paid, place,
+                                    items, waiter, isCust, custName, () => load(f)));
                         }
                     }
                 }
@@ -324,24 +349,122 @@ namespace WindowsFormsApp1.forms.main
                 finally { flp.ResumeLayout(); }
             };
 
-            // filter style
             Action reStyle = () =>
             {
                 for (int i = 0; i < 3; i++)
                 {
                     bool on = fVals[i] == filter;
-                    fBtns[i].BackColor = on ? Gold : Color.FromArgb(243, 244, 246);
+                    fBtns[i].BackColor = on ? TxtDark : Color.FromArgb(248, 250, 252);
                     fBtns[i].ForeColor = on ? Color.White : TxtMuted;
+                    fBtns[i].FlatAppearance.BorderColor = on ? TxtDark : Border;
                 }
             };
+
             for (int i = 0; i < 3; i++)
             {
                 int idx = i;
                 fBtns[i].Click += (s, e) => { filter = fVals[idx]; reStyle(); load(filter); };
             }
+            btnRefHdr.Click += (s, e) => load(filter);
 
             uc.Load += (s, e) => { reStyle(); load(filter); };
             return uc;
+        }
+
+        Panel BuildOrderCard(int oid, decimal total, DateTime created, bool paid,
+            string place, int items, string waiter, bool isCust, string custName, Action reload)
+        {
+            Color accent = paid ? Green : (isCust ? Gold : Blue);
+            Color bg     = paid ? GreenBg : (isCust ? GoldBg : BgCard);
+
+            Panel card = new Panel
+            {
+                Width  = 300, Height = paid ? 152 : 190,
+                Margin = new Padding(8), BackColor = bg, Cursor = Cursors.Hand
+            };
+            card.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var p = new Pen(Color.FromArgb(180, accent), 1f))
+                    e.Graphics.DrawRectangle(p, 0, 0, card.Width - 1, card.Height - 1);
+                using (var b = new SolidBrush(accent))
+                    e.Graphics.FillRectangle(b, 0, 0, card.Width, 5);
+            };
+
+            // Sarlavha
+            string title = isCust
+                ? (string.IsNullOrEmpty(custName) ? "Mijoz buyurtmasi" : custName)
+                : place;
+            card.Controls.Add(new Label
+            {
+                Text      = title,
+                Font      = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = TxtDark,
+                Location  = new Point(14, 14),
+                Width     = card.Width - 28, Height = 24
+            });
+
+            // Holat
+            string statusTxt = paid ? "✓ Yopilgan" : (isCust ? "● Mijoz  ·  Ochiq" : "● Ochiq");
+            card.Controls.Add(new Label
+            {
+                Text      = statusTxt, AutoSize = true,
+                Font      = new Font("Segoe UI", 8, FontStyle.Bold),
+                ForeColor = accent, Location = new Point(14, 42)
+            });
+
+            // Ma'lumot qatori: taom soni + vaqt
+            card.Controls.Add(new Label
+            {
+                Text      = $"{items} ta taom  ·  {created:dd.MM.yyyy  HH:mm}",
+                Font      = new Font("Segoe UI", 8), ForeColor = TxtMuted,
+                Location  = new Point(14, 62), Width = card.Width - 28, Height = 18
+            });
+
+            // Ofitsiant (faqat agar bor bo'lsa)
+            int yNext = 82;
+            if (!isCust && !string.IsNullOrWhiteSpace(waiter))
+            {
+                card.Controls.Add(new Label
+                {
+                    Text      = "Ofitsiant: " + waiter,
+                    Font      = new Font("Segoe UI", 8), ForeColor = TxtMuted,
+                    Location  = new Point(14, yNext), Width = card.Width - 28, Height = 18
+                });
+                yNext += 20;
+            }
+
+            // Summa — katta shrift
+            card.Controls.Add(new Label
+            {
+                Text      = total.ToString("N0") + " so'm",
+                Font      = new Font("Segoe UI", 17, FontStyle.Bold),
+                ForeColor = accent,
+                Location  = new Point(14, yNext),
+                Width     = card.Width - 28, Height = 32
+            });
+
+            // Tahrirlash tugmasi (faqat ochiq buyurtmalar uchun)
+            if (!paid)
+            {
+                Button btn = new Button
+                {
+                    Text      = "Ko'rish / Tahrirlash",
+                    Location  = new Point(14, card.Height - 42),
+                    Width     = card.Width - 28, Height = 34,
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = accent, ForeColor = Color.White,
+                    Font      = new Font("Segoe UI", 9, FontStyle.Bold),
+                    Cursor    = Cursors.Hand
+                };
+                btn.FlatAppearance.BorderSize = 0;
+                int oId = oid;
+                btn.Click  += (s, e) => { new AddOrder(0, oId, Session.Login).ShowDialog(); reload?.Invoke(); };
+                card.Click += (s, e) => { new AddOrder(0, oid, Session.Login).ShowDialog(); reload?.Invoke(); };
+                card.Controls.Add(btn);
+            }
+
+            return card;
         }
 
         // ════════════════════════════════════════════════════════════════════
@@ -351,34 +474,44 @@ namespace WindowsFormsApp1.forms.main
         {
             var uc = new UserControl { BackColor = BgPage };
 
-            Panel hdr = Hdr("Joylar", uc);
+            // ── Header ───────────────────────────────────────────────────────
+            Panel hdr = MkPageHeader("Joylar", uc, out Button btnRef);
 
-            // Refresh button in header
-            Button btnRef = new Button
+            // ── Statistika: bo'sh / band ──────────────────────────────────────
+            Panel statsRow = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = BgPage };
+            Label lblBoshVal = null, lblBandVal = null;
+            Panel sj1 = MkStatCard("Bo'sh joylar", "0", Green, GreenBg, out lblBoshVal);
+            Panel sj2 = MkStatCard("Band joylar",  "0", Red,   RedBg,   out lblBandVal);
+            statsRow.Controls.Add(sj1);
+            statsRow.Controls.Add(sj2);
+            statsRow.Resize += (s, e) =>
             {
-                Text = "↻", Width = 38, Height = 34,
-                FlatStyle = FlatStyle.Flat, BackColor = Color.Transparent,
-                ForeColor = TxtDark, Font = new Font("Segoe UI", 15), Cursor = Cursors.Hand
+                int w = (statsRow.Width - 36) / 2;
+                sj1.SetBounds(12,        10, w, 68);
+                sj2.SetBounds(12 + w + 12, 10, w, 68);
             };
-            btnRef.FlatAppearance.BorderSize = 0;
-            hdr.Resize += (s, e) => btnRef.Location = new Point(hdr.Width - 50, 15);
-            hdr.Controls.Add(btnRef);
+            uc.Controls.Add(statsRow);
 
-            // Legend
-            Panel leg = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = BgCard };
-            leg.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Border), 0, 39, leg.Width, 39);
-            LegDot(leg, Green, "Bo'sh", 18);
-            LegDot(leg, Red,   "Band",  120);
-            uc.Controls.Add(leg);
+            // ── Izoh paneli ───────────────────────────────────────────────────
+            Panel legend = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = BgCard };
+            legend.Paint += (s, e) =>
+            {
+                e.Graphics.DrawLine(new Pen(Border), 0, 0,  legend.Width, 0);
+                e.Graphics.DrawLine(new Pen(Border), 0, 39, legend.Width, 39);
+            };
+            LegDot(legend, Green, "Bo'sh",  18);
+            LegDot(legend, Red,   "Band",  100);
+            LegDot(legend, Gold,  "Aktiv buyurtma", 168);
+            uc.Controls.Add(legend);
 
-            // Scroll + FlowLayout
+            // ── Scroll joyi ───────────────────────────────────────────────────
             Panel scroll = new Panel { Dock = DockStyle.Fill, BackColor = BgPage, AutoScroll = true };
             FlowLayoutPanel flp = new FlowLayoutPanel
             {
-                Dock = DockStyle.Top, AutoSize = true,
+                Dock         = DockStyle.Top, AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 WrapContents = true, FlowDirection = FlowDirection.LeftToRight,
-                BackColor = BgPage, Padding = new Padding(10)
+                BackColor    = BgPage, Padding = new Padding(14, 8, 14, 14)
             };
             scroll.Controls.Add(flp);
             uc.Controls.Add(scroll);
@@ -396,18 +529,33 @@ namespace WindowsFormsApp1.forms.main
                         FROM place_out po
                         JOIN place_category pc ON pc.id = po.place_category_id
                         JOIN place_in pi ON pi.place_out_id = po.id
-                        ORDER BY ISNULL(po.sort_order,9999), po.name, TRY_CAST(SUBSTRING(pi.room_name,1,PATINDEX('%[^0-9]%',pi.room_name+'x')-1) AS INT), pi.room_name";
+                        ORDER BY ISNULL(po.sort_order,9999), po.name,
+                            TRY_CAST(SUBSTRING(pi.room_name,1,
+                                PATINDEX('%[^0-9]%',pi.room_name+'x')-1) AS INT),
+                            pi.room_name";
 
                     DataTable dt = new DataTable();
                     using (var da = new SqlDataAdapter(sql, new dbconnect().GetCon()))
                         da.Fill(dt);
 
+                    // Statistika
+                    int boshCnt = 0, bandCnt = 0;
+                    foreach (DataRow r in dt.Rows)
+                    {
+                        bool isEmpty = r["empty"].ToString().ToUpper() == "YES"
+                                       && Convert.ToInt32(r["cnt"]) == 0;
+                        if (isEmpty) boshCnt++; else bandCnt++;
+                    }
+                    if (lblBoshVal != null) lblBoshVal.Text = boshCnt.ToString();
+                    if (lblBandVal != null) lblBandVal.Text = bandCnt.ToString();
+
                     if (dt.Rows.Count == 0)
                     {
                         flp.Controls.Add(new Label
                         {
-                            Text = "Hech qanday stol topilmadi", AutoSize = true, Margin = new Padding(40),
-                            Font = new Font("Segoe UI", 13), ForeColor = TxtMuted
+                            Text = "Hech qanday stol topilmadi", AutoSize = true,
+                            Margin = new Padding(50),
+                            Font = new Font("Segoe UI", 14), ForeColor = TxtMuted
                         });
                     }
                     else
@@ -424,9 +572,8 @@ namespace WindowsFormsApp1.forms.main
                             if (zone != curZone)
                             {
                                 curZone = zone;
-                                flp.Controls.Add(ZoneHeader(zone, flp));
+                                flp.Controls.Add(MkZoneHeader(zone, flp));
                             }
-
                             flp.Controls.Add(TableCard(tid, rname, empty, cnt, () => load?.Invoke()));
                         }
                     }
@@ -439,7 +586,7 @@ namespace WindowsFormsApp1.forms.main
             uc.Load      += (s, e) => load();
 
             _autoRefresh = new Timer { Interval = 3000 };
-            _autoRefresh.Tick += (s, e) => load();
+            _autoRefresh.Tick += (s, e) => { if (_active == 1) load(); };
             _autoRefresh.Start();
 
             return uc;
@@ -447,26 +594,67 @@ namespace WindowsFormsApp1.forms.main
 
         Panel TableCard(int tableId, string name, bool empty, int cnt, Action reload)
         {
-            Color accent = empty ? Green : Red;
-            Color bg     = empty ? BgCard : Color.FromArgb(255, 245, 245);
-            string status = empty ? "Bo'sh" : "Band";
-            string btnTxt = empty ? "Zakaz qo'shish" : "Ko'rish / Tahrirlash";
-            Color  btnClr = empty ? Green : Gold;
+            Color accent   = empty ? Green : (cnt > 0 ? Gold : Red);
+            Color bg       = empty ? GreenBg : (cnt > 0 ? GoldBg : RedBg);
+            string status  = empty ? "● Bo'sh" : "● Band";
+            string btnText = empty ? "+ Yangi zakaz" : "Ko'rish";
 
-            Panel card = new Panel { Width = 162, Height = 152, Margin = new Padding(8), BackColor = bg, Cursor = Cursors.Hand };
+            Panel card = new Panel
+            {
+                Width  = 160, Height = 170,
+                Margin = new Padding(6), BackColor = bg, Cursor = Cursors.Hand
+            };
             card.Paint += (s, e) =>
             {
-                e.Graphics.FillRectangle(new SolidBrush(bg), card.ClientRectangle);
-                e.Graphics.DrawRectangle(new Pen(accent, 2f), 1, 1, card.Width - 3, card.Height - 3);
-                e.Graphics.FillRectangle(new SolidBrush(accent), 0, 0, card.Width, 5);
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var pen = new Pen(Color.FromArgb(160, accent), 1.5f))
+                    e.Graphics.DrawRectangle(pen, 1, 1, card.Width - 3, card.Height - 3);
+                using (var br = new SolidBrush(accent))
+                    e.Graphics.FillRectangle(br, 0, 0, card.Width, 6);
             };
 
-            Lbl(card, name,   10, 18, 142, new Font("Segoe UI", 13, FontStyle.Bold), TxtDark, false, ContentAlignment.MiddleCenter);
-            Lbl(card, status, 10, 46, 142, new Font("Segoe UI", 9,  FontStyle.Bold), accent,  false, ContentAlignment.MiddleCenter);
-            if (!empty && cnt > 0)
-                Lbl(card, cnt + " ta buyurtma", 10, 66, 142, new Font("Segoe UI", 8), TxtMuted, false, ContentAlignment.MiddleCenter);
+            // Stol nomi — katta
+            card.Controls.Add(new Label
+            {
+                Text      = name,
+                Font      = new Font("Segoe UI", 15, FontStyle.Bold),
+                ForeColor = TxtDark, TextAlign = ContentAlignment.MiddleCenter,
+                Location  = new Point(6, 14), Width = card.Width - 12, Height = 32
+            });
 
-            Button btn = CardBtn(btnTxt, btnClr, 12, 108, 138, 32);
+            // Holat
+            card.Controls.Add(new Label
+            {
+                Text      = status, AutoSize = false,
+                Font      = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = accent, TextAlign = ContentAlignment.MiddleCenter,
+                Location  = new Point(6, 50), Width = card.Width - 12, Height = 22
+            });
+
+            // Aktiv buyurtmalar soni
+            if (cnt > 0)
+            {
+                card.Controls.Add(new Label
+                {
+                    Text      = cnt + " ta aktiv",
+                    Font      = new Font("Segoe UI", 8), ForeColor = TxtMuted,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Location  = new Point(6, 72), Width = card.Width - 12, Height = 18
+                });
+            }
+
+            // Tugma
+            Button btn = new Button
+            {
+                Text      = btnText,
+                Location  = new Point(10, card.Height - 44),
+                Width     = card.Width - 20, Height = 34,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = accent, ForeColor = Color.White,
+                Font      = new Font("Segoe UI", 8, FontStyle.Bold),
+                Cursor    = Cursors.Hand
+            };
+            btn.FlatAppearance.BorderSize = 0;
             card.Controls.Add(btn);
 
             EventHandler open = (s, e) =>
@@ -476,7 +664,8 @@ namespace WindowsFormsApp1.forms.main
                     int existId = 0;
                     dbconnect db = new dbconnect();
                     db.OpenCon();
-                    using (var cmd = new SqlCommand("SELECT TOP 1 id FROM [order] WHERE place_id=@p AND paid='NO'", db.GetCon()))
+                    using (var cmd = new SqlCommand(
+                        "SELECT TOP 1 id FROM [order] WHERE place_id=@p AND paid='NO'", db.GetCon()))
                     {
                         cmd.Parameters.AddWithValue("@p", tableId);
                         object r = cmd.ExecuteScalar();
@@ -495,81 +684,86 @@ namespace WindowsFormsApp1.forms.main
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SMALL HELPERS
+        // HELPER METODLAR
         // ════════════════════════════════════════════════════════════════════
-        static Panel Hdr(string title, UserControl owner)
+
+        // Sahifa sarlavhasi (header panel)
+        static Panel MkPageHeader(string title, UserControl owner, out Button refreshBtn)
         {
-            Panel h = new Panel { Dock = DockStyle.Top, Height = 64, BackColor = BgCard };
-            h.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Border), 0, 63, h.Width, 63);
+            Panel h = new Panel { Dock = DockStyle.Top, Height = 70, BackColor = BgCard };
+            h.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Border), 0, 69, h.Width, 69);
             h.Controls.Add(new Label
             {
-                Text = title, Font = new Font("Segoe UI", 18, FontStyle.Bold),
-                ForeColor = TxtDark, AutoSize = true, Location = new Point(24, 16)
+                Text = title, Font = new Font("Segoe UI", 19, FontStyle.Bold),
+                ForeColor = TxtDark, AutoSize = true, Location = new Point(24, 18)
             });
+
+            Button rb = new Button
+            {
+                Text = "↻", Width = 38, Height = 38,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(241, 245, 249),
+                ForeColor = TxtDark, Cursor = Cursors.Hand
+            };
+            rb.FlatAppearance.BorderSize  = 1;
+            rb.FlatAppearance.BorderColor = Border;
+            h.Resize += (s, e) => rb.Location = new Point(h.Width - 56, 16);
+            h.Controls.Add(rb);
+
             owner.Controls.Add(h);
+            refreshBtn = rb;
             return h;
         }
 
-        static Panel MkStat(string label, string initVal, Color valClr, out Label valLbl)
+        // Statistika kartasi
+        static Panel MkStatCard(string label, string initVal, Color accent, Color bg, out Label valLbl)
         {
-            Panel p = new Panel { Height = 56, BackColor = BgCard };
-            p.Paint += (s, e) => e.Graphics.DrawRectangle(new Pen(Border), 0, 0, p.Width - 1, p.Height - 1);
-
+            Panel p = new Panel { BackColor = bg };
+            p.Paint += (s, e) =>
+            {
+                e.Graphics.DrawRectangle(new Pen(Color.FromArgb(60, accent)), 0, 0, p.Width - 1, p.Height - 1);
+                using (var b = new SolidBrush(accent))
+                    e.Graphics.FillRectangle(b, 0, 0, 5, p.Height);
+            };
             p.Controls.Add(new Label
             {
-                Text = label, Font = new Font("Segoe UI", 9), ForeColor = TxtMuted,
-                Location = new Point(12, 7), AutoSize = true
+                Text = label, Font = new Font("Segoe UI", 8), ForeColor = TxtMuted,
+                Location = new Point(14, 8), AutoSize = true
             });
             valLbl = new Label
             {
-                Text = initVal, Font = new Font("Segoe UI", 14, FontStyle.Bold), ForeColor = valClr,
-                Location = new Point(12, 26), Width = 230, Height = 25, AutoSize = false
+                Text = initVal,
+                Font = new Font("Segoe UI", 19, FontStyle.Bold),
+                ForeColor = accent,
+                Location = new Point(14, 28), Width = 300, Height = 34
             };
             p.Controls.Add(valLbl);
             return p;
         }
 
-        static Panel ZoneHeader(string title, FlowLayoutPanel flp)
+        // Zona sarlavhasi (FlowLayoutPanel ichida)
+        static Panel MkZoneHeader(string title, FlowLayoutPanel flp)
         {
-            Panel p = new Panel { Height = 38, Margin = new Padding(4, 14, 4, 2), BackColor = Color.Transparent };
-            p.Width = flp.Width > 48 ? flp.Width - 48 : 600;
-            flp.Resize += (s, e) => { if (flp.Width > 48) p.Width = flp.Width - 48; };
-            p.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = TxtDark, AutoSize = true, Location = new Point(0, 6) });
-            p.Controls.Add(new Panel { Height = 2, BackColor = Gold, Dock = DockStyle.Bottom });
+            Panel p = new Panel { Height = 46, Margin = new Padding(4, 18, 4, 2), BackColor = Color.Transparent };
+            p.Width = flp.Width > 60 ? flp.Width - 60 : 600;
+            flp.Resize += (s, e) => { if (flp.Width > 60) p.Width = flp.Width - 60; };
+
+            p.Controls.Add(new Label
+            {
+                Text = title, Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                ForeColor = TxtDark, AutoSize = true, Location = new Point(2, 4)
+            });
+            p.Controls.Add(new Panel { Height = 2, BackColor = Border, Dock = DockStyle.Bottom });
             return p;
         }
 
+        // Legenda nuqtasi
         static void LegDot(Panel parent, Color c, string txt, int x)
         {
             Panel d = new Panel { Width = 12, Height = 12, Location = new Point(x, 14), BackColor = Color.Transparent };
             d.Paint += (s, e) => { e.Graphics.SmoothingMode = SmoothingMode.AntiAlias; e.Graphics.FillEllipse(new SolidBrush(c), 0, 0, 11, 11); };
             parent.Controls.Add(d);
-            parent.Controls.Add(new Label { Text = txt, Font = new Font("Segoe UI", 9), ForeColor = TxtMuted, AutoSize = true, Location = new Point(x + 16, 12) });
-        }
-
-        static void Lbl(Panel p, string text, int x, int y, int w,
-            Font font, Color fore, bool autoW = false, ContentAlignment align = ContentAlignment.TopLeft)
-        {
-            Label l = new Label
-            {
-                Text = text, Font = font, ForeColor = fore,
-                Location = new Point(x, y), AutoSize = autoW,
-                TextAlign = align
-            };
-            if (!autoW) { l.Width = w; l.Height = font.Height + 4; }
-            p.Controls.Add(l);
-        }
-
-        static Button CardBtn(string text, Color bg, int x, int y, int w, int h)
-        {
-            Button b = new Button
-            {
-                Text = text, Location = new Point(x, y), Width = w, Height = h,
-                FlatStyle = FlatStyle.Flat, BackColor = bg, ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand
-            };
-            b.FlatAppearance.BorderSize = 0;
-            return b;
+            parent.Controls.Add(new Label { Text = txt, Font = new Font("Segoe UI", 9), ForeColor = TxtMuted, AutoSize = true, Location = new Point(x + 16, 11) });
         }
 
         protected override void Dispose(bool disposing)
