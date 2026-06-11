@@ -1059,60 +1059,67 @@ namespace WindowsFormsApp1.forms.main
                 }
                 det.Controls.Add(hdrPan);
 
-                // Taomlar ro'yxati
-                Panel foodsCard = new Panel { Dock = DockStyle.Top, BackColor = C_White, Padding = new Padding(18, 12, 18, 12) };
+                // Taomlar ro'yxati — har qator alohida Panel ichida
+                Panel foodsCard = new Panel
+                {
+                    Dock      = DockStyle.Top,
+                    Height    = 36 + foods.Rows.Count * 32,
+                    BackColor = C_White
+                };
                 foodsCard.Paint += (s, e) =>
                     e.Graphics.DrawLine(new Pen(C_Border), 0, foodsCard.Height - 1, foodsCard.Width, foodsCard.Height - 1);
-
-                int cardH = 32 + foods.Rows.Count * 36;
-                foodsCard.Height = cardH;
 
                 foodsCard.Controls.Add(new Label
                 {
                     Text      = "Taomlar",
-                    Font      = new Font("Segoe UI", 9, FontStyle.Bold),
+                    Font      = new Font("Segoe UI", 8, FontStyle.Bold),
                     ForeColor = C_Muted,
-                    Location  = new Point(18, 10),
+                    Location  = new Point(16, 10),
                     AutoSize  = true
                 });
 
-                int fy = 34;
+                int fy = 32;
                 foreach (DataRow fr in foods.Rows)
                 {
-                    string fn  = fr["name"].ToString();
-                    int    qty = Convert.ToInt32(fr["quantity"]);
-                    decimal fp = Convert.ToDecimal(fr["price"]);
+                    string  fn    = fr["name"].ToString();
+                    int     qty   = Convert.ToInt32(fr["quantity"]);
+                    decimal fp    = Convert.ToDecimal(fr["price"]);
+                    string  price = (fp * qty).ToString("N0") + " so'm";
 
-                    foodsCard.Controls.Add(new Label
+                    // Har bir qator uchun Panel — name va price to'g'ri joylashadi
+                    Panel foodRow = new Panel
+                    {
+                        Location  = new Point(0, fy),
+                        Height    = 30,
+                        BackColor = C_White
+                    };
+                    foodsCard.Resize += (s, e) => foodRow.Width = foodsCard.Width;
+                    foodRow.Width = 600;
+
+                    Label lblFoodName = new Label
                     {
                         Text      = $"× {qty}  {fn}",
                         Font      = new Font("Segoe UI", 9),
                         ForeColor = C_Dark,
-                        Location  = new Point(18, fy),
+                        Location  = new Point(16, 6),
                         AutoSize  = true
-                    });
-                    foodsCard.Controls.Add(new Label
+                    };
+                    Label lblPrice = new Label
                     {
-                        Text      = (fp * qty).ToString("N0"),
+                        Text      = price,
                         Font      = new Font("Segoe UI", 9),
                         ForeColor = C_Muted,
                         AutoSize  = true,
-                        Location  = new Point(0, fy)
-                    });
-                    foodsCard.Resize += (s, e) =>
-                    { /* right-align handled individually below */ };
+                        Location  = new Point(500, 6)
+                    };
+                    foodRow.Controls.Add(lblFoodName);
+                    foodRow.Controls.Add(lblPrice);
+                    // Narxni o'ng tomonga qo'yish
+                    foodRow.Resize += (s, e) =>
+                        lblPrice.Location = new Point(foodRow.Width - lblPrice.Width - 16, 6);
 
-                    fy += 36;
-                }
-
-                // Right-align price labels
-                foreach (Control fc in foodsCard.Controls)
-                {
-                    if (fc is Label fl && fl.Location.X == 0 && fl.Location.Y >= 34)
-                    {
-                        int lY = fl.Location.Y;
-                        foodsCard.Resize += (s, e) => fl.Location = new Point(foodsCard.Width - fl.Width - 18, lY);
-                    }
+                    foodsCard.Controls.Add(foodRow);
+                    fy += 32;
                 }
 
                 det.Controls.Add(foodsCard);
