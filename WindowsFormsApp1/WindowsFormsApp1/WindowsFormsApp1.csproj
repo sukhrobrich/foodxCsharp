@@ -65,6 +65,9 @@
     <Compile Include="forms\food\AddFoodCategory.Designer.cs">
       <DependentUpon>AddFoodCategory.cs</DependentUpon>
     </Compile>
+    <Compile Include="forms\main\CashierPage.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="forms\main\KassirPage.cs">
       <SubType>Form</SubType>
     </Compile>

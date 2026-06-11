@@ -420,7 +420,7 @@ namespace WindowsFormsApp1.forms.user
                             if (Session.UserCategory == "admin")
                                 new MainPage(Session.UserId).Show();
                             else if (Session.UserCategory == "kassir")
-                                new KassirPage().Show();
+                                new CashierPage().Show();
                             else
                                 new WaiterPage().Show();
                         }
