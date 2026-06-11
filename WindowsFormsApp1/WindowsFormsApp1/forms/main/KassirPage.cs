@@ -269,8 +269,8 @@ namespace WindowsFormsApp1.forms.main
                 try
                 {
                     // Statistika uchun alohida so'rov (filterga bog'liq emas)
-                    using (var db = new dbconnect())
                     {
+                        dbconnect db = new dbconnect();
                         db.OpenCon();
                         string statSql = @"
                             SELECT
