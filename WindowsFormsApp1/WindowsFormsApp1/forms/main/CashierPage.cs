@@ -305,15 +305,18 @@ namespace WindowsFormsApp1.forms.main
             Panel scroll = new Panel { Dock = DockStyle.Fill, BackColor = C_Bg, AutoScroll = true };
             FlowLayoutPanel flp = new FlowLayoutPanel
             {
-                Dock         = DockStyle.Top,
-                AutoSize     = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = true,
+                // Dock=Top + AutoSize WinForms da scroll buziladi — Width ni qo'lda boshqaramiz
+                Location      = new Point(0, 0),
+                Width         = 1000,
+                AutoSize      = true,
+                AutoSizeMode  = AutoSizeMode.GrowAndShrink,
+                WrapContents  = true,
                 FlowDirection = FlowDirection.LeftToRight,
-                BackColor    = C_Bg,
-                Padding      = new Padding(18, 14, 18, 18)
+                BackColor     = C_Bg,
+                Padding       = new Padding(18, 14, 18, 18)
             };
             scroll.Controls.Add(flp);
+            scroll.SizeChanged += (s, e) => { if (scroll.ClientSize.Width > 0) flp.Width = scroll.ClientSize.Width; };
             _pageArea.Controls.Add(scroll);
             _tableGrid = flp;
 
@@ -600,12 +603,12 @@ namespace WindowsFormsApp1.forms.main
         {
             Panel p = new Panel
             {
-                Height  = 44,
-                Margin  = new Padding(6, 14, 6, 2),
+                Height    = 44,
+                Width     = Math.Max(_tableGrid.Width - 36, 200),
+                Margin    = new Padding(0, 14, 0, 2),
                 BackColor = Color.Transparent
             };
-            _tableGrid.Resize += (s, e) => p.Width = Math.Max(_tableGrid.Width - 60, 200);
-            p.Width = 800;
+            _tableGrid.SizeChanged += (s, e) => p.Width = Math.Max(_tableGrid.Width - 36, 200);
 
             p.Controls.Add(new Label
             {
@@ -695,15 +698,17 @@ namespace WindowsFormsApp1.forms.main
             Panel listScroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = C_White };
             FlowLayoutPanel flpList = new FlowLayoutPanel
             {
-                Dock         = DockStyle.Top,
-                AutoSize     = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = false,
+                Location      = new Point(0, 0),
+                Width         = 378,
+                AutoSize      = true,
+                AutoSizeMode  = AutoSizeMode.GrowAndShrink,
+                WrapContents  = false,
                 FlowDirection = FlowDirection.TopDown,
-                BackColor    = C_White,
-                Padding      = new Padding(0)
+                BackColor     = C_White,
+                Padding       = new Padding(0)
             };
             listScroll.Controls.Add(flpList);
+            listScroll.SizeChanged += (s, e) => { if (listScroll.ClientSize.Width > 0) flpList.Width = listScroll.ClientSize.Width; };
             listPanel.Controls.Add(listScroll);
 
             // List header
@@ -841,14 +846,18 @@ namespace WindowsFormsApp1.forms.main
             Color accent = paid ? C_Green : (isCust ? C_Purple : C_Primary);
             Color bg     = paid ? C_GreenBg : (isCust ? C_PurpleBg : C_PrimaryBg);
 
+            int rowW = _orderList != null && _orderList.Width > 40 ? _orderList.Width : 378;
             Panel row = new Panel
             {
-                Width     = 378,
+                Width     = rowW,
                 Height    = 78,
                 Margin    = new Padding(0),
                 BackColor = C_White,
                 Cursor    = Cursors.Hand
             };
+            // Parent width o'zgarganda row ham kengaysin
+            if (_orderList != null)
+                _orderList.SizeChanged += (s, e) => { if (_orderList.Width > 40) row.Width = _orderList.Width; };
             row.Paint += (s, e) =>
             {
                 // Sol rang chizig'i
@@ -907,7 +916,7 @@ namespace WindowsFormsApp1.forms.main
                 {
                     Text      = "→",
                     Width     = 30, Height = 30,
-                    Location  = new Point(340, 24),
+                    Location  = new Point(row.Width - 38, 24),
                     FlatStyle = FlatStyle.Flat,
                     BackColor = Color.Transparent,
                     ForeColor = C_Primary,
@@ -915,6 +924,7 @@ namespace WindowsFormsApp1.forms.main
                     Cursor    = Cursors.Hand
                 };
                 btnEdit.FlatAppearance.BorderSize = 0;
+                row.SizeChanged += (s, e) => btnEdit.Location = new Point(row.Width - 38, 24);
                 btnEdit.Click += (s, e) => OpenOrderDetail(oid);
                 row.Controls.Add(btnEdit);
             }
@@ -1191,7 +1201,10 @@ namespace WindowsFormsApp1.forms.main
 
         Panel EmptyListItem(string text)
         {
-            Panel p = new Panel { Width = 378, Height = 60, BackColor = C_White };
+            int w = _orderList != null && _orderList.Width > 40 ? _orderList.Width : 378;
+            Panel p = new Panel { Width = w, Height = 60, BackColor = C_White };
+            if (_orderList != null)
+                _orderList.SizeChanged += (s, e) => { if (_orderList.Width > 40) p.Width = _orderList.Width; };
             p.Controls.Add(new Label
             {
                 Text      = text,
