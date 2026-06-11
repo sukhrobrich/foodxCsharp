@@ -990,9 +990,9 @@ namespace WindowsFormsApp1.forms.main
 
                 // Taomlar
                 DataTable foods = new DataTable();
-                string fsql = @"SELECT f.name, of.quantity, of.price
-                                FROM order_food of JOIN food f ON f.id=of.food_id
-                                WHERE of.order_id=@oid ORDER BY of.id";
+                string fsql = @"SELECT f.name, ofd.quantity, ofd.price
+                                FROM order_food ofd JOIN food f ON f.id=ofd.food_id
+                                WHERE ofd.order_id=@oid ORDER BY ofd.id";
                 using (var da = new SqlDataAdapter(fsql, new dbconnect().GetCon()))
                 {
                     da.SelectCommand.Parameters.AddWithValue("@oid", orderId);
