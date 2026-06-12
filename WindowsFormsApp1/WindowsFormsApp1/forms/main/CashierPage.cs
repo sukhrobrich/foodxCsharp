@@ -44,6 +44,10 @@ namespace WindowsFormsApp1.forms.main
         Panel  _zoneTabs;
         Action _newOrderHandler;
 
+        // Tile diff: tableId → updater (qayta yaratmasdan faqat yangilash uchun)
+        readonly Dictionary<int, Action<bool, int, decimal>> _tileUpdaters
+            = new Dictionary<int, Action<bool, int, decimal>>();
+
         // Buyurtmalar state
         string _ordFilter   = "NO";
         Panel  _orderList;
@@ -231,6 +235,7 @@ namespace WindowsFormsApp1.forms.main
                 SyncEngine.NewOrdersArrived -= _newOrderHandler;
                 _newOrderHandler = null;
             }
+            _tileUpdaters.Clear();
             _activeTab = tab;
             ApplyNavStyle();
             _pageArea.Controls.Clear();
@@ -396,13 +401,10 @@ namespace WindowsFormsApp1.forms.main
         {
             if (_tableGrid == null) return;
 
-            // MaximumSize ni scroll panelidan olish (WrapContents uchun)
             var scrollPnl = _tableGrid.Parent as Panel;
             if (scrollPnl != null && scrollPnl.ClientSize.Width > 10)
                 _tableGrid.MaximumSize = new Size(scrollPnl.ClientSize.Width, 0);
 
-            _tableGrid.SuspendLayout();
-            _tableGrid.Controls.Clear();
             try
             {
                 string zoneWhere = string.IsNullOrEmpty(_activeZone)
@@ -426,36 +428,65 @@ namespace WindowsFormsApp1.forms.main
                 using (var da = new SqlDataAdapter(sql, new dbconnect().GetCon()))
                     da.Fill(dt);
 
+                // Yangi ID to'plami
+                var newIds = new HashSet<int>();
+                foreach (DataRow r in dt.Rows) newIds.Add(Convert.ToInt32(r["tid"]));
+
+                // Tuzilma o'zgarganmi? (stol qo'shildi yoki o'chirildi — kam bo'ladi)
+                bool structChanged = _tileUpdaters.Count == 0
+                    || newIds.Count != _tileUpdaters.Count
+                    || !newIds.IsSubsetOf(_tileUpdaters.Keys);
+
                 int bosh = 0, band = 0, ochiq = 0;
                 decimal totalSum = 0;
-                string curZone = null;
 
-                foreach (DataRow r in dt.Rows)
+                if (structChanged)
                 {
-                    string zone    = r["zone"].ToString();
-                    int    tid     = Convert.ToInt32(r["tid"]);
-                    string rname   = r["room_name"].ToString();
-                    int    cnt     = Convert.ToInt32(r["cnt"]);
-                    bool   empty   = r["empty"].ToString().ToUpper() == "YES" && cnt == 0;
-                    decimal oTotal = Convert.ToDecimal(r["ord_total"]);
-
-                    if (empty) bosh++; else { band++; if (cnt > 0) { ochiq++; totalSum += oTotal; } }
-
-                    if (zone != curZone)
+                    // To'liq qayta qurilish — faqat stol ro'yxati o'zgarganda
+                    _tileUpdaters.Clear();
+                    _tableGrid.SuspendLayout();
+                    _tableGrid.Controls.Clear();
+                    string curZone = null;
+                    foreach (DataRow r in dt.Rows)
                     {
-                        curZone = zone;
-                        _tableGrid.Controls.Add(ZoneLabel(zone));
+                        string zone    = r["zone"].ToString();
+                        int    tid     = Convert.ToInt32(r["tid"]);
+                        string rname   = r["room_name"].ToString();
+                        int    cnt     = Convert.ToInt32(r["cnt"]);
+                        bool   empty   = r["empty"].ToString().ToUpper() == "YES" && cnt == 0;
+                        decimal oTotal = Convert.ToDecimal(r["ord_total"]);
+
+                        if (empty) bosh++; else { band++; if (cnt > 0) { ochiq++; totalSum += oTotal; } }
+
+                        if (zone != curZone) { curZone = zone; _tableGrid.Controls.Add(ZoneLabel(zone)); }
+
+                        Action<bool, int, decimal> upd;
+                        _tableGrid.Controls.Add(TableTile(tid, rname, zone, empty, cnt, oTotal, out upd));
+                        _tileUpdaters[tid] = upd;
                     }
-                    _tableGrid.Controls.Add(TableTile(tid, rname, zone, empty, cnt, oTotal));
+                    if (dt.Rows.Count == 0) _tableGrid.Controls.Add(EmptyLabel("Hech qanday stol topilmadi"));
+                    _tableGrid.ResumeLayout();
+                }
+                else
+                {
+                    // Lipillashsiz yangilanish: faqat o'zgargan holat qiymatlarini update qiladi
+                    foreach (DataRow r in dt.Rows)
+                    {
+                        int     tid    = Convert.ToInt32(r["tid"]);
+                        int     cnt    = Convert.ToInt32(r["cnt"]);
+                        bool    empty  = r["empty"].ToString().ToUpper() == "YES" && cnt == 0;
+                        decimal oTotal = Convert.ToDecimal(r["ord_total"]);
+
+                        if (empty) bosh++; else { band++; if (cnt > 0) { ochiq++; totalSum += oTotal; } }
+
+                        Action<bool, int, decimal> upd;
+                        if (_tileUpdaters.TryGetValue(tid, out upd)) upd(empty, cnt, oTotal);
+                    }
                 }
 
                 UpdateStatsLabels(bosh, band, ochiq, totalSum);
-
-                if (dt.Rows.Count == 0)
-                    _tableGrid.Controls.Add(EmptyLabel("Hech qanday stol topilmadi"));
             }
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
-            finally { _tableGrid.ResumeLayout(); }
         }
 
         // Stats labellari uchun reference saqlash
@@ -469,10 +500,14 @@ namespace WindowsFormsApp1.forms.main
             if (_lblSum   != null) _lblSum.Text    = sum.ToString("N0") + " so'm";
         }
 
-        Panel TableTile(int tableId, string name, string zone, bool empty, int cnt, decimal ordTotal)
+        Panel TableTile(int tableId, string name, string zone, bool empty, int cnt, decimal ordTotal,
+                        out Action<bool, int, decimal> updater)
         {
-            Color accent = empty ? C_Green : (cnt > 0 ? C_Amber : C_Red);
-            Color bg     = empty ? C_GreenBg : (cnt > 0 ? C_AmberBg : C_RedBg);
+            // Mutable state — closurelar array ni ushlaydi, qiymatni emas → yangilanadi
+            Color[] ac = { empty ? C_Green : (cnt > 0 ? C_Amber : C_Red) };
+            Color[] bg = { empty ? C_GreenBg : (cnt > 0 ? C_AmberBg : C_RedBg) };
+            bool[]  em = { empty };
+            int[]   cn = { cnt };
 
             Panel tile = new Panel
             {
@@ -481,108 +516,103 @@ namespace WindowsFormsApp1.forms.main
                 BackColor = C_White,
                 Cursor    = Cursors.Hand
             };
-
-            // Gölge va border
             tile.Paint += (s, e) =>
             {
-                var g = e.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-
-                // Yuqori rang chizig'i (5px)
-                using (var br = new SolidBrush(accent))
-                    g.FillRectangle(br, 0, 0, tile.Width, 5);
-
-                // Border
-                using (var pen = new Pen(Color.FromArgb(40, accent), 1))
-                    g.DrawRectangle(pen, 0, 0, tile.Width - 1, tile.Height - 1);
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var br = new SolidBrush(ac[0]))
+                    e.Graphics.FillRectangle(br, 0, 0, tile.Width, 5);
+                using (var pen = new Pen(Color.FromArgb(40, ac[0]), 1))
+                    e.Graphics.DrawRectangle(pen, 0, 0, tile.Width - 1, tile.Height - 1);
             };
 
-            // Status badge (top-right)
-            Panel badge = new Panel
-            {
-                Width     = 74, Height = 22,
-                Location  = new Point(tile.Width - 80, 12),
-                BackColor = bg
-            };
+            Panel badge = new Panel { Width = 74, Height = 22, Location = new Point(tile.Width - 80, 12), BackColor = bg[0] };
             badge.Paint += (s, e) =>
             {
-                string txt = empty ? "Bo'sh" : (cnt > 0 ? "Aktiv" : "Band");
+                string txt = em[0] ? "Bo'sh" : (cn[0] > 0 ? "Aktiv" : "Band");
                 using (var f  = new Font("Segoe UI", 8, FontStyle.Bold))
-                using (var br = new SolidBrush(accent))
+                using (var br = new SolidBrush(ac[0]))
                 using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                     e.Graphics.DrawString(txt, f, br, new RectangleF(0, 0, badge.Width, badge.Height), sf);
-                using (var pen = new Pen(Color.FromArgb(60, accent)))
+                using (var pen = new Pen(Color.FromArgb(60, ac[0])))
                     e.Graphics.DrawRectangle(pen, 0, 0, badge.Width - 1, badge.Height - 1);
             };
             tile.Controls.Add(badge);
 
-            // Stol nomi — KATTA
             Label lblName = new Label
             {
-                Text      = name,
-                Font      = new Font("Segoe UI", 22, FontStyle.Bold),
-                ForeColor = C_Dark,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Location  = new Point(0, 18),
-                Width     = tile.Width, Height = 52
+                Text = name, Font = new Font("Segoe UI", 22, FontStyle.Bold),
+                ForeColor = C_Dark, TextAlign = ContentAlignment.MiddleCenter,
+                Location = new Point(0, 18), Width = tile.Width, Height = 52
             };
             tile.Controls.Add(lblName);
 
-            // Zona nomi
             Label lblZone = new Label
             {
-                Text      = zone,
-                Font      = new Font("Segoe UI", 8),
-                ForeColor = C_Muted,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Location  = new Point(0, 68),
-                Width     = tile.Width, Height = 18
+                Text = zone, Font = new Font("Segoe UI", 8),
+                ForeColor = C_Muted, TextAlign = ContentAlignment.MiddleCenter,
+                Location = new Point(0, 68), Width = tile.Width, Height = 18
             };
             tile.Controls.Add(lblZone);
 
-            // Agar aktiv buyurtma bo'lsa — summa
-            if (cnt > 0)
+            // Summa va soni — har doim qo'shiladi, Visible orqali ko'rsatiladi/yashiriladi
+            Label lblSum = new Label
             {
-                tile.Controls.Add(new Label
-                {
-                    Text      = ordTotal.ToString("N0") + " so'm",
-                    Font      = new Font("Segoe UI", 12, FontStyle.Bold),
-                    ForeColor = C_Amber,
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Location  = new Point(0, 86),
-                    Width     = tile.Width, Height = 26
-                });
-                tile.Controls.Add(new Label
-                {
-                    Text      = cnt + " ta aktiv buyurtma",
-                    Font      = new Font("Segoe UI", 8),
-                    ForeColor = C_Muted,
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Location  = new Point(0, 110),
-                    Width     = tile.Width, Height = 18
-                });
-            }
+                Text      = cnt > 0 ? ordTotal.ToString("N0") + " so'm" : "",
+                Font      = new Font("Segoe UI", 12, FontStyle.Bold),
+                ForeColor = C_Amber, TextAlign = ContentAlignment.MiddleCenter,
+                Location  = new Point(0, 86), Width = tile.Width, Height = 26,
+                Visible   = cnt > 0
+            };
+            tile.Controls.Add(lblSum);
 
-            // Tugma
+            Label lblCnt = new Label
+            {
+                Text      = cnt > 0 ? cnt + " ta aktiv buyurtma" : "",
+                Font      = new Font("Segoe UI", 8),
+                ForeColor = C_Muted, TextAlign = ContentAlignment.MiddleCenter,
+                Location  = new Point(0, 110), Width = tile.Width, Height = 18,
+                Visible   = cnt > 0
+            };
+            tile.Controls.Add(lblCnt);
+
             Button btn = new Button
             {
                 Text      = empty ? "+ Yangi zakaz" : "Ko'rish",
                 Location  = new Point(12, tile.Height - 44),
                 Width     = tile.Width - 24, Height = 36,
                 FlatStyle = FlatStyle.Flat,
-                BackColor = accent,
-                ForeColor = Color.White,
+                BackColor = ac[0], ForeColor = Color.White,
                 Font      = new Font("Segoe UI", 9, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             btn.FlatAppearance.BorderSize = 0;
 
             EventHandler openOrder = (s, e) => OpenTableOrder(tableId);
-            tile.Click  += openOrder;
+            tile.Click   += openOrder;
             lblName.Click += openOrder;
             lblZone.Click += openOrder;
-            btn.Click   += openOrder;
+            btn.Click    += openOrder;
             tile.Controls.Add(btn);
+
+            // Yangilash funksiyasi — panel qayta yaratilmaydi, faqat qiymatlar o'zgaradi
+            updater = (newEmpty, newCnt, newTotal) =>
+            {
+                em[0] = newEmpty;
+                cn[0] = newCnt;
+                ac[0] = newEmpty ? C_Green : (newCnt > 0 ? C_Amber : C_Red);
+                bg[0] = newEmpty ? C_GreenBg : (newCnt > 0 ? C_AmberBg : C_RedBg);
+
+                badge.BackColor = bg[0];
+                lblSum.Text     = newCnt > 0 ? newTotal.ToString("N0") + " so'm" : "";
+                lblSum.Visible  = newCnt > 0;
+                lblCnt.Text     = newCnt > 0 ? newCnt + " ta aktiv buyurtma" : "";
+                lblCnt.Visible  = newCnt > 0;
+                btn.Text        = newEmpty ? "+ Yangi zakaz" : "Ko'rish";
+                btn.BackColor   = ac[0];
+
+                tile.Invalidate();   // yuqori chiziq + border qayta chiziladi
+                badge.Invalidate();  // badge matni qayta chiziladi
+            };
 
             return tile;
         }
