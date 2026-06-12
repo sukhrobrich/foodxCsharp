@@ -234,10 +234,32 @@ namespace WindowsFormsApp1.services
                     }
                 }
 
-                bool ok = CheckLocal();
-                if (ok) FixLocalDefaults();
-                else errorMessage = "SQL skript bajarildi, lekin baza hali ham mavjud emas.";
-                return ok;
+                // CREATE DATABASE dan keyin SQL Server bazani online holatga olib chiqishga vaqt kerak
+                // sys.databases dan to'g'ri tekshiramiz, keyin CheckLocal() qayta urinadi
+                bool dbExistsInSys = false;
+                using (var c2 = new SqlConnection(builder.ConnectionString))
+                {
+                    c2.Open();
+                    using (var cmd2 = new SqlCommand("SELECT COUNT(1) FROM sys.databases WHERE name='FoodX'", c2))
+                        dbExistsInSys = (int)cmd2.ExecuteScalar() > 0;
+                }
+
+                if (!dbExistsInSys)
+                {
+                    errorMessage = "SQL skript bajarildi, lekin sys.databases da FoodX ko'rinmaydi.";
+                    return false;
+                }
+
+                // Baza yaratilgan — CheckLocal() uchun biroz kutamiz (SQL Server online holatga o'tkazsin)
+                for (int i = 0; i < 5; i++)
+                {
+                    if (CheckLocal()) { FixLocalDefaults(); return true; }
+                    System.Threading.Thread.Sleep(1000);
+                }
+
+                errorMessage = $"Baza sys.databases da bor, lekin ulanib bo'lmaydi.\n" +
+                               $"Connection string: {_local}";
+                return false;
             }
             catch (Exception ex)
             {
