@@ -70,10 +70,10 @@ namespace WindowsFormsApp1
                 ApplySavedConnectionMode();
 
             // 3b. Mahalliy bazani tekshirib, zarur bo'lsa yaratamiz
-            if (!dbconnect.EnsureLocalDatabase())
+            if (!dbconnect.EnsureLocalDatabase(out string dbError))
             {
                 MessageBox.Show(
-                    "Mahalliy baza yaratilmadi.\n\ninstall_local_db.sql fayli yo'q yoki SQL Server ishlamayapti.\nDasturchi bilan bog'laning.",
+                    "Mahalliy baza yaratilmadi.\n\n" + dbError,
                     "FoodX — Xatolik", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _licTimer?.Dispose();
                 return;

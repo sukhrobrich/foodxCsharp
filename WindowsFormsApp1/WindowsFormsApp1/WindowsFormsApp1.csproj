@@ -253,7 +253,7 @@
   <ItemGroup>
     <None Include="App.config" />
     <Content Include="install_local_db.sql">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="connection.cfg">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>

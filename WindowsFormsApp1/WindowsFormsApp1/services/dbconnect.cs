@@ -166,12 +166,33 @@ namespace WindowsFormsApp1.services
         }
 
         // Mahalliy bazani tekshiradi; yo'q bo'lsa install_local_db.sql dan yaratadi.
-        public static bool EnsureLocalDatabase()
+        // out errorMessage — aniq xato sababi (null = muvaffaqiyatli)
+        public static bool EnsureLocalDatabase(out string errorMessage)
         {
+            errorMessage = null;
             if (CheckLocal())
             {
                 FixLocalDefaults();
                 return true;
+            }
+
+            // install_local_db.sql ni bir nechta joylarda qidirish
+            string sqlFile = null;
+            string[] searchPaths = new[]
+            {
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "install_local_db.sql"),
+                Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", "install_local_db.sql"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "install_local_db.sql"),
+            };
+            foreach (var p in searchPaths)
+            {
+                try { if (File.Exists(p)) { sqlFile = Path.GetFullPath(p); break; } } catch { }
+            }
+
+            if (sqlFile == null)
+            {
+                errorMessage = $"install_local_db.sql fayli topilmadi.\n\nQidirilgan joylar:\n{string.Join("\n", searchPaths)}";
+                return false;
             }
 
             try
@@ -180,10 +201,6 @@ namespace WindowsFormsApp1.services
                 var builder = new SqlConnectionStringBuilder(_local);
                 builder.InitialCatalog = "master";
                 builder.ConnectTimeout = 5;
-
-                string sqlFile = Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory, "install_local_db.sql");
-                if (!File.Exists(sqlFile)) return false;
 
                 string script = File.ReadAllText(sqlFile, System.Text.Encoding.UTF8);
 
@@ -194,7 +211,13 @@ namespace WindowsFormsApp1.services
 
                 using (var c = new SqlConnection(builder.ConnectionString))
                 {
-                    c.Open();
+                    try { c.Open(); }
+                    catch (Exception ex)
+                    {
+                        errorMessage = $"SQL Server ga ulanib bo'lmadi.\n\nServer: {builder.DataSource}\nXato: {ex.Message}";
+                        return false;
+                    }
+
                     foreach (string batch in batches)
                     {
                         string b = batch.Trim();
@@ -213,9 +236,20 @@ namespace WindowsFormsApp1.services
 
                 bool ok = CheckLocal();
                 if (ok) FixLocalDefaults();
+                else errorMessage = "SQL skript bajarildi, lekin baza hali ham mavjud emas.";
                 return ok;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                errorMessage = $"Baza yaratishda xato:\n{ex.Message}";
+                return false;
+            }
+        }
+
+        // Eski signature — orqaga moslik uchun
+        public static bool EnsureLocalDatabase()
+        {
+            return EnsureLocalDatabase(out _);
         }
 
         // Mavjud local DB dagi noto'g'ri DEFAULT larni tuzatadi
