@@ -28,10 +28,10 @@ namespace WindowsFormsApp1.services
                 TimeSpan.FromSeconds(5),
                 TimeSpan.FromSeconds(5));
 
-            // Mobil ilovadan kelgan zakaslami yuklab olish — har 3 soniyada
+            // Mobil ilovadan kelgan zakaslami yuklab olish — har 1 soniyada
             _orderDownloadTimer = new System.Threading.Timer(OrderDownloadTick, null,
-                TimeSpan.FromSeconds(3),
-                TimeSpan.FromSeconds(3));
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(1));
 
             // To'liq sinxronizatsiya (taomlar, sozlamalar va boshqalar) — har 2 daqiqada
             _fullSyncTimer = new System.Threading.Timer(FullSyncTick, null,
@@ -183,10 +183,10 @@ namespace WindowsFormsApp1.services
         private static void OrderDownloadTick(object state)
         {
             if (!Session.IsOnline || Session.ForceOffline || Session.TenantId == 0) return;
-            if (_orderDlBusy || _syncBusy) return;
+            if (_orderDlBusy) return; // _syncBusy ni tekshirmaymiz — buyurtma download alohida, tezkor
             ThreadPool.QueueUserWorkItem(delegate
             {
-                if (_orderDlBusy || _syncBusy) return;
+                if (_orderDlBusy) return;
                 _orderDlBusy = true;
                 try { SyncEngine.DownloadOrdersFast(); }
                 finally { _orderDlBusy = false; }

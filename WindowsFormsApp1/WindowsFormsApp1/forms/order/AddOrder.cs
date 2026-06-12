@@ -2085,8 +2085,10 @@ namespace WindowsFormsApp1.forms.order
                                ISNULL(f.is_unlimited,0) AS is_unlimited,
                                ISNULL(ofd.note,'') AS note
                                FROM order_food ofd
-                               JOIN food f ON f.id = ofd.food_id
-                               WHERE ofd.order_id = @oid";
+                               LEFT JOIN food f ON f.id = ofd.food_id
+                                               OR (f.central_id = ofd.food_id
+                                                   AND NOT EXISTS(SELECT 1 FROM food WHERE id = ofd.food_id))
+                               WHERE ofd.order_id = @oid AND f.id IS NOT NULL";
                 SqlCommand cmd = new SqlCommand(sql, db.GetCon());
                 cmd.Parameters.AddWithValue("@oid", orderId);
                 SqlDataReader dr = cmd.ExecuteReader();

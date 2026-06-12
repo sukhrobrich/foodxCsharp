@@ -15,6 +15,7 @@ namespace WindowsFormsApp1.forms.main
         private Button[] _navBtns;
         private int     _active = -1;
         private Timer   _autoRefresh;
+        private Action  _newOrderHandler;
 
         // ── Rang palitasi ────────────────────────────────────────────────────
         static readonly Color Sidebar    = Color.FromArgb(15, 23, 42);
@@ -166,6 +167,11 @@ namespace WindowsFormsApp1.forms.main
             _autoRefresh?.Stop();
             _autoRefresh?.Dispose();
             _autoRefresh = null;
+            if (_newOrderHandler != null)
+            {
+                SyncEngine.NewOrdersArrived -= _newOrderHandler;
+                _newOrderHandler = null;
+            }
 
             for (int i = 0; i < _navBtns.Length; i++)
             {
@@ -589,6 +595,14 @@ namespace WindowsFormsApp1.forms.main
             _autoRefresh.Tick += (s, e) => { if (_active == 1) load(); };
             _autoRefresh.Start();
 
+            // Yangi buyurtma tushganda darhol yangilanish (3 soniyani kutmasdan)
+            _newOrderHandler = () =>
+            {
+                if (_active == 1 && !IsDisposed)
+                    try { BeginInvoke(new Action(load)); } catch { }
+            };
+            SyncEngine.NewOrdersArrived += _newOrderHandler;
+
             return uc;
         }
 
@@ -770,6 +784,11 @@ namespace WindowsFormsApp1.forms.main
         {
             _autoRefresh?.Stop();
             _autoRefresh?.Dispose();
+            if (_newOrderHandler != null)
+            {
+                SyncEngine.NewOrdersArrived -= _newOrderHandler;
+                _newOrderHandler = null;
+            }
             base.Dispose(disposing);
         }
 

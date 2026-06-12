@@ -9,6 +9,9 @@ namespace WindowsFormsApp1.services
     {
         private static readonly object _syncLock = new object();
 
+        // Yangi buyurtma tushganda KassirPage ni darhol yangilash uchun
+        public static event Action NewOrdersArrived;
+
         public class SyncResult
         {
             public int    Synced    { get; set; }
@@ -2453,12 +2456,17 @@ namespace WindowsFormsApp1.services
                 local   = dbconnect.OpenLocalForSync();
                 central = dbconnect.OpenCentralForSync(Session.TenantId);
 
+                int before = result.Synced;
                 // 1. Bugungi va kechagi aktiv buyurtmalar
                 TryDl(() => DlOrdersFast(local, central), result);
-                // 2. Ular uchun taomlar ro'yxati
+                // 2. Ular uchun taomlar ro'yxati (food_id → lokal ID ga konvert bilan)
                 TryDl(() => DlOrderFoodsFast(local, central), result);
                 // 3. Stol holati (band/bo'sh)
                 TryDl(() => DlPlaceIns(local, central), result);
+
+                // Biror narsa tushgan bo'lsa KassirPage ni darhol xabardor qil
+                if (result.Synced > before)
+                    NewOrdersArrived?.Invoke();
             }
             catch (Exception ex) { result.Errors++; result.LastError = ex.Message; }
             finally
@@ -2565,6 +2573,12 @@ namespace WindowsFormsApp1.services
                     "SELECT id FROM [order] WHERE central_id=@c OR id=@c", "@c", orderId);
                 if (orderLid == null) continue;
 
+                // Central food_id → lokal food_id (food.central_id orqali)
+                int centralFoodId = Convert.ToInt32(r["food_id"]);
+                int? localFoodId  = ScalarOrNull(local,
+                    "SELECT id FROM food WHERE central_id=@c", "@c", centralFoodId);
+                int foodId = localFoodId ?? centralFoodId;
+
                 // sync_token bo'yicha tekshir — lokal ID != central ID bo'lishi mumkin
                 int? lid = ScalarOrNull(local, "SELECT id FROM order_food WHERE sync_token=@c", "@c", tok);
                 if (lid == null)
@@ -2573,7 +2587,7 @@ namespace WindowsFormsApp1.services
                 if (lid != null)
                     Exec(local,
                         "UPDATE order_food SET food_id=@fid,quantity=@qty,note=@note,is_synced=1 WHERE id=@id",
-                        P("@fid",r["food_id"]),P("@qty",r["quantity"]),
+                        P("@fid",foodId),P("@qty",r["quantity"]),
                         P("@note",r["note"]),P("@id",lid.Value));
                 else
                 {
@@ -2584,7 +2598,7 @@ namespace WindowsFormsApp1.services
                             "INSERT INTO order_food(id,order_id,food_id,quantity,note,sync_token,is_synced)" +
                             " VALUES(@id,@oid,@fid,@qty,@note,@tok,1);" +
                             "SET IDENTITY_INSERT order_food OFF",
-                            P("@id",cid),P("@oid",orderLid.Value),P("@fid",r["food_id"]),
+                            P("@id",cid),P("@oid",orderLid.Value),P("@fid",foodId),
                             P("@qty",r["quantity"]),P("@note",r["note"]),P("@tok",tok));
                     }
                     catch { }

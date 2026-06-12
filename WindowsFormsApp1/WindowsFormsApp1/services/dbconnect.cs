@@ -468,6 +468,15 @@ namespace WindowsFormsApp1.services
                     "WHERE ISNULL(amount,0)=0 AND ISNULL(is_paid,0)=0 " +
                     "  AND EXISTS(SELECT 1 FROM [order] o WHERE o.id=order_debt.order_id AND o.paid='NO')",
 
+                    // order_food.food_id: central_id da saqlangan eski yozuvlarni lokal food.id ga tuzatish
+                    // (DlOrderFoodsFast avval central food_id saqlardi, endi lokal id saqlaydi)
+                    @"IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_NAME='food' AND COLUMN_NAME='central_id')
+                      UPDATE ofd SET ofd.food_id = f.id
+                      FROM order_food ofd
+                      JOIN food f ON f.central_id = ofd.food_id
+                      WHERE NOT EXISTS (SELECT 1 FROM food WHERE id = ofd.food_id)",
+
                     // Eski DlIngredients IDENTITY_INSERT bilan yaratgan dublikat ingredientlarni o'chirish
                     "DELETE FROM ingredient " +
                     "WHERE central_id IS NULL " +
