@@ -42,6 +42,7 @@ namespace WindowsFormsApp1.forms.main
         Label  _lblEmpty, _lblBusy;
         List<(int id, string name)> _zones = new List<(int, string)>();
         Panel  _zoneTabs;
+        Action _newOrderHandler;
 
         // Buyurtmalar state
         string _ordFilter   = "NO";
@@ -225,6 +226,11 @@ namespace WindowsFormsApp1.forms.main
         // ════════════════════════════════════════════════════════════════════
         void SwitchTab(int tab)
         {
+            if (_newOrderHandler != null)
+            {
+                SyncEngine.NewOrdersArrived -= _newOrderHandler;
+                _newOrderHandler = null;
+            }
             _activeTab = tab;
             ApplyNavStyle();
             _pageArea.Controls.Clear();
@@ -318,6 +324,14 @@ namespace WindowsFormsApp1.forms.main
                 fixWidth();
                 LoadZones(() => { BuildZoneTabs(); RefreshTables(); });
             }));
+
+            // Yangi buyurtma tushganda darhol yangilash (_refreshLeft ni kutmasdan)
+            _newOrderHandler = () =>
+            {
+                if (_activeTab == 0 && !IsDisposed)
+                    try { BeginInvoke(new Action(() => { _refreshLeft = 1; })); } catch { }
+            };
+            SyncEngine.NewOrdersArrived += _newOrderHandler;
         }
 
         void LoadZones(Action done)
@@ -955,8 +969,11 @@ namespace WindowsFormsApp1.forms.main
                 // Taomlar
                 DataTable foods = new DataTable();
                 string fsql = @"SELECT f.name, ofd.quantity, f.selling_price AS price
-                                FROM order_food ofd JOIN food f ON f.id=ofd.food_id
-                                WHERE ofd.order_id=@oid ORDER BY ofd.id";
+                                FROM order_food ofd
+                                LEFT JOIN food f ON f.id = ofd.food_id
+                                               OR (f.central_id = ofd.food_id
+                                                   AND NOT EXISTS(SELECT 1 FROM food WHERE id = ofd.food_id))
+                                WHERE ofd.order_id=@oid AND f.id IS NOT NULL ORDER BY ofd.id";
                 using (var da = new SqlDataAdapter(fsql, new dbconnect().GetCon()))
                 {
                     da.SelectCommand.Parameters.AddWithValue("@oid", orderId);
@@ -1165,6 +1182,11 @@ namespace WindowsFormsApp1.forms.main
         {
             _refreshTimer?.Stop();
             _refreshTimer?.Dispose();
+            if (_newOrderHandler != null)
+            {
+                SyncEngine.NewOrdersArrived -= _newOrderHandler;
+                _newOrderHandler = null;
+            }
             base.Dispose(disposing);
         }
 
