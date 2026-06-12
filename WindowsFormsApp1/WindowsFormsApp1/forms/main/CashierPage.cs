@@ -35,7 +35,6 @@ namespace WindowsFormsApp1.forms.main
         Timer  _refreshTimer;
         int    _refreshSec  = 5;
         int    _refreshLeft = 5;
-        Label  _lblClock;
 
         // Joylar state
         string _activeZone  = "";   // "" = barchasi
@@ -98,17 +97,6 @@ namespace WindowsFormsApp1.forms.main
             nav.Controls.Add(btnJoylar);
             nav.Controls.Add(btnOrders);
 
-            // Soat (refresh countdown)
-            _lblClock = new Label
-            {
-                Text      = "",
-                Font      = new Font("Segoe UI", 8),
-                ForeColor = C_Muted,
-                AutoSize  = true,
-                Location  = new Point(0, 20)
-            };
-            nav.Controls.Add(_lblClock);
-            nav.Resize += (s, e) => _lblClock.Location = new Point(nav.Width - 310, 20);
 
             // Foydalanuvchi va chiqish
             Panel userPanel = new Panel
@@ -118,7 +106,7 @@ namespace WindowsFormsApp1.forms.main
                 Location  = new Point(0, 9),
                 BackColor = Color.Transparent
             };
-            nav.Resize += (s, e) => userPanel.Location = new Point(nav.Width - 290, 9);
+            nav.Resize += (s, e) => userPanel.Location = new Point(nav.Width - 295, 9);
 
             // Avatar
             Panel av = new Panel { Width = 36, Height = 36, Location = new Point(0, 2), BackColor = Color.Transparent };
@@ -249,8 +237,8 @@ namespace WindowsFormsApp1.forms.main
             }
             else
             {
-                _refreshSec  = 15;
-                _refreshLeft = 15;
+                _refreshSec  = 30;
+                _refreshLeft = 30;
                 BuildBuyurtmalarView();
             }
         }
@@ -258,8 +246,6 @@ namespace WindowsFormsApp1.forms.main
         void RefreshTick(object sender, EventArgs e)
         {
             _refreshLeft--;
-            _lblClock.Text = $"↺ {_refreshLeft}s";
-
             if (_refreshLeft <= 0)
             {
                 _refreshLeft = _refreshSec;
@@ -797,6 +783,9 @@ namespace WindowsFormsApp1.forms.main
         void RefreshOrderList()
         {
             if (_orderList == null) return;
+            // Ko'rinmas refresh — list yangilanishda parvoz qilmasin
+            var listScrollParent = _orderList.Parent;
+            if (listScrollParent != null) listScrollParent.Visible = false;
             _orderList.SuspendLayout();
             _orderList.Controls.Clear();
             try
@@ -848,89 +837,69 @@ namespace WindowsFormsApp1.forms.main
                 }
             }
             catch (Exception ex) { MessageBox.Show("Xatolik: " + ex.Message); }
-            finally { _orderList.ResumeLayout(); }
+            finally
+            {
+                _orderList.ResumeLayout();
+                if (listScrollParent != null) listScrollParent.Visible = true;
+            }
         }
 
         Panel OrderListItem(int oid, decimal total, DateTime created, bool paid,
             string place, int items, string waiter, bool isCust)
         {
-            Color accent = paid ? C_Green : (isCust ? C_Purple : C_Primary);
-            Color bg     = paid ? C_GreenBg : (isCust ? C_PurpleBg : C_PrimaryBg);
+            Color accent    = paid ? C_Green : (isCust ? C_Purple : C_Primary);
+            string titleTxt = $"#{oid}  {place}";
+            string metaTxt  = $"{items} taom  •  {created:HH:mm}" +
+                              (string.IsNullOrEmpty(waiter) ? "" : "  •  " + waiter);
+            string amtTxt   = total.ToString("N0") + " so'm";
 
             int rowW = _orderList != null && _orderList.Width > 40 ? _orderList.Width : 378;
-            Panel row = new Panel
-            {
-                Width     = rowW,
-                Height    = 78,
-                Margin    = new Padding(0),
-                BackColor = C_White,
-                Cursor    = Cursors.Hand
-            };
-            // Parent width o'zgarganda row ham kengaysin
+            Panel row = new Panel { Width = rowW, Height = 78, Margin = new Padding(0),
+                                    BackColor = C_White, Cursor = Cursors.Hand };
+
             if (_orderList != null)
-                _orderList.SizeChanged += (s, e) => { if (_orderList.Width > 40) row.Width = _orderList.Width; };
+                _orderList.SizeChanged += (s, e) =>
+                {
+                    if (_orderList.Width > 40) { row.Width = _orderList.Width; row.Invalidate(); }
+                };
+
+            Font fTitle = new Font("Segoe UI", 9, FontStyle.Bold);
+            Font fMeta  = new Font("Segoe UI", 8);
+            Font fAmt   = new Font("Segoe UI", 11, FontStyle.Bold);
+
             row.Paint += (s, e) =>
             {
+                var g = e.Graphics;
                 // Sol rang chizig'i
                 using (var br = new SolidBrush(accent))
-                    e.Graphics.FillRectangle(br, 0, 0, 4, row.Height);
-                // Alt bg on hover yapilmaydi — divider
-                e.Graphics.DrawLine(new Pen(C_Border), 0, row.Height - 1, row.Width, row.Height - 1);
+                    g.FillRectangle(br, 0, 0, 4, row.Height);
+                // Pastki ajratuvchi chiziq
+                g.DrawLine(new Pen(C_Border), 0, row.Height - 1, row.Width, row.Height - 1);
+                // Status doira
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.FillEllipse(new SolidBrush(accent), 14, 13, 8, 8);
+                g.SmoothingMode = SmoothingMode.Default;
+                // Matnlar — TextRenderer har doim ishlaydi
+                int textW = row.Width - 68;
+                TextRenderer.DrawText(g, titleTxt, fTitle,
+                    new Rectangle(28, 8, textW, 20), C_Dark,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                TextRenderer.DrawText(g, metaTxt, fMeta,
+                    new Rectangle(28, 28, textW, 18), C_Muted,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                TextRenderer.DrawText(g, amtTxt, fAmt,
+                    new Rectangle(28, 48, textW, 22), accent,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
             };
 
-            // Status dot
-            Panel dot = new Panel { Width = 8, Height = 8, Location = new Point(14, 14), BackColor = Color.Transparent };
-            dot.Paint += (s, e) =>
-            {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                e.Graphics.FillEllipse(new SolidBrush(accent), 0, 0, 7, 7);
-            };
-            row.Controls.Add(dot);
-
-            Label lblName = new Label
-            {
-                Text      = "#" + oid + "  " + place,
-                Font      = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = C_Dark,
-                Location  = new Point(28, 10),
-                Width     = 260, Height = 18,
-                Cursor    = Cursors.Hand
-            };
-            row.Controls.Add(lblName);
-
-            Label lblMeta = new Label
-            {
-                Text      = $"{items} taom  •  {created:HH:mm}  •  {(string.IsNullOrEmpty(waiter) ? "" : waiter)}",
-                Font      = new Font("Segoe UI", 8),
-                ForeColor = C_Muted,
-                Location  = new Point(28, 30),
-                Width     = 260, Height = 16,
-                Cursor    = Cursors.Hand
-            };
-            row.Controls.Add(lblMeta);
-
-            Label lblAmt = new Label
-            {
-                Text      = total.ToString("N0") + " so'm",
-                Font      = new Font("Segoe UI", 11, FontStyle.Bold),
-                ForeColor = accent,
-                Location  = new Point(28, 48),
-                Width     = 200, Height = 22,
-                Cursor    = Cursors.Hand
-            };
-            row.Controls.Add(lblAmt);
-
-            // Tahrirlash
             if (!paid)
             {
                 Button btnEdit = new Button
                 {
-                    Text      = "→",
-                    Width     = 30, Height = 30,
+                    Text = "→", Width = 30, Height = 30,
                     Location  = new Point(row.Width - 38, 24),
                     FlatStyle = FlatStyle.Flat,
-                    BackColor = Color.Transparent,
-                    ForeColor = C_Primary,
+                    BackColor = Color.Transparent, ForeColor = C_Primary,
                     Font      = new Font("Segoe UI", 12, FontStyle.Bold),
                     Cursor    = Cursors.Hand
                 };
@@ -940,12 +909,7 @@ namespace WindowsFormsApp1.forms.main
                 row.Controls.Add(btnEdit);
             }
 
-            EventHandler openDet = (s, e) => OpenOrderDetail(oid);
-            row.Click += openDet;
-            lblName.Click += openDet;
-            lblMeta.Click += openDet;
-            lblAmt.Click  += openDet;
-
+            row.Click += (s, e) => OpenOrderDetail(oid);
             return row;
         }
 
@@ -1027,42 +991,30 @@ namespace WindowsFormsApp1.forms.main
                 };
                 det.Controls.Add(totalCard);
 
-                // 2. TAOM QATORLARI (teskari tartibda qo'shamiz)
+                // 2. TAOM QATORLARI (teskari tartibda qo'shamiz; Paint orqali chizamiz)
+                Font fFood = new Font("Segoe UI", 9);
                 for (int fi = foods.Rows.Count - 1; fi >= 0; fi--)
                 {
-                    DataRow fr  = foods.Rows[fi];
-                    string  fn  = fr["name"].ToString();
-                    int     qty = Convert.ToInt32(fr["quantity"]);
-                    decimal fp  = Convert.ToDecimal(fr["price"]);
+                    DataRow fr       = foods.Rows[fi];
+                    string  foodName = fr["name"].ToString();
+                    int     qty      = Convert.ToInt32(fr["quantity"]);
+                    decimal fp       = Convert.ToDecimal(fr["price"]);
+                    string  nameTxt  = $"× {qty}  {foodName}";
+                    string  priceTxt = (fp * qty).ToString("N0") + " so'm";
 
                     Panel foodRow = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = C_White };
                     foodRow.Paint += (s, e) =>
-                        e.Graphics.DrawLine(new Pen(Color.FromArgb(240, 240, 240)),
-                            16, foodRow.Height - 1, foodRow.Width - 16, foodRow.Height - 1);
-
-                    // Narx labeli — DockStyle.Right (birinchi qo'shiladi = ichki, lekin Right har doim o'ngda)
-                    Label lblP = new Label
                     {
-                        Text      = (fp * qty).ToString("N0") + " so'm",
-                        Dock      = DockStyle.Right,
-                        Width     = 130,
-                        Font      = new Font("Segoe UI", 9),
-                        ForeColor = C_Muted,
-                        TextAlign = ContentAlignment.MiddleRight,
-                        Padding   = new Padding(0, 0, 16, 0)
+                        var g = e.Graphics;
+                        g.DrawLine(new Pen(Color.FromArgb(235, 235, 235)), 16, 35, foodRow.Width - 16, 35);
+                        int priceW = 146;
+                        TextRenderer.DrawText(g, nameTxt, fFood,
+                            new Rectangle(16, 0, foodRow.Width - priceW - 8, 36), C_Dark,
+                            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                        TextRenderer.DrawText(g, priceTxt, fFood,
+                            new Rectangle(foodRow.Width - priceW, 0, priceW - 8, 36), C_Muted,
+                            TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
                     };
-                    // Nom labeli — DockStyle.Fill (ikkinchi qo'shiladi = qolgan joy)
-                    Label lblN = new Label
-                    {
-                        Text      = $"× {qty}  {fn}",
-                        Dock      = DockStyle.Fill,
-                        Font      = new Font("Segoe UI", 9),
-                        ForeColor = C_Dark,
-                        TextAlign = ContentAlignment.MiddleLeft,
-                        Padding   = new Padding(16, 0, 0, 0)
-                    };
-                    foodRow.Controls.Add(lblP);
-                    foodRow.Controls.Add(lblN);
                     det.Controls.Add(foodRow);
                 }
 
