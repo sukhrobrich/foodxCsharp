@@ -24,6 +24,8 @@ namespace WindowsFormsApp1.forms.license
         public string SavedPassword  { get; private set; }
         public int    SavedTenantId  { get; private set; }
         public bool   SavedIsOffline { get; private set; }
+        public string SavedCafeName  { get; private set; }
+        public string SavedExpiresAt { get; private set; }
 
         public LicenseLoginForm(string initialError = null)
         {
@@ -170,6 +172,8 @@ namespace WindowsFormsApp1.forms.license
                 SavedPassword  = p;
                 SavedTenantId  = result.TenantId;
                 SavedIsOffline = result.Offline;
+                SavedCafeName  = result.CafeName;
+                SavedExpiresAt = result.ExpiresAt;
 
                 if (result.Offline)
                     MessageBox.Show("Server bilan ulanish yo'q.\nOflayn rejimda ishlanmoqda.",

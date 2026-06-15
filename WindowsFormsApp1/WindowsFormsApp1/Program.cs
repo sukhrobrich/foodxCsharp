@@ -46,7 +46,7 @@ namespace WindowsFormsApp1
             }
 
             // 2. Litsenziya tekshirish
-            string login, pass;
+            string login, pass, cafeName, expiresAt;
             int    tenantId;
             bool   isOffline;
 
@@ -59,6 +59,8 @@ namespace WindowsFormsApp1
                 pass      = lic.SavedPassword;
                 tenantId  = lic.SavedTenantId;
                 isOffline = lic.SavedIsOffline;
+                cafeName  = lic.SavedCafeName;
+                expiresAt = lic.SavedExpiresAt;
             }
 
             // 3. Session o'rnatish
@@ -78,6 +80,10 @@ namespace WindowsFormsApp1
                 _licTimer?.Dispose();
                 return;
             }
+
+            // 3b+. Lokal license jadvalini haqiqiy tenant_id bilan yangilash
+            // Oflayn kirish (staff-list) to'g'ri tenant topishi uchun zarur
+            dbconnect.UpdateLocalLicense(tenantId, cafeName, expiresAt, login);
 
             // 3c. Baza bo'sh bo'lsa (yangi yoki o'chirilgan) — centraldan yuklaymiz
             if (Session.IsOnline && Session.TenantId > 0 && IsLocalDbEmpty())

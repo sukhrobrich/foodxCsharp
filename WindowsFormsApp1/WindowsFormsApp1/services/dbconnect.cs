@@ -561,6 +561,82 @@ namespace WindowsFormsApp1.services
             catch { }
         }
 
+        // Litsenziya ma'lumotlarini lokal license jadvaliga saqlaydi.
+        // FoodXApi/staff-list haqiqiy tenant_id ni topa olishi uchun zarur (oflayn kirish).
+        public static void UpdateLocalLicense(int tenantId, string cafeName, string expiresAt, string login)
+        {
+            if (tenantId <= 0) return;
+            try
+            {
+                using (var c = new SqlConnection(_local + ";Connect Timeout=3"))
+                {
+                    c.Open();
+
+                    // license jadvali mavjudligini tekshirish (FoodXApi migration yaratadi)
+                    int tableExists;
+                    using (var cmd = new SqlCommand(
+                        "SELECT COUNT(*) FROM sys.objects WHERE name='license' AND type='U'", c))
+                        tableExists = (int)cmd.ExecuteScalar();
+
+                    if (tableExists == 0) return; // FoodXApi hali ishga tushmagan
+
+                    // expiresAt ni parse qilish ("dd.MM.yyyy" formatida)
+                    DateTime expires = DateTime.Now.AddYears(2);
+                    if (!string.IsNullOrEmpty(expiresAt))
+                        DateTime.TryParseExact(expiresAt, "dd.MM.yyyy",
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.None, out expires);
+
+                    // Noto'g'ri default yozuvlarni o'chirish (id != haqiqiy tenantId)
+                    using (var cmd = new SqlCommand(
+                        "DELETE FROM license WHERE id != @id", c))
+                    {
+                        cmd.Parameters.AddWithValue("@id", tenantId);
+                        cmd.ExecuteNonQuery();
+                    }
+
+                    // Haqiqiy yozuv borligini tekshirish
+                    int recordExists;
+                    using (var cmd = new SqlCommand(
+                        "SELECT COUNT(*) FROM license WHERE id = @id", c))
+                    {
+                        cmd.Parameters.AddWithValue("@id", tenantId);
+                        recordExists = (int)cmd.ExecuteScalar();
+                    }
+
+                    if (recordExists == 0)
+                    {
+                        // IDENTITY_INSERT bilan haqiqiy tenant_id ni kiritish
+                        using (var cmd = new SqlCommand(@"
+                            SET IDENTITY_INSERT license ON;
+                            INSERT INTO license(id, login, cafe_name, is_active, expires_at)
+                            VALUES(@id, @login, @cafeName, 1, @expires);
+                            SET IDENTITY_INSERT license OFF;", c))
+                        {
+                            cmd.Parameters.AddWithValue("@id",       tenantId);
+                            cmd.Parameters.AddWithValue("@login",    login    ?? "");
+                            cmd.Parameters.AddWithValue("@cafeName", cafeName ?? "");
+                            cmd.Parameters.AddWithValue("@expires",  expires);
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                    else
+                    {
+                        // Mavjud yozuvni yangilash
+                        using (var cmd = new SqlCommand(
+                            "UPDATE license SET cafe_name=@cn, is_active=1, expires_at=@exp WHERE id=@id", c))
+                        {
+                            cmd.Parameters.AddWithValue("@cn",  cafeName ?? "");
+                            cmd.Parameters.AddWithValue("@exp", expires);
+                            cmd.Parameters.AddWithValue("@id",  tenantId);
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+            }
+            catch { } // Kritik emas — settings fallback ishlaydi
+        }
+
         public static SqlConnection OpenCentralForSync(int tenantId)
         {
             if (!IsCentralConfigured)
