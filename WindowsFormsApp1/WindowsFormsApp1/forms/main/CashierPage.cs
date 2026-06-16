@@ -115,6 +115,15 @@ namespace WindowsFormsApp1.forms.main
             };
             nav.Resize += (s, e) => userPanel.Location = new Point(nav.Width - 295, 9);
 
+            Label lblLicenseDays = new Label
+            {
+                Font     = new Font("Segoe UI", 8.5f),
+                AutoSize = true,
+                Location = new Point(0, 20)
+            };
+            nav.Controls.Add(lblLicenseDays);
+            nav.Resize += (s, e) => lblLicenseDays.Location = new Point(nav.Width - 460, 20);
+
             // Avatar
             Panel av = new Panel { Width = 36, Height = 36, Location = new Point(0, 2), BackColor = Color.Transparent };
             av.Paint += (s, e) =>
@@ -187,8 +196,10 @@ namespace WindowsFormsApp1.forms.main
             _pageArea.BringToFront();
 
             // ── Refresh timer ─────────────────────────────────────────────────
+            LicenseDaysDisplay.Apply(lblLicenseDays);
             _refreshTimer = new Timer { Interval = 1000 };
             _refreshTimer.Tick += RefreshTick;
+            _refreshTimer.Tick += (s, e) => LicenseDaysDisplay.Apply(lblLicenseDays);
             _refreshTimer.Start();
 
             // ── Yangi buyurtma bildirishnomasi (toast + ovoz) ───────────────────

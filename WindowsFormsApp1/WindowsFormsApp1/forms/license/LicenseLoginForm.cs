@@ -26,6 +26,7 @@ namespace WindowsFormsApp1.forms.license
         public bool   SavedIsOffline { get; private set; }
         public string SavedCafeName  { get; private set; }
         public string SavedExpiresAt { get; private set; }
+        public int    SavedDaysLeft  { get; private set; } = int.MaxValue;
 
         public LicenseLoginForm(string initialError = null)
         {
@@ -174,6 +175,7 @@ namespace WindowsFormsApp1.forms.license
                 SavedIsOffline = result.Offline;
                 SavedCafeName  = result.CafeName;
                 SavedExpiresAt = result.ExpiresAt;
+                SavedDaysLeft  = result.DaysLeft;
 
                 if (result.Offline)
                     MessageBox.Show("Server bilan ulanish yo'q.\nOflayn rejimda ishlanmoqda.",

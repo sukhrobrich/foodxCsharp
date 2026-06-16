@@ -56,9 +56,17 @@ namespace WindowsFormsApp1.forms.main
             this.Controls.Add(sidebar);
 
             // Logout (Bottom) — add first so it's positioned at bottom
-            Panel logoutPanel = new Panel { Height = 56, Dock = DockStyle.Bottom, BackColor = BgCard };
+            Panel logoutPanel = new Panel { Height = 78, Dock = DockStyle.Bottom, BackColor = BgCard };
             logoutPanel.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, logoutPanel.Width, 0);
+            Label lblLicenseDays = new Label
+            {
+                Dock = DockStyle.Top,
+                Height = 22,
+                Font = new Font("Segoe UI", 8.5f),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            logoutPanel.Controls.Add(lblLicenseDays);
             Button btnLogout = new Button
             {
                 Text = "Chiqish",
@@ -133,8 +141,10 @@ namespace WindowsFormsApp1.forms.main
                 Text = DateTime.Now.ToString("dd.MM.yyyy  HH:mm")
             };
             logoPanel.Controls.Add(lblClock);
+            Action updateLicenseLabel = () => LicenseDaysDisplay.Apply(lblLicenseDays);
+            updateLicenseLabel();
             Timer clock = new Timer { Interval = 1000 };
-            clock.Tick += (s, e) => lblClock.Text = DateTime.Now.ToString("dd.MM.yyyy  HH:mm");
+            clock.Tick += (s, e) => { lblClock.Text = DateTime.Now.ToString("dd.MM.yyyy  HH:mm"); updateLicenseLabel(); };
             clock.Start();
             sidebar.Controls.Add(logoPanel);
 

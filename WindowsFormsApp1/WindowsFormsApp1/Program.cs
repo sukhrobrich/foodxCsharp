@@ -15,6 +15,7 @@ namespace WindowsFormsApp1
         private static System.Threading.Timer _licTimer;
         private static string                _licLogin;
         private static string                _licPass;
+        private static DateTime              _lastLicenseWarnTime = DateTime.MinValue;
 
         [STAThread]
         static void Main()
@@ -49,7 +50,7 @@ namespace WindowsFormsApp1
             // 2. Litsenziya tekshirish — avval saqlangan login/parol bilan sukut saqlab
             //    qayta urinamiz; faqat muvaffaqiyatsiz bo'lsa (masalan obuna tugagan) forma ko'rsatiladi.
             string login, pass, cafeName, expiresAt;
-            int    tenantId;
+            int    tenantId, daysLeft;
             bool   isOffline;
 
             var savedLic = LicenseService.LoadSaved();
@@ -65,6 +66,7 @@ namespace WindowsFormsApp1
                 isOffline = autoLic.Offline;
                 cafeName  = autoLic.CafeName;
                 expiresAt = autoLic.ExpiresAt;
+                daysLeft  = autoLic.DaysLeft;
             }
             else
             {
@@ -80,8 +82,11 @@ namespace WindowsFormsApp1
                     isOffline = lic.SavedIsOffline;
                     cafeName  = lic.SavedCafeName;
                     expiresAt = lic.SavedExpiresAt;
+                    daysLeft  = lic.SavedDaysLeft;
                 }
             }
+
+            Session.LicenseDaysLeft = daysLeft;
 
             // 3. Session o'rnatish
             Session.TenantId = tenantId;
@@ -144,6 +149,9 @@ namespace WindowsFormsApp1
             var r = LicenseService.Verify(_licLogin, _licPass);
             if (r.Offline) return;
 
+            // UI'da doim ko'rsatib turish uchun (MainPage/CashierPage/WaiterPage o'qiydi)
+            Session.LicenseDaysLeft = r.DaysLeft;
+
             if (!r.Valid)
             {
                 _licTimer?.Dispose();
@@ -157,8 +165,12 @@ namespace WindowsFormsApp1
                         Application.Exit();
                     }));
             }
-            else if (r.DaysLeft <= 3)
+            else if (r.DaysLeft <= 3 && (DateTime.Now - _lastLicenseWarnTime) >= TimeSpan.FromHours(1))
             {
+                // Watchdog endi har 1 daqiqada ishlaydi — shuning uchun ogohlantirish
+                // har 1 soatda bir martadan ko'p chiqmasligi uchun cheklanadi
+                // (1 kun yoki kamroq qolganda ham xuddi shu — kamida har soatda eslatadi).
+                _lastLicenseWarnTime = DateTime.Now;
                 var form = Application.OpenForms.Count > 0 ? Application.OpenForms[0] : null;
                 if (form != null && !form.IsDisposed)
                     form.BeginInvoke(new Action(() =>

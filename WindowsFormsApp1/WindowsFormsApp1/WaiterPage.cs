@@ -15,6 +15,7 @@ namespace WindowsFormsApp1
 	
         private FlowLayoutPanel flpTables;
         private Label lblWelcome;
+        private Label lblLicenseDays;
         private Timer refreshTimer;
         private Panel _myOrdersOverlay;
         private System.Collections.Generic.Dictionary<int, string> _lastTableState
@@ -35,8 +36,10 @@ namespace WindowsFormsApp1
             // Defer first load until layout is complete
             this.Load += (s, e) => BeginInvoke((Action)LoadTables);
 
+            LicenseDaysDisplay.Apply(lblLicenseDays);
             refreshTimer = new Timer { Interval = 2000 };
             refreshTimer.Tick += (s, e) => LoadTables();
+            refreshTimer.Tick += (s, e) => LicenseDaysDisplay.Apply(lblLicenseDays);
             refreshTimer.Start();
         }
 
@@ -67,6 +70,14 @@ namespace WindowsFormsApp1
                 Location = new Point(20, 18)
             };
             header.Controls.Add(logo);
+
+            lblLicenseDays = new Label
+            {
+                Font     = new Font("Segoe UI", 8.5f),
+                AutoSize = true,
+                Location = new Point(110, 28)
+            };
+            header.Controls.Add(lblLicenseDays);
 
             // Welcome
             lblWelcome = new Label

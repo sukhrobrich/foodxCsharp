@@ -157,6 +157,7 @@
     <Compile Include="services\SyncService.cs" />
     <Compile Include="services\StockAlertService.cs" />
     <Compile Include="services\NotificationSound.cs" />
+    <Compile Include="services\LicenseDaysDisplay.cs" />
     <Compile Include="forms\license\LicenseLoginForm.cs" />
     <Compile Include="forms\order\OrdersPanel.cs">
       <SubType>UserControl</SubType>

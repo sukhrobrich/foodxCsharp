@@ -10,6 +10,10 @@ public static class Session
     public static bool   IsOnline    { get; set; }
     public static bool   ForceOffline { get; set; }
 
+    // Obuna qoldiq kuni (Program.cs watchdog tomonidan yangilanadi).
+    // int.MaxValue — hali aniqlanmagan (login bosqichidan oldin) degani.
+    public static int LicenseDaysLeft { get; set; } = int.MaxValue;
+
     public static bool IsAdmin => UserCategory == "admin";
     public static bool IsKassir => UserCategory == "kassir";
     public static bool IsWaiter => UserCategory == "ofitsiant";
