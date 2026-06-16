@@ -81,6 +81,11 @@ namespace WindowsFormsApp1.services
                 result.LastError = "TenantId = 0. Dasturni qayta ishga tushirib litsenziya bilan kiring.";
                 return result;
             }
+            // Bir vaqtda faqat bitta SyncAll/DownloadAll — aks holda IDENTITY_INSERT
+            // bilan ishlaydigan jadvallarda (masalan recipe_ingredient) ikki parallel
+            // chaqiruv bir xil id ni qo'shishga urinib PK violation berishi mumkin
+            // (masalan oflayn→onlayn o'tishda darhol DownloadAll + davriy _downloadTimer).
+            if (!Monitor.TryEnter(_syncLock)) { result.LastError = "Boshqa sinxronlash davom etmoqda."; return result; }
 
             // Har sync/download oldidan lokal sxemani yangilash
             dbconnect.FixLocalDefaults();
@@ -140,6 +145,7 @@ namespace WindowsFormsApp1.services
             {
                 if (local   != null) { local.Close();   local.Dispose(); }
                 if (central != null) { central.Close(); central.Dispose(); }
+                Monitor.Exit(_syncLock);
             }
             return result;
         }
@@ -1058,6 +1064,9 @@ namespace WindowsFormsApp1.services
         {
             var result = new SyncResult();
             if (!Session.IsOnline || Session.TenantId == 0) return result;
+            // SyncAll bilan bir xil qulf — ikkalasi bir vaqtda ishlamasligi uchun
+            // (masalan oflayn→onlayn o'tishda darhol chaqirilgani + davriy _downloadTimer)
+            if (!Monitor.TryEnter(_syncLock)) { result.LastError = "Boshqa sinxronlash davom etmoqda."; return result; }
 
             // Har sync/download oldidan lokal sxemani yangilash
             dbconnect.FixLocalDefaults();
@@ -1102,6 +1111,7 @@ namespace WindowsFormsApp1.services
             {
                 if (local   != null) { local.Close();   local.Dispose(); }
                 if (central != null) { central.Close(); central.Dispose(); }
+                Monitor.Exit(_syncLock);
             }
             return result;
         }
