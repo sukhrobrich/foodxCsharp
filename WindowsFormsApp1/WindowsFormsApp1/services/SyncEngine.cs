@@ -12,6 +12,19 @@ namespace WindowsFormsApp1.services
         // Yangi buyurtma tushganda KassirPage ni darhol yangilash uchun
         public static event Action NewOrdersArrived;
 
+        // Markaziydan mobil/web orqali HAQIQIY yangi buyurtma kelganda (insert, update emas)
+        // — bildirishnoma (toast + ovoz) ko'rsatish uchun
+        public static event Action<NewOrderInfo> NewOrderCreated;
+
+        public class NewOrderInfo
+        {
+            public int     OrderId      { get; set; }
+            public decimal Total        { get; set; }
+            public bool    IsDelivery   { get; set; }
+            public string  CustomerName { get; set; }
+            public string  PlaceName    { get; set; }
+        }
+
         public class SyncResult
         {
             public int    Synced    { get; set; }
@@ -2543,6 +2556,19 @@ namespace WindowsFormsApp1.services
                             P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
                             P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
                             P("@isco",r["is_customer_order"]),P("@tok",r["sync_token"]));
+
+                        string placeName = null;
+                        try { placeName = ScalarOrNullString(local, "SELECT name FROM place_in WHERE id=@id", "@id", r["place_id"]); }
+                        catch { /* nom topilmasa bildirishnoma generik bo'ladi */ }
+
+                        NewOrderCreated?.Invoke(new NewOrderInfo
+                        {
+                            OrderId      = cid,
+                            Total        = Convert.ToDecimal(r["total"]),
+                            IsDelivery   = Convert.ToInt32(r["is_delivery"]) == 1,
+                            CustomerName = r["customer_name"].ToString(),
+                            PlaceName    = placeName
+                        });
                     }
                     catch { /* ID konflikt bo'lsa o'tkazib yuboramiz */ }
                 }
@@ -2633,6 +2659,16 @@ namespace WindowsFormsApp1.services
                 cmd.Parameters.AddWithValue(pName, pVal);
                 object v = cmd.ExecuteScalar();
                 return (v == null || v == DBNull.Value) ? (int?)null : Convert.ToInt32(v);
+            }
+        }
+
+        private static string ScalarOrNullString(SqlConnection conn, string sql, string pName, object pVal)
+        {
+            using (var cmd = new SqlCommand(sql, conn))
+            {
+                cmd.Parameters.AddWithValue(pName, pVal);
+                object v = cmd.ExecuteScalar();
+                return (v == null || v == DBNull.Value) ? null : v.ToString();
             }
         }
 

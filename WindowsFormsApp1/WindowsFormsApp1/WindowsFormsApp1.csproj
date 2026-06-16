@@ -65,6 +65,7 @@
     <Compile Include="forms\food\AddFoodCategory.Designer.cs">
       <DependentUpon>AddFoodCategory.cs</DependentUpon>
     </Compile>
+    <Compile Include="forms\main\NewOrderToast.cs" />
     <Compile Include="forms\main\CashierPage.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -154,6 +155,7 @@
     <Compile Include="services\LicenseService.cs" />
     <Compile Include="services\SyncEngine.cs" />
     <Compile Include="services\SyncService.cs" />
+    <Compile Include="services\StockAlertService.cs" />
     <Compile Include="forms\license\LicenseLoginForm.cs" />
     <Compile Include="forms\order\OrdersPanel.cs">
       <SubType>UserControl</SubType>

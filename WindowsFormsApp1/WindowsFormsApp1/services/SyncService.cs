@@ -52,6 +52,9 @@ namespace WindowsFormsApp1.services
             _localPrintTimer = new System.Threading.Timer(LocalPrintTick, null,
                 TimeSpan.FromSeconds(3),
                 TimeSpan.FromSeconds(1));
+
+            // Kam qolgan ingredientlarni kuzatish — har 20 soniyada
+            StockAlertService.Start();
         }
 
         public static void Stop()
@@ -63,6 +66,7 @@ namespace WindowsFormsApp1.services
             if (_downloadTimer       != null) _downloadTimer.Dispose();
             if (_printTimer          != null) _printTimer.Dispose();
             if (_localPrintTimer     != null) _localPrintTimer.Dispose();
+            StockAlertService.Stop();
         }
 
         // ── Upload: local → central ───────────────────────────────────────────

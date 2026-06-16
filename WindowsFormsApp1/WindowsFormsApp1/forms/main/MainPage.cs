@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Media;
 using System.Windows.Forms;
 using WindowsFormsApp1.forms.food;
 using WindowsFormsApp1.forms.order;
@@ -13,6 +14,7 @@ using WindowsFormsApp1.forms.user;
 using WindowsFormsApp1.forms.cashflow;
 using WindowsFormsApp1.forms.customer;
 using WindowsFormsApp1.forms.warehouse;
+using WindowsFormsApp1.services;
 
 namespace WindowsFormsApp1.forms.main
 {
@@ -23,6 +25,7 @@ namespace WindowsFormsApp1.forms.main
         private Panel menuScrollPanel;
         private List<Action<bool>> menuSetters = new List<Action<bool>>();
         private int activeMenuIndex = -1;
+        private Action<StockAlertService.LowStockInfo> _lowStockToastHandler;
 
         private static readonly Color BgPage    = Color.FromArgb(249, 249, 251);
         private static readonly Color BgCard    = Color.White;
@@ -141,6 +144,32 @@ namespace WindowsFormsApp1.forms.main
             rightSide.Controls.Add(panelContent);
 
             this.Load += (s, e) => NavigateTo(1, "Stollar");
+
+            // ── Kam qolgan ingredient bildirishnomasi (toast + ovoz) ────────────
+            _lowStockToastHandler = info =>
+            {
+                if (IsDisposed) return;
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        if (!IsDisposed && PrintService.GetSetting("low_stock_notify", "1") == "1")
+                            NewOrderToast.Show("⚠ Kam qolgan mahsulot",
+                                string.Format("{0}  •  {1:N1} {2} qoldi", info.Name, info.Quantity, info.Unit),
+                                NewOrderToast.C_AccentWarning, this, SystemSounds.Exclamation);
+                    }));
+                }
+                catch { }
+            };
+            StockAlertService.LowStockDetected += _lowStockToastHandler;
+            this.FormClosed += (s, e) =>
+            {
+                if (_lowStockToastHandler != null)
+                {
+                    StockAlertService.LowStockDetected -= _lowStockToastHandler;
+                    _lowStockToastHandler = null;
+                }
+            };
         }
 
         private void BuildMenuItems()

@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Media;
 using System.Windows.Forms;
 using WindowsFormsApp1.forms.order;
 using WindowsFormsApp1.services;
@@ -43,6 +44,8 @@ namespace WindowsFormsApp1.forms.main
         List<(int id, string name)> _zones = new List<(int, string)>();
         Panel  _zoneTabs;
         Action _newOrderHandler;
+        Action<SyncEngine.NewOrderInfo> _newOrderToastHandler;
+        Action<StockAlertService.LowStockInfo> _lowStockToastHandler;
 
         // Tile diff: tableId → updater (qayta yaratmasdan faqat yangilash uchun)
         readonly Dictionary<int, Action<bool, int, decimal>> _tileUpdaters
@@ -187,6 +190,41 @@ namespace WindowsFormsApp1.forms.main
             _refreshTimer = new Timer { Interval = 1000 };
             _refreshTimer.Tick += RefreshTick;
             _refreshTimer.Start();
+
+            // ── Yangi buyurtma bildirishnomasi (toast + ovoz) ───────────────────
+            // Tab qaysi bo'lishidan qat'iy nazar ishlaydi; admin sozlamadan o'chirib qo'yishi mumkin
+            _newOrderToastHandler = info =>
+            {
+                if (IsDisposed) return;
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        if (!IsDisposed && PrintService.GetSetting("new_order_notify", "1") == "1")
+                            NewOrderToast.Show(info, this);
+                    }));
+                }
+                catch { }
+            };
+            SyncEngine.NewOrderCreated += _newOrderToastHandler;
+
+            // ── Kam qolgan ingredient bildirishnomasi (toast + ovoz) ────────────
+            _lowStockToastHandler = info =>
+            {
+                if (IsDisposed) return;
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        if (!IsDisposed && PrintService.GetSetting("low_stock_notify", "1") == "1")
+                            NewOrderToast.Show("⚠ Kam qolgan mahsulot",
+                                string.Format("{0}  •  {1:N1} {2} qoldi", info.Name, info.Quantity, info.Unit),
+                                NewOrderToast.C_AccentWarning, this, SystemSounds.Exclamation);
+                    }));
+                }
+                catch { }
+            };
+            StockAlertService.LowStockDetected += _lowStockToastHandler;
         }
 
         Button NavTab(string text, int idx)
@@ -1216,6 +1254,16 @@ namespace WindowsFormsApp1.forms.main
             {
                 SyncEngine.NewOrdersArrived -= _newOrderHandler;
                 _newOrderHandler = null;
+            }
+            if (_newOrderToastHandler != null)
+            {
+                SyncEngine.NewOrderCreated -= _newOrderToastHandler;
+                _newOrderToastHandler = null;
+            }
+            if (_lowStockToastHandler != null)
+            {
+                StockAlertService.LowStockDetected -= _lowStockToastHandler;
+                _lowStockToastHandler = null;
             }
             base.Dispose(disposing);
         }

@@ -883,6 +883,8 @@ namespace WindowsFormsApp1.forms.settings
                 ("kassir_delete",      "Kassir uchun kamaytirish/o'chirish ruxsati",      false),
                 ("waiter_delete",      "Ofitsiant uchun kamaytirish/o'chirish ruxsati",   false),
                 ("virtual_keyboard",   "Virtual klaviatura",                              true),
+                ("new_order_notify",   "Yangi buyurtma uvedomleniyasi (ovoz bilan)",      true),
+                ("low_stock_notify",   "Kam qolgan mahsulot uvedomleniyasi (ovoz bilan)", true),
             };
             foreach (var r in rows) { if (!_orderToggles.ContainsKey(r.key)) _orderToggles[r.key] = r.def; flow.Controls.Add(MakeOrderSettingRow(r.key, r.label)); }
             flow.Controls.Add(MakeDiscountRow());
@@ -982,7 +984,7 @@ namespace WindowsFormsApp1.forms.settings
 
         void LoadOrderSettings()
         {
-            string[] keys = { "order_remove_items", "order_anyone_close", "kassir_delete", "waiter_delete", "virtual_keyboard" };
+            string[] keys = { "order_remove_items", "order_anyone_close", "kassir_delete", "waiter_delete", "virtual_keyboard", "new_order_notify", "low_stock_notify" };
             foreach (string key in keys) { string v = PrintService.GetSetting(key, ""); if (!string.IsNullOrEmpty(v)) _orderToggles[key] = v == "1"; }
             string disc = PrintService.GetSetting("max_discount", "50");
             if (txtMaxDiscount     != null) txtMaxDiscount.Text     = disc;
@@ -992,7 +994,7 @@ namespace WindowsFormsApp1.forms.settings
 
         void SaveOrderSettings()
         {
-            string[] keys = { "order_remove_items", "order_anyone_close", "kassir_delete", "waiter_delete", "virtual_keyboard" };
+            string[] keys = { "order_remove_items", "order_anyone_close", "kassir_delete", "waiter_delete", "virtual_keyboard", "new_order_notify", "low_stock_notify" };
             foreach (string key in keys) PrintService.SetSetting(key, (_orderToggles.ContainsKey(key) && _orderToggles[key]) ? "1" : "0");
 
             // Maksimum chegirma
