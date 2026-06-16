@@ -416,6 +416,7 @@ namespace WindowsFormsApp1.forms.user
                             Session.UserCategory = dr["category"].ToString().ToLower();
                             dr.Close();
                             db.CloseCon();
+                            try { PrintService.SetSetting("last_logged_in_user", Session.UserId.ToString()); } catch { }
                             this.Hide();
                             if (Session.UserCategory == "admin")
                                 new MainPage(Session.UserId).Show();
@@ -493,6 +494,7 @@ namespace WindowsFormsApp1.forms.user
 
                     Session.UserId = newUID; Session.Login = "admin";
                     Session.UserName = "Admin"; Session.UserCategory = "admin";
+                    try { PrintService.SetSetting("last_logged_in_user", Session.UserId.ToString()); } catch { }
 
                     this.Hide();
                     new MainPage(newUID).Show();

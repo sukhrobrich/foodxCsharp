@@ -172,6 +172,7 @@ namespace WindowsFormsApp1.forms.main
                 if (MessageBox.Show("Chiqishni tasdiqlaysizmi?", "Chiqish",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
+                    try { PrintService.SetSetting("last_logged_in_user", ""); } catch { }
                     Session.Clear();
                     Hide();
                     new Form1().Show();

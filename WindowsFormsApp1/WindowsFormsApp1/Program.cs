@@ -3,6 +3,7 @@ using System.Data.SqlClient;
 using System.Drawing;
 using System.Windows.Forms;
 using WindowsFormsApp1.forms.license;
+using WindowsFormsApp1.forms.main;
 using WindowsFormsApp1.forms.settings;
 using WindowsFormsApp1.forms.user;
 using WindowsFormsApp1.services;
@@ -45,22 +46,41 @@ namespace WindowsFormsApp1
                 }
             }
 
-            // 2. Litsenziya tekshirish
+            // 2. Litsenziya tekshirish — avval saqlangan login/parol bilan sukut saqlab
+            //    qayta urinamiz; faqat muvaffaqiyatsiz bo'lsa (masalan obuna tugagan) forma ko'rsatiladi.
             string login, pass, cafeName, expiresAt;
             int    tenantId;
             bool   isOffline;
 
-            using (var lic = new LicenseLoginForm())
-            {
-                if (lic.ShowDialog() != DialogResult.OK)
-                    return;
+            var savedLic = LicenseService.LoadSaved();
+            var autoLic  = (savedLic.HasValue && !string.IsNullOrEmpty(savedLic.Value.login) && !string.IsNullOrEmpty(savedLic.Value.pass))
+                ? LicenseService.Verify(savedLic.Value.login, savedLic.Value.pass)
+                : null;
 
-                login     = lic.SavedLogin;
-                pass      = lic.SavedPassword;
-                tenantId  = lic.SavedTenantId;
-                isOffline = lic.SavedIsOffline;
-                cafeName  = lic.SavedCafeName;
-                expiresAt = lic.SavedExpiresAt;
+            if (autoLic != null && autoLic.Valid)
+            {
+                login     = savedLic.Value.login;
+                pass      = savedLic.Value.pass;
+                tenantId  = autoLic.TenantId > 0 ? autoLic.TenantId : savedLic.Value.tenantId;
+                isOffline = autoLic.Offline;
+                cafeName  = autoLic.CafeName;
+                expiresAt = autoLic.ExpiresAt;
+            }
+            else
+            {
+                string err = (autoLic != null && !autoLic.Valid) ? autoLic.Message : null;
+                using (var lic = new LicenseLoginForm(err))
+                {
+                    if (lic.ShowDialog() != DialogResult.OK)
+                        return;
+
+                    login     = lic.SavedLogin;
+                    pass      = lic.SavedPassword;
+                    tenantId  = lic.SavedTenantId;
+                    isOffline = lic.SavedIsOffline;
+                    cafeName  = lic.SavedCafeName;
+                    expiresAt = lic.SavedExpiresAt;
+                }
             }
 
             // 3. Session o'rnatish
@@ -101,9 +121,14 @@ namespace WindowsFormsApp1
             // 5. Online↔offline avtomatik monitor
             SyncService.Start();
 
-            // 6. Asosiy forma
+            // 6. Asosiy forma — agar oxirgi marta kirgan xodim saqlangan bo'lsa,
+            //    login/PIN so'ramasdan to'g'ridan-to'g'ri uning sahifasiga o'tamiz.
+            //    Chiqish (logout) bosilganda saqlangan qiymat tozalanadi.
             if (IsAdminExists())
-                Application.Run(new Form1());
+            {
+                Form autoForm = TryAutoLoginForm();
+                Application.Run(autoForm ?? new Form1());
+            }
             else
                 Application.Run(new Password("admin", false));
 
@@ -290,6 +315,57 @@ namespace WindowsFormsApp1
             }
             catch { return false; }
             finally { Session.IsOnline = prevOnline; }
+        }
+
+        // Oxirgi marta kirgan xodimni ("last_logged_in_user" sozlamasi) lokal bazadan
+        // topib, to'g'ridan-to'g'ri uning rolidagi sahifasini qaytaradi.
+        // Topilmasa (sozlama bo'sh, xodim o'chirilgan va h.k.) null qaytaradi — Form1 ko'rsatiladi.
+        static Form TryAutoLoginForm()
+        {
+            try
+            {
+                string saved = PrintService.GetSetting("last_logged_in_user", "");
+                if (!int.TryParse(saved, out int uid) || uid <= 0) return null;
+
+                bool prevOnline = Session.IsOnline;
+                Session.IsOnline = false;
+                string name = null, login = null, category = null;
+                try
+                {
+                    var db = new dbconnect();
+                    db.OpenCon();
+                    using (var cmd = new SqlCommand(
+                        @"SELECT u.name, u.login, ISNULL(uc.role_type, LOWER(uc.name)) AS category
+                          FROM [user] u JOIN user_category uc ON uc.id = u.user_category_id
+                          WHERE u.id=@id", db.GetCon()))
+                    {
+                        cmd.Parameters.AddWithValue("@id", uid);
+                        using (var dr = cmd.ExecuteReader())
+                        {
+                            if (dr.Read())
+                            {
+                                name     = dr["name"].ToString();
+                                login    = dr["login"].ToString();
+                                category = dr["category"].ToString().ToLower();
+                            }
+                        }
+                    }
+                    db.CloseCon();
+                }
+                finally { Session.IsOnline = prevOnline; }
+
+                if (name == null) return null;
+
+                Session.UserId       = uid;
+                Session.Login        = login;
+                Session.UserName     = name;
+                Session.UserCategory = category;
+
+                if (category == "admin")  return new MainPage(uid);
+                if (category == "kassir") return new CashierPage();
+                return new WaiterPage();
+            }
+            catch { return null; }
         }
     }
 }

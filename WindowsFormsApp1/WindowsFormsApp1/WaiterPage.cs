@@ -106,6 +106,7 @@ namespace WindowsFormsApp1
             btnLogout.Click += (s, e) =>
             {
                 refreshTimer?.Stop();
+                try { PrintService.SetSetting("last_logged_in_user", ""); } catch { }
                 Session.Clear();
                 this.Hide();
                 new Form1().Show();

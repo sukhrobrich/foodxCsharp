@@ -72,7 +72,13 @@ namespace WindowsFormsApp1.forms.main
             btnLogout.FlatAppearance.BorderSize = 0;
             btnLogout.MouseEnter += (s, e) => { btnLogout.ForeColor = Color.White; btnLogout.BackColor = Color.FromArgb(220, 38, 38); };
             btnLogout.MouseLeave += (s, e) => { btnLogout.ForeColor = TextMuted; btnLogout.BackColor = Color.Transparent; };
-            btnLogout.Click += (s, e) => { Session.Clear(); this.Hide(); new Form1().Show(); };
+            btnLogout.Click += (s, e) =>
+            {
+                try { PrintService.SetSetting("last_logged_in_user", ""); } catch { }
+                Session.Clear();
+                this.Hide();
+                new Form1().Show();
+            };
             logoutPanel.Controls.Add(btnLogout);
             sidebar.Controls.Add(logoutPanel);
 
