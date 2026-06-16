@@ -15,6 +15,7 @@ namespace WindowsFormsApp1.services
         private static System.Threading.Timer _downloadTimer;
         private static System.Threading.Timer _printTimer;
         private static System.Threading.Timer _localPrintTimer;
+        private static System.Threading.Timer _heartbeatTimer;
 
         public static void Start()
         {
@@ -55,6 +56,13 @@ namespace WindowsFormsApp1.services
 
             // Kam qolgan ingredientlarni kuzatish — har 20 soniyada
             StockAlertService.Start();
+
+            // Heartbeat — har 10 soniyada, mustaqil (print/sync band bo'lsa ham kechikmasin —
+            // mobil ilova buni 15 soniyalik chegarada tekshirib, "PC offline" deb chiqarib
+            // yuborardi, chunki avval PrintTick band bo'lganda heartbeat yozilmay qolardi)
+            _heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null,
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(10));
         }
 
         public static void Stop()
@@ -66,6 +74,7 @@ namespace WindowsFormsApp1.services
             if (_downloadTimer       != null) _downloadTimer.Dispose();
             if (_printTimer          != null) _printTimer.Dispose();
             if (_localPrintTimer     != null) _localPrintTimer.Dispose();
+            if (_heartbeatTimer      != null) _heartbeatTimer.Dispose();
             StockAlertService.Stop();
         }
 
@@ -204,12 +213,32 @@ namespace WindowsFormsApp1.services
             SyncEngine.DownloadAll();
         }
 
+        // ── Heartbeat: mobil ilova "PC online" deb bilishi uchun (mustaqil, 10s) ──
+        private static void HeartbeatTick(object state)
+        {
+            if (!Session.IsOnline || Session.ForceOffline) return;
+            if (Session.TenantId == 0) return;
+            try
+            {
+                using (SqlConnection central = dbconnect.OpenCentralForSync(Session.TenantId))
+                using (var hCmd = new SqlCommand(@"
+                    IF EXISTS (SELECT 1 FROM settings WHERE [key]='last_heartbeat' AND tenant_id=@tid)
+                        UPDATE settings SET value=@v WHERE [key]='last_heartbeat' AND tenant_id=@tid
+                    ELSE
+                        INSERT INTO settings([key],[value],tenant_id) VALUES('last_heartbeat',@v,@tid)",
+                    central))
+                {
+                    hCmd.Parameters.AddWithValue("@tid", Session.TenantId);
+                    hCmd.Parameters.AddWithValue("@v", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"));
+                    hCmd.ExecuteNonQuery();
+                }
+            }
+            catch { }
+        }
+
         // ── Print: mobil print so'rovlarini 1 soniyada tekshiradi ────────────
         private static bool _printBusy = false;
         private static bool _tableChecked = false;
-
-        // Heartbeat: oxirgi marta central serverga ulanganligi (har 30 soniyada bir marta)
-        private static DateTime _lastHeartbeat = DateTime.MinValue;
 
         private static void PrintTick(object state)
         {
@@ -221,28 +250,6 @@ namespace WindowsFormsApp1.services
             {
                 using (SqlConnection central = dbconnect.OpenCentralForSync(Session.TenantId))
                 {
-                    // Heartbeat — har 10 soniyada settings ga yozamiz
-                    if ((DateTime.Now - _lastHeartbeat).TotalSeconds >= 10)
-                    {
-                        try
-                        {
-                            using (var hCmd = new SqlCommand(@"
-                                IF EXISTS (SELECT 1 FROM settings WHERE [key]='last_heartbeat' AND tenant_id=@tid)
-                                    UPDATE settings SET value=@v WHERE [key]='last_heartbeat' AND tenant_id=@tid
-                                ELSE
-                                    INSERT INTO settings([key],[value],tenant_id) VALUES('last_heartbeat',@v,@tid)",
-                                central))
-                            {
-                                hCmd.Parameters.AddWithValue("@tid", Session.TenantId);
-                                hCmd.Parameters.AddWithValue("@v",
-                                    DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"));
-                                hCmd.ExecuteNonQuery();
-                            }
-                            _lastHeartbeat = DateTime.Now;
-                        }
-                        catch { }
-                    }
-
                     // Jadval mavjudligini bir marta tekshirish
                     if (!_tableChecked)
                     {
