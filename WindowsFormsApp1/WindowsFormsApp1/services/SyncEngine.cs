@@ -1136,20 +1136,24 @@ namespace WindowsFormsApp1.services
             DataTable rows = ReadAll(central, "SELECT id,name,role_type,color FROM user_category");
             foreach (DataRow r in rows.Rows)
             {
-                // BUG FIX: avval central_id ga mos lokal yozuvni qidirish (duplikat oldini olish)
-                Exec(local,
-                    "IF EXISTS (SELECT 1 FROM user_category WHERE central_id=@id) " +
-                    "  UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE central_id=@id " +
-                    "ELSE IF EXISTS (SELECT 1 FROM user_category WHERE id=@id) " +
-                    "  UPDATE user_category SET name=@n,role_type=@rt,color=@c,central_id=@id WHERE id=@id " +
-                    "ELSE BEGIN " +
-                    "  SET IDENTITY_INSERT user_category ON; " +
-                    "  INSERT INTO user_category(id,name,role_type,color,central_id) VALUES(@id,@n,@rt,@c,@id); " +
-                    "  SET IDENTITY_INSERT user_category OFF " +
-                    "END",
-                    P("@id", r["id"]), P("@n", r["name"]),
-                    P("@rt", r["role_type"]), P("@c", r["color"]));
-                count++;
+                try
+                {
+                    // BUG FIX: avval central_id ga mos lokal yozuvni qidirish (duplikat oldini olish)
+                    Exec(local,
+                        "IF EXISTS (SELECT 1 FROM user_category WHERE central_id=@id) " +
+                        "  UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE central_id=@id " +
+                        "ELSE IF EXISTS (SELECT 1 FROM user_category WHERE id=@id) " +
+                        "  UPDATE user_category SET name=@n,role_type=@rt,color=@c,central_id=@id WHERE id=@id " +
+                        "ELSE BEGIN " +
+                        "  SET IDENTITY_INSERT user_category ON; " +
+                        "  INSERT INTO user_category(id,name,role_type,color,central_id) VALUES(@id,@n,@rt,@c,@id); " +
+                        "  SET IDENTITY_INSERT user_category OFF " +
+                        "END",
+                        P("@id", r["id"]), P("@n", r["name"]),
+                        P("@rt", r["role_type"]), P("@c", r["color"]));
+                    count++;
+                }
+                catch { /* Bitta qator xato bersa ham qolganlari davom etsin */ }
             }
             return count;
         }
@@ -1161,28 +1165,32 @@ namespace WindowsFormsApp1.services
                 "SELECT id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order FROM [user]");
             foreach (DataRow r in rows.Rows)
             {
-                // BUG FIX: login bo'yicha avval lokal yozuvni topish (duplikat oldini olish)
-                Exec(local,
-                    "IF EXISTS (SELECT 1 FROM [user] WHERE central_id=@id) " +
-                    "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
-                    "    phone_number=@ph,updated_at=@ua,sort_order=@so WHERE central_id=@id " +
-                    "ELSE IF EXISTS (SELECT 1 FROM [user] WHERE login=@l) " +
-                    "  UPDATE [user] SET name=@n,user_category_id=@uc,password=@pw,app_password=@ap," +
-                    "    phone_number=@ph,updated_at=@ua,sort_order=@so,central_id=@id WHERE login=@l " +
-                    "ELSE IF EXISTS (SELECT 1 FROM [user] WHERE id=@id) " +
-                    "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
-                    "    phone_number=@ph,updated_at=@ua,sort_order=@so,central_id=@id WHERE id=@id " +
-                    "ELSE BEGIN " +
-                    "  SET IDENTITY_INSERT [user] ON; " +
-                    "  INSERT INTO [user](id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order,central_id) " +
-                    "  VALUES(@id,@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so,@id); " +
-                    "  SET IDENTITY_INSERT [user] OFF " +
-                    "END",
-                    P("@id", r["id"]), P("@n", r["name"]), P("@uc", r["user_category_id"]),
-                    P("@l", r["login"]), P("@pw", r["password"]), P("@ap", r["app_password"]),
-                    P("@ph", r["phone_number"]), P("@ca", r["created_at"]),
-                    P("@ua", r["updated_at"]), P("@so", r["sort_order"]));
-                count++;
+                try
+                {
+                    // BUG FIX: login bo'yicha avval lokal yozuvni topish (duplikat oldini olish)
+                    Exec(local,
+                        "IF EXISTS (SELECT 1 FROM [user] WHERE central_id=@id) " +
+                        "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
+                        "    phone_number=@ph,updated_at=@ua,sort_order=@so WHERE central_id=@id " +
+                        "ELSE IF EXISTS (SELECT 1 FROM [user] WHERE login=@l) " +
+                        "  UPDATE [user] SET name=@n,user_category_id=@uc,password=@pw,app_password=@ap," +
+                        "    phone_number=@ph,updated_at=@ua,sort_order=@so,central_id=@id WHERE login=@l " +
+                        "ELSE IF EXISTS (SELECT 1 FROM [user] WHERE id=@id) " +
+                        "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
+                        "    phone_number=@ph,updated_at=@ua,sort_order=@so,central_id=@id WHERE id=@id " +
+                        "ELSE BEGIN " +
+                        "  SET IDENTITY_INSERT [user] ON; " +
+                        "  INSERT INTO [user](id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order,central_id) " +
+                        "  VALUES(@id,@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so,@id); " +
+                        "  SET IDENTITY_INSERT [user] OFF " +
+                        "END",
+                        P("@id", r["id"]), P("@n", r["name"]), P("@uc", r["user_category_id"]),
+                        P("@l", r["login"]), P("@pw", r["password"]), P("@ap", r["app_password"]),
+                        P("@ph", r["phone_number"]), P("@ca", r["created_at"]),
+                        P("@ua", r["updated_at"]), P("@so", r["sort_order"]));
+                    count++;
+                }
+                catch { /* Bitta xodim xato bersa ham qolganlari (masalan yangi ofitsiant) davom etsin */ }
             }
             return count;
         }
@@ -2135,42 +2143,50 @@ namespace WindowsFormsApp1.services
                 " WHERE created_at >= DATEADD(YEAR,-1,GETDATE())");
             foreach (DataRow r in rows.Rows)
             {
-                int cid = Convert.ToInt32(r["id"]);
-                int? lid = ScalarOrNull(local, "SELECT id FROM [order] WHERE central_id=@c", "@c", cid)
-                        ?? ScalarOrNull(local, "SELECT id FROM [order] WHERE id=@c", "@c", cid);
-                if (lid != null)
-                    Exec(local,
-                        "UPDATE [order] SET paid=@paid,total=@tot,discount_amount=@disc," +
-                        "  discount_pct=@discp,payment_id=@pay,custom_svc_fee=@svf," +
-                        "  custom_svc_type=@svt,payment2_id=@p2,payment2_amount=@p2a," +
-                        "  order_note=@note,is_customer_order=@isco,central_id=@cid,is_synced=1 WHERE id=@id",
-                        P("@paid",r["paid"]),P("@tot",r["total"]),P("@disc",r["discount_amount"]),
-                        P("@discp",r["discount_pct"]),P("@pay",r["payment_id"]),
-                        P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
-                        P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
-                        P("@note",r["order_note"]),P("@isco",r["is_customer_order"]),
-                        P("@cid",cid),P("@id",lid.Value));
-                else
-                    Exec(local,
-                        "SET IDENTITY_INSERT [order] ON;" +
-                        "INSERT INTO [order](id,user_id,place_id,payment_id,created_at,paid,total," +
-                        "  discount_amount,discount_pct,customer_id,customer_name,delivery_phone," +
-                        "  delivery_address,is_delivery,order_note,custom_svc_fee,custom_svc_type," +
-                        "  payment2_id,payment2_amount,is_customer_order,sync_token,is_synced,central_id)" +
-                        " VALUES(@id,@uid,@plid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
-                        "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@isco,@tok,1,@id);" +
-                        "SET IDENTITY_INSERT [order] OFF",
-                        P("@id",cid),P("@uid",r["user_id"]),P("@plid",r["place_id"]),
-                        P("@pay",r["payment_id"]),P("@cat",r["created_at"]),
-                        P("@paid",r["paid"]),P("@tot",r["total"]),
-                        P("@disc",r["discount_amount"]),P("@discp",r["discount_pct"]),
-                        P("@cust",r["customer_id"]),P("@custn",r["customer_name"]),
-                        P("@dph",r["delivery_phone"]),P("@dadr",r["delivery_address"]),
-                        P("@isdel",r["is_delivery"]),P("@note",r["order_note"]),
-                        P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
-                        P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
-                        P("@isco",r["is_customer_order"]),P("@tok",r["sync_token"]));
-                count++;
+                try
+                {
+                    int cid = Convert.ToInt32(r["id"]);
+                    int? lid = ScalarOrNull(local, "SELECT id FROM [order] WHERE central_id=@c", "@c", cid)
+                            ?? ScalarOrNull(local, "SELECT id FROM [order] WHERE id=@c", "@c", cid);
+                    if (lid != null)
+                        Exec(local,
+                            "UPDATE [order] SET paid=@paid,total=@tot,discount_amount=@disc," +
+                            "  discount_pct=@discp,payment_id=@pay,custom_svc_fee=@svf," +
+                            "  custom_svc_type=@svt,payment2_id=@p2,payment2_amount=@p2a," +
+                            "  order_note=@note,is_customer_order=@isco,central_id=@cid,is_synced=1 WHERE id=@id",
+                            P("@paid",r["paid"]),P("@tot",r["total"]),P("@disc",r["discount_amount"]),
+                            P("@discp",r["discount_pct"]),P("@pay",r["payment_id"]),
+                            P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
+                            P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
+                            P("@note",r["order_note"]),P("@isco",r["is_customer_order"]),
+                            P("@cid",cid),P("@id",lid.Value));
+                    else
+                    {
+                        // user_id markaziy va lokal o'rtasida farq qilishi mumkin (central_id orqali aniqlanadi)
+                        int localUserId = EnsureLocalUser(local, central, Convert.ToInt32(r["user_id"]));
+                        Exec(local,
+                            "SET IDENTITY_INSERT [order] ON;" +
+                            "INSERT INTO [order](id,user_id,place_id,payment_id,created_at,paid,total," +
+                            "  discount_amount,discount_pct,customer_id,customer_name,delivery_phone," +
+                            "  delivery_address,is_delivery,order_note,custom_svc_fee,custom_svc_type," +
+                            "  payment2_id,payment2_amount,is_customer_order,sync_token,is_synced,central_id)" +
+                            " VALUES(@id,@uid,@plid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
+                            "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@isco,@tok,1,@id);" +
+                            "SET IDENTITY_INSERT [order] OFF",
+                            P("@id",cid),P("@uid",localUserId),P("@plid",r["place_id"]),
+                            P("@pay",r["payment_id"]),P("@cat",r["created_at"]),
+                            P("@paid",r["paid"]),P("@tot",r["total"]),
+                            P("@disc",r["discount_amount"]),P("@discp",r["discount_pct"]),
+                            P("@cust",r["customer_id"]),P("@custn",r["customer_name"]),
+                            P("@dph",r["delivery_phone"]),P("@dadr",r["delivery_address"]),
+                            P("@isdel",r["is_delivery"]),P("@note",r["order_note"]),
+                            P("@svf",r["custom_svc_fee"]),P("@svt",r["custom_svc_type"]),
+                            P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
+                            P("@isco",r["is_customer_order"]),P("@tok",r["sync_token"]));
+                    }
+                    count++;
+                }
+                catch { /* Bitta buyurtma xato bersa ham qolganlari davom etsin */ }
             }
             return count;
         }
@@ -2471,12 +2487,13 @@ namespace WindowsFormsApp1.services
                 central = dbconnect.OpenCentralForSync(Session.TenantId);
 
                 int before = result.Synced;
-                // 1. Bugungi va kechagi aktiv buyurtmalar
-                TryDl(() => DlOrdersFast(local, central), result);
-                // 2. Ular uchun taomlar ro'yxati (food_id → lokal ID ga konvert bilan)
-                TryDl(() => DlOrderFoodsFast(local, central), result);
-                // 3. Stol holati (band/bo'sh)
+                // 1. Stol holati (yangi qo'shilgan stol bo'lsa ham order undan oldin tushadi —
+                //    aks holda place_id FK xato berib o'tkazib yuborilishi mumkin)
                 TryDl(() => DlPlaceIns(local, central), result);
+                // 2. Bugungi va kechagi aktiv buyurtmalar
+                TryDl(() => DlOrdersFast(local, central), result);
+                // 3. Ular uchun taomlar ro'yxati (food_id → lokal ID ga konvert bilan)
+                TryDl(() => DlOrderFoodsFast(local, central), result);
 
                 // Biror narsa tushgan bo'lsa KassirPage ni darhol xabardor qil
                 if (result.Synced > before)
@@ -2538,6 +2555,9 @@ namespace WindowsFormsApp1.services
                     // Yangi buyurtma (mobil yoki boshqa qurilmadan) — INSERT
                     try
                     {
+                        // user_id markaziy va lokal o'rtasida farq qilishi mumkin (central_id orqali aniqlanadi)
+                        int localUserId = EnsureLocalUser(local, central, Convert.ToInt32(r["user_id"]));
+
                         Exec(local,
                             "SET IDENTITY_INSERT [order] ON;" +
                             "INSERT INTO [order](id,user_id,place_id,payment_id,created_at,paid,total," +
@@ -2547,7 +2567,7 @@ namespace WindowsFormsApp1.services
                             " VALUES(@id,@uid,@plid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
                             "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@isco,@tok,1,@id);" +
                             "SET IDENTITY_INSERT [order] OFF",
-                            P("@id",cid),P("@uid",r["user_id"]),P("@plid",r["place_id"]),
+                            P("@id",cid),P("@uid",localUserId),P("@plid",r["place_id"]),
                             P("@pay",r["payment_id"]),P("@cat",r["created_at"]),
                             P("@paid",r["paid"]),P("@tot",r["total"]),
                             P("@disc",r["discount_amount"]),P("@discp",r["discount_pct"]),
@@ -2562,14 +2582,8 @@ namespace WindowsFormsApp1.services
                         try { placeName = ScalarOrNullString(local, "SELECT room_name FROM place_in WHERE id=@id", "@id", r["place_id"]); }
                         catch { /* nom topilmasa bildirishnoma generik bo'ladi */ }
 
-                        // user_id markaziy id — lokalda central_id orqali (yoki to'g'ridan-to'g'ri id bo'yicha) topiladi
                         string waiterName = null;
-                        try
-                        {
-                            waiterName = ScalarOrNullString(local, "SELECT name FROM [user] WHERE central_id=@id", "@id", r["user_id"]);
-                            if (string.IsNullOrEmpty(waiterName))
-                                waiterName = ScalarOrNullString(local, "SELECT name FROM [user] WHERE id=@id", "@id", r["user_id"]);
-                        }
+                        try { waiterName = ScalarOrNullString(local, "SELECT name FROM [user] WHERE id=@id", "@id", localUserId); }
                         catch { /* topilmasa bildirishnomada ofitsiant ko'rsatilmaydi */ }
 
                         NewOrderCreated?.Invoke(new NewOrderInfo
@@ -2687,6 +2701,79 @@ namespace WindowsFormsApp1.services
         private static SqlParameter P(string name, object value)
         {
             return new SqlParameter(name, value ?? (object)DBNull.Value);
+        }
+
+        // Markaziy user_category mahalliyda hali yo'q bo'lsa (masalan DlUserCategories
+        // boshqa qatorda xato berib to'liq tugamagan bo'lsa), shu birini central'dan
+        // darhol yuklab oladi — [user].user_category_id FK buzilmasligi uchun.
+        private static int EnsureLocalUserCategory(SqlConnection local, SqlConnection central, int centralCategoryId)
+        {
+            int? lid = ScalarOrNull(local, "SELECT id FROM user_category WHERE central_id=@id", "@id", centralCategoryId)
+                    ?? ScalarOrNull(local, "SELECT id FROM user_category WHERE id=@id", "@id", centralCategoryId);
+            if (lid != null) return lid.Value;
+
+            try
+            {
+                DataTable t = ReadAll(central, "SELECT id,name,role_type,color FROM user_category WHERE id=" + centralCategoryId);
+                if (t.Rows.Count > 0)
+                {
+                    DataRow r = t.Rows[0];
+                    object newId = Exec(local,
+                        "INSERT INTO user_category(name,role_type,color,central_id) OUTPUT INSERTED.id VALUES(@n,@rt,@c,@cid)",
+                        P("@n", r["name"]), P("@rt", r["role_type"]), P("@c", r["color"]), P("@cid", centralCategoryId));
+                    if (newId != null) return Convert.ToInt32(newId);
+                }
+            }
+            catch { }
+
+            try
+            {
+                using (var cmd = new SqlCommand("SELECT TOP 1 id FROM user_category", local))
+                {
+                    object v = cmd.ExecuteScalar();
+                    if (v != null) return Convert.ToInt32(v);
+                }
+            }
+            catch { }
+            return 1;
+        }
+
+        // Markaziy user (central_id) mahalliyda hali yo'q bo'lsa, shu birini central'dan
+        // darhol yuklab oladi — DlOrders/DlOrdersFast da [order].user_id FK buzilib,
+        // butun buyurtma yo'qolib ketmasligi uchun (masalan mobildan yangi ro'yxatdan
+        // o'tgan ofitsiant darhol buyurtma olsa, DlUsers hali ulgurmagan bo'lishi mumkin).
+        private static int EnsureLocalUser(SqlConnection local, SqlConnection central, int centralUserId)
+        {
+            int? lid = ScalarOrNull(local, "SELECT id FROM [user] WHERE central_id=@id", "@id", centralUserId)
+                    ?? ScalarOrNull(local, "SELECT id FROM [user] WHERE id=@id", "@id", centralUserId);
+            if (lid != null) return lid.Value;
+
+            try
+            {
+                DataTable t = ReadAll(central,
+                    "SELECT id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order " +
+                    "FROM [user] WHERE id=" + centralUserId);
+                if (t.Rows.Count > 0)
+                {
+                    DataRow r = t.Rows[0];
+                    int localCatId = EnsureLocalUserCategory(local, central, Convert.ToInt32(r["user_category_id"]));
+
+                    object newId = Exec(local,
+                        "IF EXISTS (SELECT 1 FROM [user] WHERE login=@l) " +
+                        "  UPDATE [user] SET central_id=@cid OUTPUT INSERTED.id WHERE login=@l " +
+                        "ELSE " +
+                        "  INSERT INTO [user](name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order,central_id) " +
+                        "  OUTPUT INSERTED.id VALUES(@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so,@cid)",
+                        P("@n", r["name"]), P("@uc", localCatId), P("@l", r["login"]), P("@pw", r["password"]),
+                        P("@ap", r["app_password"]), P("@ph", r["phone_number"]), P("@ca", r["created_at"]),
+                        P("@ua", r["updated_at"]), P("@so", r["sort_order"]), P("@cid", centralUserId));
+                    if (newId != null) return Convert.ToInt32(newId);
+                }
+            }
+            catch { }
+
+            // Oxirgi chora: buyurtma FK xatosi bilan yo'qolib ketmasin — joriy foydalanuvchiga bog'lanadi
+            return Session.UserId > 0 ? Session.UserId : 1;
         }
     }
 
