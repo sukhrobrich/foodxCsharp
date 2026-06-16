@@ -111,12 +111,13 @@ namespace WindowsFormsApp1
                 RestoreFromCentral();
             }
 
-            // 4. Watchdog — har 30 daqiqada litsenziyani qayta tekshiradi
+            // 4. Watchdog — har 1 daqiqada litsenziyani qayta tekshiradi
+            //    (bloklash/obuna tugashi tezroq sezilishi uchun — avval 30 daqiqa edi)
             _licLogin = login;
             _licPass  = pass;
             _licTimer = new System.Threading.Timer(WatchdogTick, null,
-                TimeSpan.FromMinutes(30),
-                TimeSpan.FromMinutes(30));
+                TimeSpan.FromMinutes(1),
+                TimeSpan.FromMinutes(1));
 
             // 5. Online↔offline avtomatik monitor
             SyncService.Start();
