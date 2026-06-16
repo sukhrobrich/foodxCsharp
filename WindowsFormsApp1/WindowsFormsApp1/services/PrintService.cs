@@ -650,10 +650,11 @@ public class PrintService
         catch { }
     }
 
-    // Online holatda tenant_id bilan, oflayn holatda 0 bilan ishlaydi
+    // Lokal DB har doim bitta kafega tegishli — settings doim tenant_id=0 bilan saqlanadi.
+    // SyncEngine.SyncSettings/DlSettings ham aynan shu tenant_id=0 ni kutadi (lokal<->markaziy mapping).
     private static int EffectiveTenantId()
     {
-        return Session.IsOnline && Session.TenantId > 0 ? Session.TenantId : 0;
+        return 0;
     }
 
     public static string GetSetting(string key, string defaultValue = "")

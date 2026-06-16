@@ -299,6 +299,22 @@ namespace WindowsFormsApp1.services
                         END", c))
                     { try { cmd.ExecuteNonQuery(); } catch { } }
 
+                    // BUG FIX: EffectiveTenantId() ilgari onlayn holatda haqiqiy tenant_id qaytargan —
+                    // shu tufayli sozlamalar tenant_id<>0 bilan yozilib, SyncSettings/DlSettings (tenant_id=0
+                    // kutadi) ularni hech qachon ko'rmagan. Eski noto'g'ri qatorlarni tenant_id=0 ga ko'chiramiz.
+                    using (var cmd = new SqlCommand(@"
+                        IF EXISTS(SELECT 1 FROM sys.objects WHERE object_id=OBJECT_ID(N'settings') AND type=N'U')
+                        AND EXISTS(SELECT 1 FROM settings WHERE tenant_id<>0)
+                        BEGIN
+                            MERGE settings AS tgt
+                            USING (SELECT [key], value FROM settings WHERE tenant_id<>0) AS src
+                            ON tgt.[key]=src.[key] AND tgt.tenant_id=0
+                            WHEN MATCHED THEN UPDATE SET tgt.value=src.value
+                            WHEN NOT MATCHED THEN INSERT([key],value,tenant_id) VALUES(src.[key],src.value,0);
+                            DELETE FROM settings WHERE tenant_id<>0;
+                        END", c))
+                    { try { cmd.ExecuteNonQuery(); } catch { } }
+
                     // order_debt_paid_sync
                     using (var cmd = new SqlCommand(
                         "IF OBJECT_ID('dbo.order_debt_paid_sync','U') IS NULL " +
