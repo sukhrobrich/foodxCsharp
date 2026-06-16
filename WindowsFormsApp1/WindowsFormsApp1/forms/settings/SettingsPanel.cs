@@ -5,6 +5,8 @@ using System.Data.SqlClient;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Printing;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Windows.Forms;
 using WindowsFormsApp1.services;
 
@@ -206,6 +208,9 @@ namespace WindowsFormsApp1.forms.settings
             _cardConn = MakeConnectionCard(new Point(24, 388));
             wrap.Controls.Add(_cardConn);
 
+            Panel cardNetwork = MakeLocalNetworkCard(new Point(24, 540));
+            wrap.Controls.Add(cardNetwork);
+
             wrap.Resize += (s, e) =>
             {
                 int cw = Math.Max(300, wrap.ClientSize.Width - 48);
@@ -213,6 +218,7 @@ namespace WindowsFormsApp1.forms.settings
                 cardOrder.Width   = cw;
                 cardFont.Width    = cw;
                 if (_cardConn != null) _cardConn.Width = cw;
+                cardNetwork.Width = cw;
                 foreach (Control c in cardPrinter.Controls)
                     if (c is Label lbl && !lbl.AutoSize) lbl.Width = cw - 80;
                 foreach (Control c in cardOrder.Controls)
@@ -1346,6 +1352,110 @@ namespace WindowsFormsApp1.forms.settings
             };
 
             return card;
+        }
+
+        // ── Local tarmoq (IP manzillar) ──────────────────────────────────────
+        Panel MakeLocalNetworkCard(Point loc)
+        {
+            Color accent = Color.FromArgb(59, 130, 246);
+
+            Panel card = new Panel { Width = 480, Height = 132, Location = loc, BackColor = BgCard };
+            card.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var path = RoundRect(card.ClientRectangle, 10))
+                {
+                    e.Graphics.FillPath(new SolidBrush(BgCard), path);
+                    e.Graphics.DrawPath(new Pen(Border), path);
+                }
+                e.Graphics.FillRectangle(new SolidBrush(accent), 0, 0, 5, card.Height);
+            };
+
+            card.Controls.Add(new Label { Text = "📡", Font = new Font("Segoe UI", 24), ForeColor = TextM, Location = new Point(18, 14), AutoSize = true });
+            card.Controls.Add(new Label { Text = "Local tarmoq", Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = TextD, Location = new Point(82, 16), AutoSize = true });
+
+            Label lblIps = new Label
+            {
+                Font      = new Font("Segoe UI", 9.5f),
+                ForeColor = TextD,
+                Location  = new Point(82, 46),
+                Width = 380, Height = 70, AutoSize = false
+            };
+            card.Controls.Add(lblIps);
+
+            Button btnRefresh = new Button
+            {
+                Text      = "↻",
+                Width     = 30, Height = 30,
+                Location  = new Point(card.Width - 46, 14),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.Transparent,
+                ForeColor = TextM,
+                Font      = new Font("Segoe UI", 12),
+                Cursor    = Cursors.Hand
+            };
+            btnRefresh.FlatAppearance.BorderSize = 0;
+            card.Controls.Add(btnRefresh);
+
+            Action refresh = () =>
+            {
+                var addrs = GetLocalNetworkAddresses();
+                if (addrs.Count == 0)
+                {
+                    lblIps.ForeColor = Danger;
+                    lblIps.Text = "Tarmoq aniqlanmadi.\nKabel yoki Wi-Fi ulanganligini tekshiring.";
+                }
+                else
+                {
+                    lblIps.ForeColor = TextD;
+                    var sb = new System.Text.StringBuilder();
+                    foreach (var a in addrs)
+                        sb.AppendLine(a.label + ":  " + a.ip);
+                    lblIps.Text = sb.ToString().TrimEnd();
+                }
+            };
+            btnRefresh.Click += (s, e) => refresh();
+            refresh();
+
+            card.Resize += (s, e) =>
+            {
+                btnRefresh.Location = new Point(card.Width - 46, 14);
+                lblIps.Width = card.Width - 102;
+            };
+
+            return card;
+        }
+
+        // Ethernet va Wi-Fi orqali ulangan IPv4 manzillarni qaytaradi
+        // (mobil ilovada "local_url" sifatida ishlatish uchun)
+        private static List<(string label, string ip)> GetLocalNetworkAddresses()
+        {
+            var result = new List<(string label, string ip)>();
+            try
+            {
+                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (ni.OperationalStatus != OperationalStatus.Up) continue;
+
+                    string label;
+                    if (ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
+                        label = "Ethernet";
+                    else if (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
+                        label = "Wi-Fi";
+                    else
+                        continue;
+
+                    foreach (var addr in ni.GetIPProperties().UnicastAddresses)
+                    {
+                        if (addr.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                        string ip = addr.Address.ToString();
+                        if (ip.StartsWith("169.254.")) continue; // APIPA — haqiqatda ulanmagan
+                        result.Add((label, ip));
+                    }
+                }
+            }
+            catch { }
+            return result;
         }
 
         // ── Nav / back bar factories ──────────────────────────────────────────
