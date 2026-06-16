@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Media;
 using System.Windows.Forms;
 using WindowsFormsApp1.forms.food;
 using WindowsFormsApp1.forms.order;
@@ -26,6 +25,7 @@ namespace WindowsFormsApp1.forms.main
         private List<Action<bool>> menuSetters = new List<Action<bool>>();
         private int activeMenuIndex = -1;
         private Action<StockAlertService.LowStockInfo> _lowStockToastHandler;
+        private Action<SyncEngine.NewOrderInfo> _newOrderToastHandler;
 
         private static readonly Color BgPage    = Color.FromArgb(249, 249, 251);
         private static readonly Color BgCard    = Color.White;
@@ -145,6 +145,22 @@ namespace WindowsFormsApp1.forms.main
 
             this.Load += (s, e) => NavigateTo(1, "Stollar");
 
+            // ── Yangi buyurtma bildirishnomasi (toast + ovoz) ───────────────────
+            _newOrderToastHandler = info =>
+            {
+                if (IsDisposed) return;
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        if (!IsDisposed && PrintService.GetSetting("new_order_notify", "1") == "1")
+                            NewOrderToast.Show(info, this);
+                    }));
+                }
+                catch { }
+            };
+            SyncEngine.NewOrderCreated += _newOrderToastHandler;
+
             // ── Kam qolgan ingredient bildirishnomasi (toast + ovoz) ────────────
             _lowStockToastHandler = info =>
             {
@@ -156,7 +172,7 @@ namespace WindowsFormsApp1.forms.main
                         if (!IsDisposed && PrintService.GetSetting("low_stock_notify", "1") == "1")
                             NewOrderToast.Show("⚠ Kam qolgan mahsulot",
                                 string.Format("{0}  •  {1:N1} {2} qoldi", info.Name, info.Quantity, info.Unit),
-                                NewOrderToast.C_AccentWarning, this, SystemSounds.Exclamation);
+                                NewOrderToast.C_AccentWarning, this);
                     }));
                 }
                 catch { }
@@ -164,6 +180,11 @@ namespace WindowsFormsApp1.forms.main
             StockAlertService.LowStockDetected += _lowStockToastHandler;
             this.FormClosed += (s, e) =>
             {
+                if (_newOrderToastHandler != null)
+                {
+                    SyncEngine.NewOrderCreated -= _newOrderToastHandler;
+                    _newOrderToastHandler = null;
+                }
                 if (_lowStockToastHandler != null)
                 {
                     StockAlertService.LowStockDetected -= _lowStockToastHandler;

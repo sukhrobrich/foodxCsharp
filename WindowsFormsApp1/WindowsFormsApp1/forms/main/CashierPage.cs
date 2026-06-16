@@ -4,7 +4,6 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Media;
 using System.Windows.Forms;
 using WindowsFormsApp1.forms.order;
 using WindowsFormsApp1.services;
@@ -219,7 +218,7 @@ namespace WindowsFormsApp1.forms.main
                         if (!IsDisposed && PrintService.GetSetting("low_stock_notify", "1") == "1")
                             NewOrderToast.Show("⚠ Kam qolgan mahsulot",
                                 string.Format("{0}  •  {1:N1} {2} qoldi", info.Name, info.Quantity, info.Unit),
-                                NewOrderToast.C_AccentWarning, this, SystemSounds.Exclamation);
+                                NewOrderToast.C_AccentWarning, this);
                     }));
                 }
                 catch { }

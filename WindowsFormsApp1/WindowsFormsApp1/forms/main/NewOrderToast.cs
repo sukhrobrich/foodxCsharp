@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Media;
 using System.Windows.Forms;
 using WindowsFormsApp1.services;
 
@@ -12,7 +11,7 @@ namespace WindowsFormsApp1.forms.main
     // burchagida chiqadigan bildirishnoma (toast) + ovoz signali.
     internal class NewOrderToast : Form
     {
-        const int W = 340, H = 92, MARGIN = 16, GAP = 10, LIFE_MS = 6000;
+        const int W = 340, H = 104, MARGIN = 16, GAP = 10, LIFE_MS = 6000;
 
         static readonly List<NewOrderToast> _open = new List<NewOrderToast>();
 
@@ -32,15 +31,16 @@ namespace WindowsFormsApp1.forms.main
             string place = info.IsDelivery
                 ? (string.IsNullOrWhiteSpace(info.CustomerName) ? "Yetkazib berish" : info.CustomerName)
                 : (string.IsNullOrWhiteSpace(info.PlaceName) ? ("Buyurtma #" + info.OrderId) : info.PlaceName);
-            string body = string.Format("{0}  •  {1:N0} so'm", place, info.Total);
+            string waiter = string.IsNullOrWhiteSpace(info.WaiterName) ? "" : ("  •  👤 " + info.WaiterName);
+            string body = string.Format("{0}{1}\n{2:N0} so'm", place, waiter, info.Total);
 
             Show(title, body, info.IsDelivery ? C_AccentDelivery : C_Accent, owner);
         }
 
         // Har qanday toast (masalan: kam qolgan ingredient ogohlantirishi) uchun umumiy metod.
-        public static void Show(string title, string body, Color accent, Form owner = null, SystemSound sound = null)
+        public static void Show(string title, string body, Color accent, Form owner = null)
         {
-            try { (sound ?? SystemSounds.Asterisk).Play(); } catch { }
+            NotificationSound.Play();
 
             var toast = new NewOrderToast(title, body, accent);
 
@@ -90,7 +90,7 @@ namespace WindowsFormsApp1.forms.main
                 ForeColor = C_Body,
                 AutoSize  = false,
                 Location  = new Point(22, 42),
-                Size      = new Size(W - 44, 36)
+                Size      = new Size(W - 44, 48)
             };
             Controls.Add(lblBody);
 

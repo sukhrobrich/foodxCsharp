@@ -23,6 +23,7 @@ namespace WindowsFormsApp1.services
             public bool    IsDelivery   { get; set; }
             public string  CustomerName { get; set; }
             public string  PlaceName    { get; set; }
+            public string  WaiterName   { get; set; }
         }
 
         public class SyncResult
@@ -2558,8 +2559,18 @@ namespace WindowsFormsApp1.services
                             P("@isco",r["is_customer_order"]),P("@tok",r["sync_token"]));
 
                         string placeName = null;
-                        try { placeName = ScalarOrNullString(local, "SELECT name FROM place_in WHERE id=@id", "@id", r["place_id"]); }
+                        try { placeName = ScalarOrNullString(local, "SELECT room_name FROM place_in WHERE id=@id", "@id", r["place_id"]); }
                         catch { /* nom topilmasa bildirishnoma generik bo'ladi */ }
+
+                        // user_id markaziy id — lokalda central_id orqali (yoki to'g'ridan-to'g'ri id bo'yicha) topiladi
+                        string waiterName = null;
+                        try
+                        {
+                            waiterName = ScalarOrNullString(local, "SELECT name FROM [user] WHERE central_id=@id", "@id", r["user_id"]);
+                            if (string.IsNullOrEmpty(waiterName))
+                                waiterName = ScalarOrNullString(local, "SELECT name FROM [user] WHERE id=@id", "@id", r["user_id"]);
+                        }
+                        catch { /* topilmasa bildirishnomada ofitsiant ko'rsatilmaydi */ }
 
                         NewOrderCreated?.Invoke(new NewOrderInfo
                         {
@@ -2567,7 +2578,8 @@ namespace WindowsFormsApp1.services
                             Total        = Convert.ToDecimal(r["total"]),
                             IsDelivery   = Convert.ToInt32(r["is_delivery"]) == 1,
                             CustomerName = r["customer_name"].ToString(),
-                            PlaceName    = placeName
+                            PlaceName    = placeName,
+                            WaiterName   = waiterName
                         });
                     }
                     catch { /* ID konflikt bo'lsa o'tkazib yuboramiz */ }
