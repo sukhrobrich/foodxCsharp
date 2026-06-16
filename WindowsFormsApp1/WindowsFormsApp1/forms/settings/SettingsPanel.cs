@@ -1437,6 +1437,11 @@ namespace WindowsFormsApp1.forms.settings
                 {
                     if (ni.OperationalStatus != OperationalStatus.Up) continue;
 
+                    // Mobile Hotspot/Wi-Fi Direct/Hosted Network virtual adapterlari ham
+                    // "Wireless80211" va "Up" bo'lib ko'rinadi, lekin haqiqiy ulanish emas
+                    string desc = (ni.Description ?? "") + " " + (ni.Name ?? "");
+                    if (desc.IndexOf("virtual", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+
                     string label;
                     if (ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
                         label = "Ethernet";
@@ -1450,6 +1455,7 @@ namespace WindowsFormsApp1.forms.settings
                         if (addr.Address.AddressFamily != AddressFamily.InterNetwork) continue;
                         string ip = addr.Address.ToString();
                         if (ip.StartsWith("169.254.")) continue; // APIPA — haqiqatda ulanmagan
+                        if (ip.StartsWith("192.168.137.")) continue; // Windows ICS/Mobile Hotspot standart manzili
                         result.Add((label, ip));
                     }
                 }
