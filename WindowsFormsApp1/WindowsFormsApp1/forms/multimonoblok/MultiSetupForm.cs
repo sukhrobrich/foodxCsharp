@@ -140,17 +140,23 @@ namespace WindowsFormsApp1.forms.multimonoblok
             // O'chirish tugmasi (agar allaqachon sozlangan bo'lsa)
             if (MultiMonoblokConfig.IsMultiMonoblokMode)
             {
+                // Ajratgich
+                main.Controls.Add(new Panel { Height = 1, BackColor = Border, Location = new Point(0, 352), Width = 360 });
+
                 Button btnClear = new Button
                 {
-                    Text = "✕ Monoblok rejimini o'chirish",
-                    Location = new Point(0, 360), Width = 360, Height = 22,
-                    FlatStyle = FlatStyle.Flat, BackColor = Color.Transparent,
-                    ForeColor = Danger, Font = new Font("Segoe UI", 8.5f), Cursor = Cursors.Hand
+                    Text = "✕ Keshni tozalash va oddiy rejimga qaytish",
+                    Location = new Point(0, 362), Width = 360, Height = 30,
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(254, 242, 242),
+                    ForeColor = Danger,
+                    Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand
                 };
-                btnClear.FlatAppearance.BorderSize = 0;
+                btnClear.FlatAppearance.BorderSize  = 1;
+                btnClear.FlatAppearance.BorderColor = Danger;
                 btnClear.Click += (s, e) =>
                 {
-                    if (MessageBox.Show("Multimonoblok rejimini o'chirilsinmi?\n\nKeyingi ishga tushirishda oddiy rejimda ochiladi.",
+                    if (MessageBox.Show("Multimonoblok konfiguratsiyasi o'chirilsinmi?\n\nDastur qayta ishga tushiriladi va oddiy rejimda ochiladi.",
                         "FoodX — Tasdiqlash", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     {
                         MultiMonoblokConfig.Clear();
@@ -159,6 +165,8 @@ namespace WindowsFormsApp1.forms.multimonoblok
                     }
                 };
                 main.Controls.Add(btnClear);
+                this.Height = 460;
+                this.MinimumSize = new Size(480, 460);
             }
 
             main.Resize += (s, e) =>

@@ -64,14 +64,17 @@ namespace WindowsFormsApp1.forms.multimonoblok
 
             Button btnSetup = new Button
             {
-                Text = "⚙ Sozlash",
-                AutoSize = true, Height = 28,
-                FlatStyle = FlatStyle.Flat, BackColor = Color.Transparent,
-                ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5f), Cursor = Cursors.Hand
+                Text = "⚙ Kafe o'zgartirish",
+                AutoSize = true, Height = 30,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(243, 244, 246),
+                ForeColor = TextMuted,
+                Font = new Font("Segoe UI", 8.5f), Cursor = Cursors.Hand
             };
-            btnSetup.FlatAppearance.BorderSize = 0;
-            btnSetup.MouseEnter += (s, e) => btnSetup.ForeColor = Gold;
-            btnSetup.MouseLeave += (s, e) => btnSetup.ForeColor = TextMuted;
+            btnSetup.FlatAppearance.BorderSize  = 1;
+            btnSetup.FlatAppearance.BorderColor = Border;
+            btnSetup.MouseEnter += (s, e) => { btnSetup.ForeColor = Gold; btnSetup.FlatAppearance.BorderColor = Gold; };
+            btnSetup.MouseLeave += (s, e) => { btnSetup.ForeColor = TextMuted; btnSetup.FlatAppearance.BorderColor = Border; };
             btnSetup.Click += (s, e) => OpenSetup();
             footer.Controls.Add(btnSetup);
             footer.Resize += (s, e) =>
