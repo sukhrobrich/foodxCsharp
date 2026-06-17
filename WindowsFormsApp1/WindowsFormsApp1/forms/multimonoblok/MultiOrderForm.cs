@@ -26,6 +26,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
         private readonly int    _tableId;
         private readonly string _tableName;
         private readonly int    _existingOrderId;
+        private readonly string _userRole;
 
         // Joriy buyurtma elementlari: food_id → (name, qty, price, note)
         private readonly Dictionary<int, (string name, int qty, decimal price, string note)> _items
@@ -44,12 +45,13 @@ namespace WindowsFormsApp1.forms.multimonoblok
         private readonly List<(int id, string name)> _categories = new List<(int, string)>();
         private readonly List<string>                 _allFoods   = new List<string>();
 
-        public MultiOrderForm(MultiMonoblokClient client, int tableId, string tableName, int existingOrderId)
+        public MultiOrderForm(MultiMonoblokClient client, int tableId, string tableName, int existingOrderId, string userRole = "ofitsiant")
         {
             _client          = client;
             _tableId         = tableId;
             _tableName       = tableName;
             _existingOrderId = existingOrderId;
+            _userRole        = userRole;
 
             BuildUI();
             this.Load += async (s, e) => await InitAsync();
@@ -164,7 +166,10 @@ namespace WindowsFormsApp1.forms.multimonoblok
             _panOrderList.Controls.Clear();
 
             // Jami va saqlash panel
-            Panel bottomPanel = new Panel { Dock = DockStyle.Bottom, Height = 110, BackColor = BgCard };
+            bool isKassir = _userRole == "kassir" || _userRole == "admin";
+            int bottomH = isKassir ? 162 : 110;
+
+            Panel bottomPanel = new Panel { Dock = DockStyle.Bottom, Height = bottomH, BackColor = BgCard };
             bottomPanel.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, bottomPanel.Width, 0);
 
@@ -179,14 +184,28 @@ namespace WindowsFormsApp1.forms.multimonoblok
 
             Button btnSaveBottom = new Button
             {
-                Text = "✓ Saqlash", Width = 240, Height = 42,
-                Location = new Point(8, 52),
+                Text = "✓ Saqlash", Width = 240, Height = 38,
+                Location = new Point(8, 50),
                 FlatStyle = FlatStyle.Flat, BackColor = Success, ForeColor = Color.White,
-                Font = new Font("Segoe UI", 11, FontStyle.Bold), Cursor = Cursors.Hand
+                Font = new Font("Segoe UI", 10, FontStyle.Bold), Cursor = Cursors.Hand
             };
             btnSaveBottom.FlatAppearance.BorderSize = 0;
             btnSaveBottom.Click += async (s, e) => await SaveOrderAsync();
             bottomPanel.Controls.Add(btnSaveBottom);
+
+            if (isKassir)
+            {
+                Button btnPay = new Button
+                {
+                    Text = "To'lov qabul qilish", Width = 240, Height = 44,
+                    Location = new Point(8, 96),
+                    FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(37, 99, 235), ForeColor = Color.White,
+                    Font = new Font("Segoe UI", 11, FontStyle.Bold), Cursor = Cursors.Hand
+                };
+                btnPay.FlatAppearance.BorderSize = 0;
+                btnPay.Click += async (s, e) => await OpenPayAsync();
+                bottomPanel.Controls.Add(btnPay);
+            }
 
             // Buyurtma elementlari (scroll) — Fill, birinchi qo'shiladi
             var flpItems = new FlowLayoutPanel
@@ -544,6 +563,37 @@ namespace WindowsFormsApp1.forms.multimonoblok
 
             _lblTotal.Text = "Jami: " + FormatMoney(total);
             flpItems.ResumeLayout();
+        }
+
+        private async Task OpenPayAsync()
+        {
+            int orderId = _existingOrderId;
+            if (orderId <= 0)
+            {
+                SetStatus("Avval buyurtmani saqlang!", Danger);
+                return;
+            }
+
+            // Jami summani hisoblash
+            decimal total = 0;
+            foreach (var kv in _items) total += kv.Value.qty * kv.Value.price;
+
+            string payJson;
+            try { payJson = await _client.GetPaymentsAsync(); }
+            catch { SetStatus("To'lov usullari yuklanmadi", Danger); return; }
+
+            var payments = MultiMonoblokClient.JsonArr(payJson);
+            if (payments.Count == 0) { SetStatus("To'lov usullari topilmadi", Danger); return; }
+
+            using (var dlg = new MultiPayForm(_client, orderId, total, payments))
+            {
+                if (dlg.ShowDialog(this) == System.Windows.Forms.DialogResult.OK)
+                {
+                    SetStatus("✓ To'lov qabul qilindi!", Success);
+                    await Task.Delay(800);
+                    this.Close();
+                }
+            }
         }
 
         private async Task SaveOrderAsync()

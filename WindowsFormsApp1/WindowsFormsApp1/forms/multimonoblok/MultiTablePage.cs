@@ -22,6 +22,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
         private readonly MultiMonoblokClient _client;
         private readonly int    _userId;
         private readonly string _userName;
+        private readonly string _userRole;
 
         private Panel  _scrollArea;
         private Timer  _refreshTimer;
@@ -30,11 +31,12 @@ namespace WindowsFormsApp1.forms.multimonoblok
         // Stol holati — yangilanish kerakligini aniqlash uchun
         private readonly Dictionary<int, string> _lastState = new Dictionary<int, string>();
 
-        public MultiTablePage(MultiMonoblokClient client, int userId, string userName)
+        public MultiTablePage(MultiMonoblokClient client, int userId, string userName, string userRole = "ofitsiant")
         {
             _client   = client;
             _userId   = userId;
             _userName = userName;
+            _userRole = userRole;
             BuildUI();
 
             this.Load += async (s, e) => await RefreshAsync();
@@ -293,7 +295,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
             EventHandler onClick = (s, e) =>
             {
                 _refreshTimer.Stop();
-                var orderForm = new MultiOrderForm(_client, tableId, name, orderId);
+                var orderForm = new MultiOrderForm(_client, tableId, name, orderId, _userRole);
                 orderForm.FormClosed += async (fs, fe) =>
                 {
                     await RefreshAsync();

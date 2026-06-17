@@ -264,7 +264,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
 
             // Dialog OK bilan yopildi — token o'rnatilgan
             ShowErr("");
-            var tablePage = new MultiTablePage(_client, userId, userName);
+            var tablePage = new MultiTablePage(_client, userId, userName, role);
             tablePage.FormClosed += async (s, e) =>
             {
                 _client.Token = null;

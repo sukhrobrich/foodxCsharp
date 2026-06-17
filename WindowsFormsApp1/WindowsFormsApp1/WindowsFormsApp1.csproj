@@ -160,6 +160,7 @@
     <Compile Include="services\LicenseDaysDisplay.cs" />
     <Compile Include="services\MultiMonoblokConfig.cs" />
     <Compile Include="services\MultiMonoblokClient.cs" />
+    <Compile Include="forms\multimonoblok\MultiPayForm.cs" />
     <Compile Include="forms\multimonoblok\MultiPinDialog.cs" />
     <Compile Include="forms\multimonoblok\MultiSetupForm.cs" />
     <Compile Include="forms\multimonoblok\MultiWaiterLoginPage.cs" />

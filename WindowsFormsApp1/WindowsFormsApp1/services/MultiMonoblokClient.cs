@@ -53,6 +53,15 @@ namespace WindowsFormsApp1.services
         public Task<string> UpdateOrderItemsAsync(int orderId, string json)
             => RunAsync(() => Request("PUT", $"/api/orders/{orderId}/items", json));
 
+        public Task<string> GetPaymentsAsync()
+            => RunAsync(() => Request("GET", "/api/payments"));
+
+        public Task<string> PayOrderAsync(int orderId, int paymentId, decimal amount)
+        {
+            string body = $"{{\"payments\":[{{\"paymentId\":{paymentId},\"amount\":{amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}]}}";
+            return RunAsync(() => Request("PUT", $"/api/orders/{orderId}/pay", body));
+        }
+
         // ── JSON yordamchi metodlar ──────────────────────────────────────────
 
         public static string JsonStr(string json, string key)
