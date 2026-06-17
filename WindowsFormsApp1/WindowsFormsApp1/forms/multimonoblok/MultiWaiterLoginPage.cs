@@ -246,61 +246,33 @@ namespace WindowsFormsApp1.forms.multimonoblok
             card.MouseLeave += (s, e) => hover(false);
             foreach (Control c in card.Controls) { c.MouseEnter += (s, e) => hover(true); c.MouseLeave += (s, e) => hover(false); }
 
-            EventHandler onClick = async (s, e) => await LoginAsync(userId, name, login, role, tenantId);
+            EventHandler onClick = (s, e) => LoginAsync(userId, name, login, role, tenantId);
             card.Click += onClick;
             foreach (Control c in card.Controls) c.Click += onClick;
 
             return card;
         }
 
-        private async Task LoginAsync(int userId, string userName, string login, string role, int tenantId)
+        private void LoginAsync(int userId, string userName, string login, string role, int tenantId)
         {
-            // PIN so'rash
-            string pin;
-            using (var dlg = new MultiPinDialog(userName))
+            // MultiPinDialog API ni o'zi chaqiradi va _client.Token ni o'rnatadi
+            _client.Token = null;
+            using (var dlg = new MultiPinDialog(_client, userName, login))
             {
                 if (dlg.ShowDialog(this) != System.Windows.Forms.DialogResult.OK) return;
-                pin = dlg.Pin;
             }
 
+            // Dialog OK bilan yopildi — token o'rnatilgan
             ShowErr("");
-            try
+            var tablePage = new MultiTablePage(_client, userId, userName);
+            tablePage.FormClosed += async (s, e) =>
             {
-                string json  = await _client.LoginWithPinAsync(login, pin);
-                string token = MultiMonoblokClient.JsonStr(json, "token");
-                if (string.IsNullOrEmpty(token)) { ShowErr("Token olinmadi."); return; }
-
-                _client.Token = token;
-
-                // Serverdan qaytgan user.id ni olish
-                string userJson = MultiMonoblokClient.JsonNested(json, "user");
-                int    serverId = MultiMonoblokClient.JsonInt(userJson, "id");
-                int    realId   = serverId > 0 ? serverId : userId;
-
-                var tablePage = new MultiTablePage(_client, realId, userName);
-                tablePage.FormClosed += async (s, e) =>
-                {
-                    _client.Token = null;
-                    this.Show();
-                    await LoadStaffAsync();
-                };
-                this.Hide();
-                tablePage.Show();
-            }
-            catch (MultiApiException ex)
-            {
-                string msg = MultiMonoblokClient.JsonStr(ex.Body, "message");
-                if (ex.StatusCode == 401)
-                    ShowErr("PIN noto'g'ri. Qayta urinib ko'ring.");
-                else if (ex.StatusCode == 403)
-                    ShowErr("Litsenziya muddati tugagan! Administrator bilan bog'laning.");
-                else
-                    ShowErr(string.IsNullOrEmpty(msg) ? $"Kirish muvaffaqiyatsiz ({ex.StatusCode})" : msg);
-            }
-            catch (Exception ex)
-            {
-                ShowErr("Xatolik: " + ex.Message);
-            }
+                _client.Token = null;
+                this.Show();
+                await LoadStaffAsync();
+            };
+            this.Hide();
+            tablePage.Show();
         }
 
         private async Task CheckLicenseAsync()
