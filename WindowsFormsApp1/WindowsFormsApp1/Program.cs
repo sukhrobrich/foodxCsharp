@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using WindowsFormsApp1.forms.license;
 using WindowsFormsApp1.forms.main;
+using WindowsFormsApp1.forms.multimonoblok;
 using WindowsFormsApp1.forms.settings;
 using WindowsFormsApp1.forms.user;
 using WindowsFormsApp1.services;
@@ -22,6 +23,13 @@ namespace WindowsFormsApp1
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            // 0. Multimonoblok rejimini tekshirish — SQL/litsenziya kerak emas
+            if (MultiMonoblokConfig.IsMultiMonoblokMode)
+            {
+                RunMultiMonoblokMode();
+                return;
+            }
 
             // 1. Ulanish holatini aniqlash (central → local fallback)
             Session.IsOnline = dbconnect.CheckCentral();
@@ -141,6 +149,25 @@ namespace WindowsFormsApp1
             // 7. Dastur yopilganda tozalash
             _licTimer?.Dispose();
             SyncService.Stop();
+        }
+
+        // ── Multimonoblok rejimi ────────────────────────────────────────────
+        static void RunMultiMonoblokMode()
+        {
+            var cfg = MultiMonoblokConfig.Load();
+            if (string.IsNullOrEmpty(cfg.apiUrl))
+            {
+                // Config bo'sh — sozlash formini ko'rsatish
+                using (var dlg = new MultiSetupForm())
+                {
+                    if (dlg.ShowDialog() != DialogResult.OK)
+                        return;
+                    cfg = MultiMonoblokConfig.Load();
+                }
+            }
+
+            var client = new MultiMonoblokClient(cfg.apiUrl, cfg.tenantId);
+            Application.Run(new MultiWaiterLoginPage(client));
         }
 
         // ── Watchdog ────────────────────────────────────────────────────────

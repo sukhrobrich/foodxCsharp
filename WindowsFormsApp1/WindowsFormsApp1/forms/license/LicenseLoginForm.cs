@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using WindowsFormsApp1.forms.multimonoblok;
 using WindowsFormsApp1.services;
 
 namespace WindowsFormsApp1.forms.license
@@ -43,8 +44,8 @@ namespace WindowsFormsApp1.forms.license
         private void InitializeComponent()
         {
             this.Text            = "FoodX — Litsenziya";
-            this.Size            = new Size(420, 500);
-            this.MinimumSize     = new Size(420, 500);
+            this.Size            = new Size(420, 580);
+            this.MinimumSize     = new Size(420, 580);
             this.StartPosition   = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox     = false;
@@ -111,11 +112,36 @@ namespace WindowsFormsApp1.forms.license
             // Xato xabari
             _err = new Label
             {
-                Location = new Point(0, y), Height = 52,
+                Location = new Point(0, y), Height = 48,
                 Font = new Font("Segoe UI", 9), ForeColor = Danger,
                 TextAlign = ContentAlignment.MiddleCenter, AutoSize = false, Visible = false
             };
             card.Controls.Add(_err);
+            y += 56;
+
+            // Multimonoblok tugmasi
+            Button btnMulti = new Button
+            {
+                Text = "📟  Qo'shimcha Monoblok sifatida ulash",
+                Location = new Point(0, y), Height = 34,
+                FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(241, 245, 249),
+                ForeColor = Color.FromArgb(30, 64, 175),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnMulti.FlatAppearance.BorderSize = 1;
+            btnMulti.FlatAppearance.BorderColor = Color.FromArgb(147, 197, 253);
+            btnMulti.Click += (s, e) => OpenMultiSetup();
+            card.Controls.Add(btnMulti);
+            y += 44;
+
+            // Kengliklarga bog'lash (btnMulti ham)
+            card.Resize += (s2, e2) =>
+            {
+                int w = card.ClientSize.Width - 72;
+                btnMulti.Width    = w;
+                btnMulti.Location = new Point(36, btnMulti.Location.Y);
+            };
 
             // Footer
             Label footer = new Label
@@ -192,6 +218,23 @@ namespace WindowsFormsApp1.forms.license
                 _pass.Clear();
                 _pass.Focus();
                 ShowErr(result.Message);
+            }
+        }
+
+        private void OpenMultiSetup()
+        {
+            using (var dlg = new MultiSetupForm())
+            {
+                var result = dlg.ShowDialog(this);
+                if (result == DialogResult.OK)
+                {
+                    // Saqlandi — dasturni qayta ishga tushiramiz
+                    Application.Restart();
+                }
+                else if (result == DialogResult.Abort)
+                {
+                    // Monoblok rejimi o'chirildi — normal ishlab davom etamiz
+                }
             }
         }
 

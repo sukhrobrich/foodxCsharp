@@ -158,6 +158,12 @@
     <Compile Include="services\StockAlertService.cs" />
     <Compile Include="services\NotificationSound.cs" />
     <Compile Include="services\LicenseDaysDisplay.cs" />
+    <Compile Include="services\MultiMonoblokConfig.cs" />
+    <Compile Include="services\MultiMonoblokClient.cs" />
+    <Compile Include="forms\multimonoblok\MultiSetupForm.cs" />
+    <Compile Include="forms\multimonoblok\MultiWaiterLoginPage.cs" />
+    <Compile Include="forms\multimonoblok\MultiTablePage.cs" />
+    <Compile Include="forms\multimonoblok\MultiOrderForm.cs" />
     <Compile Include="forms\license\LicenseLoginForm.cs" />
     <Compile Include="forms\order\OrdersPanel.cs">
       <SubType>UserControl</SubType>
