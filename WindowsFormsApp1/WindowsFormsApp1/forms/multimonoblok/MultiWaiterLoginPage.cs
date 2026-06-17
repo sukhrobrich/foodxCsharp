@@ -179,10 +179,11 @@ namespace WindowsFormsApp1.forms.multimonoblok
 
                 foreach (var s in staff)
                 {
-                    int    id   = MultiMonoblokClient.JsonInt(s, "id");
-                    string name = MultiMonoblokClient.JsonStr(s, "name");
-                    string role = MultiMonoblokClient.JsonStr(s, "role_type");
-                    _flpStaff.Controls.Add(MakeCard(id, name, role, tenantId));
+                    int    id    = MultiMonoblokClient.JsonInt(s, "id");
+                    string name  = MultiMonoblokClient.JsonStr(s, "name");
+                    string login = MultiMonoblokClient.JsonStr(s, "login");
+                    string role  = MultiMonoblokClient.JsonStr(s, "role_type");
+                    _flpStaff.Controls.Add(MakeCard(id, name, login, role, tenantId));
                 }
             }
             catch (MultiApiException ex)
@@ -203,7 +204,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
             }
         }
 
-        private Control MakeCard(int userId, string name, string role, int tenantId)
+        private Control MakeCard(int userId, string name, string login, string role, int tenantId)
         {
             string initials = name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
             Color roleColor = role == "admin" ? Color.FromArgb(124, 58, 237)
@@ -245,25 +246,38 @@ namespace WindowsFormsApp1.forms.multimonoblok
             card.MouseLeave += (s, e) => hover(false);
             foreach (Control c in card.Controls) { c.MouseEnter += (s, e) => hover(true); c.MouseLeave += (s, e) => hover(false); }
 
-            EventHandler onClick = async (s, e) => await LoginAsync(userId, name, role, tenantId);
+            EventHandler onClick = async (s, e) => await LoginAsync(userId, name, login, role, tenantId);
             card.Click += onClick;
             foreach (Control c in card.Controls) c.Click += onClick;
 
             return card;
         }
 
-        private async Task LoginAsync(int userId, string userName, string role, int tenantId)
+        private async Task LoginAsync(int userId, string userName, string login, string role, int tenantId)
         {
+            // PIN so'rash
+            string pin;
+            using (var dlg = new MultiPinDialog(userName))
+            {
+                if (dlg.ShowDialog(this) != System.Windows.Forms.DialogResult.OK) return;
+                pin = dlg.Pin;
+            }
+
             ShowErr("");
             try
             {
-                string json  = await _client.QuickLoginAsync(userId);
+                string json  = await _client.LoginWithPinAsync(login, pin);
                 string token = MultiMonoblokClient.JsonStr(json, "token");
                 if (string.IsNullOrEmpty(token)) { ShowErr("Token olinmadi."); return; }
 
                 _client.Token = token;
 
-                var tablePage = new MultiTablePage(_client, userId, userName);
+                // Serverdan qaytgan user.id ni olish
+                string userJson = MultiMonoblokClient.JsonNested(json, "user");
+                int    serverId = MultiMonoblokClient.JsonInt(userJson, "id");
+                int    realId   = serverId > 0 ? serverId : userId;
+
+                var tablePage = new MultiTablePage(_client, realId, userName);
                 tablePage.FormClosed += async (s, e) =>
                 {
                     _client.Token = null;
@@ -276,7 +290,12 @@ namespace WindowsFormsApp1.forms.multimonoblok
             catch (MultiApiException ex)
             {
                 string msg = MultiMonoblokClient.JsonStr(ex.Body, "message");
-                ShowErr(string.IsNullOrEmpty(msg) ? $"Kirish muvaffaqiyatsiz ({ex.StatusCode})" : msg);
+                if (ex.StatusCode == 401)
+                    ShowErr("PIN noto'g'ri. Qayta urinib ko'ring.");
+                else if (ex.StatusCode == 403)
+                    ShowErr("Litsenziya muddati tugagan! Administrator bilan bog'laning.");
+                else
+                    ShowErr(string.IsNullOrEmpty(msg) ? $"Kirish muvaffaqiyatsiz ({ex.StatusCode})" : msg);
             }
             catch (Exception ex)
             {

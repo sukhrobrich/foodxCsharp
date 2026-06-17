@@ -30,6 +30,10 @@ namespace WindowsFormsApp1.services
             => RunAsync(() => Request("POST", "/api/auth/quick-login",
                 $"{{\"userId\":{userId},\"tenantId\":{_tenantId}}}", auth: false));
 
+        public Task<string> LoginWithPinAsync(string login, string pin)
+            => RunAsync(() => Request("POST", "/api/auth/login",
+                $"{{\"login\":\"{Esc(login)}\",\"password\":\"{Esc(pin)}\",\"tenantId\":{_tenantId}}}", auth: false));
+
         public Task<string> GetPlacesAsync()
             => RunAsync(() => Request("GET", "/api/places"));
 
