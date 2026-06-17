@@ -13,8 +13,8 @@ namespace WindowsFormsApp1.forms.multimonoblok
         private static readonly Color Muted   = Color.FromArgb(156, 163, 175);
         private static readonly Color Border  = Color.FromArgb(229, 231, 235);
         private static readonly Color Success = Color.FromArgb(22, 163, 74);
-        private static readonly Color Danger  = Color.FromArgb(220, 38, 38);
-        private static readonly Color Text    = Color.FromArgb(17, 24, 39);
+        private static readonly Color Danger   = Color.FromArgb(220, 38, 38);
+        private static readonly Color TextDark = Color.FromArgb(17, 24, 39);
 
         private TextBox _txtIp;
         private Label   _lblStatus;
@@ -70,7 +70,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
             {
                 Text = "Qo'shimcha Monoblok Sozlamasi",
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                ForeColor = Text, AutoSize = true, Location = new Point(78, 80)
+                ForeColor = TextDark, AutoSize = true, Location = new Point(78, 80)
             });
             main.Controls.Add(new Label
             {
@@ -95,7 +95,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 Location = new Point(0, 196), Width = 360, Height = 38,
                 Font = new Font("Segoe UI", 13),
                 BorderStyle = BorderStyle.FixedSingle,
-                BackColor = BgPage, ForeColor = Text,
+                BackColor = BgPage, ForeColor = TextDark,
                 TextAlign = HorizontalAlignment.Center
             };
             SetPlaceholder(_txtIp, "masalan: 192.168.1.5");
