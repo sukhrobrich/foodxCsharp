@@ -62,6 +62,9 @@ namespace WindowsFormsApp1.services
             return RunAsync(() => Request("PUT", $"/api/orders/{orderId}/pay", body));
         }
 
+        public Task<string> GetActiveOrdersAsync()
+            => RunAsync(() => Request("GET", "/api/orders/active"));
+
         // ── JSON yordamchi metodlar ──────────────────────────────────────────
 
         public static string JsonStr(string json, string key)

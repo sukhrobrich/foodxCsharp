@@ -294,15 +294,21 @@ namespace WindowsFormsApp1.forms.multimonoblok
 
             // Dialog OK bilan yopildi — token o'rnatilgan
             ShowErr("");
-            var tablePage = new MultiTablePage(_client, userId, userName, role);
-            tablePage.FormClosed += async (s, e) =>
+
+            Form nextPage;
+            if (role == "kassir" || role == "admin")
+                nextPage = new MultiCashierPage(_client, userName);
+            else
+                nextPage = new MultiTablePage(_client, userId, userName, role);
+
+            nextPage.FormClosed += async (s, e) =>
             {
                 _client.Token = null;
                 this.Show();
                 await LoadStaffAsync();
             };
             this.Hide();
-            tablePage.Show();
+            nextPage.Show();
         }
 
         private async Task CheckLicenseAsync()
