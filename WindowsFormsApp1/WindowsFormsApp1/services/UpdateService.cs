@@ -10,7 +10,7 @@ namespace WindowsFormsApp1.services
     public static class UpdateService
     {
         private const string UPDATE_BASE = "http://195.158.24.155:5050/update";
-        public  const string APP_VERSION = "1.0.0";
+        public  const string APP_VERSION = "1.0.1";
 
         // Fon threadida versiyani tekshiradi, yangi versiya bo'lsa callback chaqiriladi
         public static void CheckInBackground(Action<string> onUpdateAvailable)
