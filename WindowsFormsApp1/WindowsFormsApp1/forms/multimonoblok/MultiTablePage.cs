@@ -170,15 +170,15 @@ namespace WindowsFormsApp1.forms.multimonoblok
             if (_btnLayoutToggle == null) return;
             if (_layoutMode == "horizontal")
             {
-                _btnLayoutToggle.Text      = "→ Gorizontal";
-                _btnLayoutToggle.ForeColor = Color.FromArgb(37, 99, 235);
-                _btnLayoutToggle.FlatAppearance.BorderColor = Color.FromArgb(37, 99, 235);
+                _btnLayoutToggle.Text      = "⊞ Grid (tepadan pastga)";
+                _btnLayoutToggle.ForeColor = Color.FromArgb(22, 163, 74);
+                _btnLayoutToggle.FlatAppearance.BorderColor = Color.FromArgb(22, 163, 74);
             }
             else
             {
-                _btnLayoutToggle.Text      = "↕ Vertikal";
-                _btnLayoutToggle.ForeColor = Color.FromArgb(22, 163, 74);
-                _btnLayoutToggle.FlatAppearance.BorderColor = Color.FromArgb(22, 163, 74);
+                _btnLayoutToggle.Text      = "→ Bir qator (o'ngga)";
+                _btnLayoutToggle.ForeColor = Color.FromArgb(37, 99, 235);
+                _btnLayoutToggle.FlatAppearance.BorderColor = Color.FromArgb(37, 99, 235);
             }
         }
 
@@ -231,25 +231,35 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 _scrollArea.Controls.Add(new Panel { Location = new Point(0, yOffset), Width = totalWidth, Height = 1, BackColor = Border });
                 yOffset += 6;
 
-                if (_layoutMode == "vertical")
+                if (_layoutMode == "horizontal")
                 {
-                    // ── VERTIKAL rejim: kartalar buralar, scrollArea tepadan pastga ──
+                    // ── GRID rejim: ekran kenligini to'ldiradi, tepadan pastga wrap ──
+                    const int minCardW  = 140;
+                    const int cardMarg  = 8; // Margin(4) → har yon 4px = 8 jami
+                    int cols    = Math.Max((totalWidth + cardMarg) / (minCardW + cardMarg), 2);
+                    int gridW   = (totalWidth - cols * cardMarg) / cols;
+                    int gridH   = 120;
+                    int rows    = (int)Math.Ceiling((double)tableList.Count / cols);
+                    int gridFlowH = rows * (gridH + cardMarg);
+
                     var flow = new FlowLayoutPanel
                     {
                         Location      = new Point(0, yOffset),
                         Width         = totalWidth,
-                        AutoSize      = true,
+                        Height        = gridFlowH,
                         FlowDirection = FlowDirection.LeftToRight,
                         WrapContents  = true,
+                        Padding       = new Padding(0),
                         BackColor     = Color.Transparent
                     };
-                    foreach (var t in tableList) flow.Controls.Add(MakeTableCard(t));
+                    foreach (var t in tableList)
+                        flow.Controls.Add(MakeTableCard(t, gridW, gridH));
                     _scrollArea.Controls.Add(flow);
-                    yOffset += flow.PreferredSize.Height + 16;
+                    yOffset += gridFlowH + 16;
                 }
                 else
                 {
-                    // ── GORIZONTAL rejim: bir qator, o'ngga scroll ──
+                    // ── VERTIKAL rejim: bir qator, o'ngga scroll ──
                     int hScrollH  = SystemInformation.HorizontalScrollBarHeight;
                     int rowPanelH = flowH + hScrollH + 4;
                     int flowWidth = tableList.Count * (cardW + cardGap) + cardGap;
@@ -318,7 +328,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
             return 0;
         }
 
-        private Control MakeTableCard(string t)
+        private Control MakeTableCard(string t, int cardW = 148, int cardH = 120)
         {
             int    tableId  = MultiMonoblokClient.JsonInt(t, "id");
             string name     = MultiMonoblokClient.JsonStr(t, "name");
@@ -339,10 +349,12 @@ namespace WindowsFormsApp1.forms.multimonoblok
                               : isMine  ? Color.FromArgb(255, 248, 230)
                               :           Color.FromArgb(254, 242, 242);
 
+            int innerW = cardW - 8; // Labellar ichki kenglik
+
             Panel card = new Panel
             {
-                Width = 148, Height = 120,
-                Margin = new Padding(6), BackColor = bgColor, Cursor = Cursors.Hand
+                Width = cardW, Height = cardH,
+                Margin = new Padding(4), BackColor = bgColor, Cursor = Cursors.Hand
             };
 
             card.Paint += (s, e) =>
@@ -356,30 +368,34 @@ namespace WindowsFormsApp1.forms.multimonoblok
             };
 
             // Holat rangi — yuqori chiziq
-            card.Controls.Add(new Panel { Height = 4, Width = card.Width, BackColor = borderColor, Location = new Point(0, 0) });
+            card.Controls.Add(new Panel { Height = 4, Width = cardW, BackColor = borderColor, Location = new Point(0, 0) });
 
             // Stol nomi
             card.Controls.Add(new Label
             {
                 Text = name,
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                ForeColor = TextDark, Width = 140, Height = 24,
+                ForeColor = TextDark, Width = innerW, Height = 24,
                 Location = new Point(4, 10), TextAlign = ContentAlignment.MiddleCenter
             });
+
+            int row2Y = (int)(cardH * 0.31);
+            int row3Y = (int)(cardH * 0.47);
+            int row4Y = cardH - 22;
 
             if (isEmpty)
             {
                 card.Controls.Add(new Label
                 {
                     Text = "Bo'sh", Font = new Font("Segoe UI", 9),
-                    ForeColor = Success, Width = 140, Height = 20,
-                    Location = new Point(4, 38), TextAlign = ContentAlignment.MiddleCenter
+                    ForeColor = Success, Width = innerW, Height = 20,
+                    Location = new Point(4, row2Y), TextAlign = ContentAlignment.MiddleCenter
                 });
                 card.Controls.Add(new Label
                 {
                     Text = "Yangi buyurtma", Font = new Font("Segoe UI", 8),
-                    ForeColor = Muted, Width = 140, Height = 18,
-                    Location = new Point(4, 58), TextAlign = ContentAlignment.MiddleCenter
+                    ForeColor = Muted, Width = innerW, Height = 18,
+                    Location = new Point(4, row3Y), TextAlign = ContentAlignment.MiddleCenter
                 });
             }
             else
@@ -388,14 +404,15 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 {
                     Text = isMine ? "Mening stolim" : $"Ofitsiant: {ownerNm}",
                     Font = new Font("Segoe UI", 8), ForeColor = borderColor,
-                    Width = 140, Height = 18, Location = new Point(4, 38), TextAlign = ContentAlignment.MiddleCenter
+                    Width = innerW, Height = 18, Location = new Point(4, row2Y),
+                    TextAlign = ContentAlignment.MiddleCenter
                 });
                 card.Controls.Add(new Label
                 {
                     Text = FormatMoney(total),
                     Font = new Font("Segoe UI", 10, FontStyle.Bold),
-                    ForeColor = TextDark, Width = 140, Height = 22,
-                    Location = new Point(4, 58), TextAlign = ContentAlignment.MiddleCenter
+                    ForeColor = TextDark, Width = innerW, Height = 22,
+                    Location = new Point(4, row3Y), TextAlign = ContentAlignment.MiddleCenter
                 });
             }
 
@@ -403,7 +420,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
             {
                 Text = isEmpty ? "+ Qo'shish" : "Ochish →",
                 Font = new Font("Segoe UI", 8), ForeColor = borderColor,
-                Width = 140, Height = 18, Location = new Point(4, 95),
+                Width = innerW, Height = 18, Location = new Point(4, row4Y),
                 TextAlign = ContentAlignment.MiddleCenter
             });
 
