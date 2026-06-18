@@ -77,8 +77,28 @@ namespace WindowsFormsApp1.forms.multimonoblok
             btnSetup.MouseLeave += (s, e) => { btnSetup.ForeColor = TextMuted; btnSetup.FlatAppearance.BorderColor = Border; };
             btnSetup.Click += (s, e) => OpenSetup();
             footer.Controls.Add(btnSetup);
+
+            Button btnUpdate = new Button
+            {
+                Text = $"⬆ Yangilash (v{UpdateService.APP_VERSION})",
+                AutoSize = true, Height = 30,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(243, 244, 246),
+                ForeColor = TextMuted,
+                Font = new Font("Segoe UI", 8.5f), Cursor = Cursors.Hand
+            };
+            btnUpdate.FlatAppearance.BorderSize  = 1;
+            btnUpdate.FlatAppearance.BorderColor = Border;
+            btnUpdate.MouseEnter += (s, e) => { btnUpdate.ForeColor = Color.FromArgb(22, 163, 74); btnUpdate.FlatAppearance.BorderColor = Color.FromArgb(22, 163, 74); };
+            btnUpdate.MouseLeave += (s, e) => { btnUpdate.ForeColor = TextMuted; btnUpdate.FlatAppearance.BorderColor = Border; };
+            btnUpdate.Click += (s, e) => UpdateService.ManualCheck(this);
+            footer.Controls.Add(btnUpdate);
+
             footer.Resize += (s, e) =>
-                btnSetup.Location = new Point(footer.Width - btnSetup.Width - 12, (footer.Height - btnSetup.Height) / 2);
+            {
+                btnSetup.Location   = new Point(footer.Width - btnSetup.Width - 12, (footer.Height - btnSetup.Height) / 2);
+                btnUpdate.Location  = new Point(btnSetup.Left - btnUpdate.Width - 8, (footer.Height - btnUpdate.Height) / 2);
+            };
 
             this.Controls.Add(footer);
 
