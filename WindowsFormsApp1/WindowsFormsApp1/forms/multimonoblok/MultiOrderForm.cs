@@ -618,10 +618,14 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 }
                 sb.Append("]}");
 
-                string json;
                 if (_existingOrderId > 0)
                 {
-                    json = await _client.UpdateOrderItemsAsync(_existingOrderId, sb.ToString());
+                    // Mavjud buyurtma yangilash — yopmasdan formni yangilaymiz
+                    await _client.UpdateOrderItemsAsync(_existingOrderId, sb.ToString());
+                    SetStatus("✓ Saqlandi!", Success);
+
+                    // API dan yangilangan buyurtmani qayta yuklaymiz
+                    await ReloadOrderFromApiAsync();
                 }
                 else
                 {
@@ -635,14 +639,12 @@ namespace WindowsFormsApp1.forms.multimonoblok
                         f2 = false;
                     }
                     body += "]}";
-                    json = await _client.CreateOrderAsync(body);
+                    string json = await _client.CreateOrderAsync(body);
+                    string msg  = MultiMonoblokClient.JsonStr(json, "message");
+                    SetStatus("✓ " + (string.IsNullOrEmpty(msg) ? "Saqlandi!" : msg), Success);
+                    await Task.Delay(800);
+                    this.Close();
                 }
-
-                string msg = MultiMonoblokClient.JsonStr(json, "message");
-                SetStatus("✓ " + (string.IsNullOrEmpty(msg) ? "Saqlandi!" : msg), Success);
-
-                await Task.Delay(1000);
-                this.Close();
             }
             catch (MultiApiException ex)
             {
@@ -658,6 +660,28 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 _btnSave.Enabled = true;
                 _btnSave.Text    = "Saqlash";
             }
+        }
+
+        private async Task ReloadOrderFromApiAsync()
+        {
+            try
+            {
+                string orderJson = await _client.GetOrderAsync(_existingOrderId);
+                string itemsJson = MultiMonoblokClient.JsonNested(orderJson, "items");
+                _items.Clear();
+                foreach (var item in MultiMonoblokClient.JsonArr(itemsJson))
+                {
+                    int     fid   = MultiMonoblokClient.JsonInt(item, "food_id");
+                    string  fname = MultiMonoblokClient.JsonStr(item, "food_name");
+                    int     qty   = MultiMonoblokClient.JsonInt(item, "quantity");
+                    decimal price = MultiMonoblokClient.JsonDec(item, "selling_price");
+                    string  note  = MultiMonoblokClient.JsonStr(item, "note");
+                    if (fid > 0) _items[fid] = (fname, qty, price, note);
+                }
+                ShowFoods(_activeCategoryId);
+                RefreshOrderList();
+            }
+            catch { /* yangilash xatosi — hozirgi holat qoladi */ }
         }
 
         private void SetStatus(string text, Color color)

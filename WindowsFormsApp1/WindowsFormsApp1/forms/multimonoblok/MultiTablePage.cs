@@ -426,10 +426,21 @@ namespace WindowsFormsApp1.forms.multimonoblok
 
             EventHandler onClick = (s, e) =>
             {
+                // Boshqa ofitsiantning buyurtmasini ofitsiant ocholmaydi
+                bool isKassirOrAdmin = _userRole == "kassir" || _userRole == "admin";
+                if (!isEmpty && ownerId != _userId && !isKassirOrAdmin)
+                {
+                    MessageBox.Show(
+                        $"Bu stol \"{ownerNm}\" ga tegishli.\nSiz faqat o'z stollaringizni ochishingiz mumkin.",
+                        "Ruxsat yo'q", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 _refreshTimer.Stop();
                 var orderForm = new MultiOrderForm(_client, tableId, name, orderId, _userRole);
                 orderForm.FormClosed += async (fs, fe) =>
                 {
+                    _lastState.Clear(); // Har doim qayta chizish — total o'zgargan bo'lishi mumkin
                     await RefreshAsync();
                     _refreshTimer.Start();
                 };
