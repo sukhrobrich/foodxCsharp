@@ -211,6 +211,14 @@ namespace WindowsFormsApp1.forms.settings
             Panel cardNetwork = MakeLocalNetworkCard(new Point(24, 540));
             wrap.Controls.Add(cardNetwork);
 
+            Panel cardUpdate = MakeNavCard(
+                "Dasturni yangilash",
+                $"Hozirgi versiya: {UpdateService.APP_VERSION}\nServerdagi yangi versiyani tekshirish va o'rnatish",
+                "⬆", Color.FromArgb(22, 163, 74), new Point(24, 684));
+            cardUpdate.Click += (s, e) => UpdateService.ManualCheck(this.FindForm());
+            foreach (Control c in cardUpdate.Controls) c.Click += (s, e) => UpdateService.ManualCheck(this.FindForm());
+            wrap.Controls.Add(cardUpdate);
+
             wrap.Resize += (s, e) =>
             {
                 int cw = Math.Max(300, wrap.ClientSize.Width - 48);
@@ -219,11 +227,14 @@ namespace WindowsFormsApp1.forms.settings
                 cardFont.Width    = cw;
                 if (_cardConn != null) _cardConn.Width = cw;
                 cardNetwork.Width = cw;
+                cardUpdate.Width  = cw;
                 foreach (Control c in cardPrinter.Controls)
                     if (c is Label lbl && !lbl.AutoSize) lbl.Width = cw - 80;
                 foreach (Control c in cardOrder.Controls)
                     if (c is Label lbl && !lbl.AutoSize) lbl.Width = cw - 80;
                 foreach (Control c in cardFont.Controls)
+                    if (c is Label lbl && !lbl.AutoSize) lbl.Width = cw - 80;
+                foreach (Control c in cardUpdate.Controls)
                     if (c is Label lbl && !lbl.AutoSize) lbl.Width = cw - 80;
             };
         }

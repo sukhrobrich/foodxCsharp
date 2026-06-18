@@ -50,6 +50,9 @@ namespace WindowsFormsApp1.forms.main
         readonly Dictionary<int, Action<bool, int, decimal>> _tileUpdaters
             = new Dictionary<int, Action<bool, int, decimal>>();
 
+        // Multimonoblok rejimida buyurtma download timer (SyncService ishlamaydi)
+        Timer _multiDlTimer;
+
         // Buyurtmalar state
         string _ordFilter   = "NO";
         Panel  _orderList;
@@ -241,6 +244,23 @@ namespace WindowsFormsApp1.forms.main
                 catch { }
             };
             StockAlertService.LowStockDetected += _lowStockToastHandler;
+
+            // ── Multimonoblok rejimida SyncService ishlamaydi — o'zimiz pollayamiz ──
+            // Har 2 soniyada yangi buyurtmalarni centraldan yuklab NewOrderCreated/
+            // NewOrdersArrived eventlarini otiramiz → toast + refresh ishlaydi.
+            if (MultiMonoblokConfig.IsMultiMonoblokMode && Session.IsOnline)
+            {
+                _multiDlTimer = new Timer { Interval = 2000 };
+                _multiDlTimer.Tick += (s, e) =>
+                {
+                    if (IsDisposed) { _multiDlTimer.Stop(); return; }
+                    System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        try { SyncEngine.DownloadOrdersFast(); } catch { }
+                    });
+                };
+                _multiDlTimer.Start();
+            }
         }
 
         Button NavTab(string text, int idx)
@@ -1290,6 +1310,8 @@ namespace WindowsFormsApp1.forms.main
         {
             _refreshTimer?.Stop();
             _refreshTimer?.Dispose();
+            _multiDlTimer?.Stop();
+            _multiDlTimer?.Dispose();
             if (_newOrderHandler != null)
             {
                 SyncEngine.NewOrdersArrived -= _newOrderHandler;
