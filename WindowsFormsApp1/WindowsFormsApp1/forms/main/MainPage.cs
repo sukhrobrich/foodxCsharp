@@ -56,7 +56,7 @@ namespace WindowsFormsApp1.forms.main
             this.Controls.Add(sidebar);
 
             // Logout (Bottom) — add first so it's positioned at bottom
-            Panel logoutPanel = new Panel { Height = 78, Dock = DockStyle.Bottom, BackColor = BgCard };
+            Panel logoutPanel = new Panel { Height = 100, Dock = DockStyle.Bottom, BackColor = BgCard };
             logoutPanel.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, logoutPanel.Width, 0);
             Label lblLicenseDays = new Label
@@ -67,6 +67,25 @@ namespace WindowsFormsApp1.forms.main
                 TextAlign = ContentAlignment.MiddleCenter
             };
             logoutPanel.Controls.Add(lblLicenseDays);
+
+            // Yangilash tugmasi
+            Button btnUpdate = new Button
+            {
+                Text      = $"⬆  Yangilash (v{UpdateService.APP_VERSION})",
+                Dock      = DockStyle.Top,
+                Height    = 22,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.Transparent,
+                ForeColor = TextMuted,
+                Font      = new Font("Segoe UI", 8f),
+                Cursor    = Cursors.Hand
+            };
+            btnUpdate.FlatAppearance.BorderSize = 0;
+            btnUpdate.MouseEnter += (s, e) => { btnUpdate.ForeColor = Gold; };
+            btnUpdate.MouseLeave += (s, e) => { btnUpdate.ForeColor = TextMuted; };
+            btnUpdate.Click += (s, e) => UpdateService.ManualCheck(this);
+            logoutPanel.Controls.Add(btnUpdate);
+
             Button btnLogout = new Button
             {
                 Text = "Chiqish",

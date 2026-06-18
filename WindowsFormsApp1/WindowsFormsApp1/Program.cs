@@ -140,6 +140,19 @@ namespace WindowsFormsApp1
             // 5. Online↔offline avtomatik monitor
             SyncService.Start();
 
+            // 5a. Fon threadida yangi versiya tekshiruvi (8 soniyada, dastur to'liq ochilganidan keyin)
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                System.Threading.Thread.Sleep(8000);
+                UpdateService.CheckInBackground(latestVer =>
+                {
+                    var form = Application.OpenForms.Count > 0 ? Application.OpenForms[0] : null;
+                    if (form == null || form.IsDisposed) return;
+                    form.BeginInvoke(new Action(() =>
+                        UpdateService.PromptAndInstall(form, latestVer)));
+                });
+            });
+
             // 6. Asosiy forma — agar oxirgi marta kirgan xodim saqlangan bo'lsa,
             //    login/PIN so'ramasdan to'g'ridan-to'g'ri uning sahifasiga o'tamiz.
             //    Chiqish (logout) bosilganda saqlangan qiymat tozalanadi.

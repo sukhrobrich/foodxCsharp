@@ -141,7 +141,6 @@ namespace WindowsFormsApp1.forms.multimonoblok
             _scrollArea.SuspendLayout();
             _scrollArea.Controls.Clear();
 
-            // Zonalar bo'yicha guruhlash
             var zones = new Dictionary<string, List<string>>();
             var zoneOrder = new List<string>();
 
@@ -153,8 +152,14 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 zones[zone].Add(p);
             }
 
-            int yOffset = 8;
-            int totalWidth = Math.Max(_scrollArea.ClientSize.Width - 32, 200);
+            // Karta o'lchami: 148×120, margin 6 → har bir karta 160px kenglik
+            const int cardW   = 148;
+            const int cardH   = 120;
+            const int cardGap = 12; // margin 6+6
+            const int flowH   = cardH + 16; // flow ichida karta + yuqori/pastki boʻshliq
+
+            int totalWidth = Math.Max(_scrollArea.ClientSize.Width - _scrollArea.Padding.Horizontal - 8, 300);
+            int yOffset    = 0;
 
             foreach (string zone in zoneOrder)
             {
@@ -163,41 +168,68 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 // Zona sarlavhasi
                 Panel zoneHeader = new Panel
                 {
-                    Location  = new Point(8, yOffset),
+                    Location  = new Point(0, yOffset),
                     Width     = totalWidth,
                     Height    = 36,
                     BackColor = Color.Transparent
                 };
                 zoneHeader.Controls.Add(new Label
                 {
-                    Text = zone,
-                    Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                    Text = zone, Font = new Font("Segoe UI", 11, FontStyle.Bold),
                     ForeColor = TextDark, AutoSize = true, Location = new Point(4, 8)
                 });
                 _scrollArea.Controls.Add(zoneHeader);
-                yOffset += 40;
+                yOffset += 36;
 
-                // Zona ajratgichi
-                Panel zoneLine = new Panel { Location = new Point(8, yOffset), Width = totalWidth, Height = 1, BackColor = Border };
-                _scrollArea.Controls.Add(zoneLine);
-                yOffset += 8;
+                // Ajratgich
+                _scrollArea.Controls.Add(new Panel
+                {
+                    Location  = new Point(0, yOffset),
+                    Width     = totalWidth, Height = 1, BackColor = Border
+                });
+                yOffset += 6;
 
-                // Stollar
+                // Gorizontal scroll panel — faqat o'ngga yo'naltirilgan
+                int hScrollH   = SystemInformation.HorizontalScrollBarHeight;
+                int rowPanelH  = flowH + hScrollH + 4;
+                int flowWidth  = tableList.Count * (cardW + cardGap) + cardGap;
+
+                Panel rowPanel = new Panel
+                {
+                    Location    = new Point(0, yOffset),
+                    Width       = totalWidth,
+                    Height      = rowPanelH,
+                    AutoScroll  = true,
+                    BackColor   = Color.Transparent
+                };
+
                 FlowLayoutPanel flow = new FlowLayoutPanel
                 {
-                    Location      = new Point(8, yOffset),
-                    Width         = totalWidth,
-                    AutoSize      = true,
+                    Location      = new Point(0, 0),
+                    Width         = Math.Max(flowWidth, totalWidth),
+                    Height        = flowH, // flowH < rowPanelH → vertikal scroll chiqmaydi
                     FlowDirection = FlowDirection.LeftToRight,
-                    WrapContents  = true,
+                    WrapContents  = false,
+                    AutoSize      = false,
                     BackColor     = Color.Transparent
                 };
 
                 foreach (var t in tableList)
                     flow.Controls.Add(MakeTableCard(t));
 
-                _scrollArea.Controls.Add(flow);
-                yOffset += flow.PreferredSize.Height + 20;
+                rowPanel.Controls.Add(flow);
+                _scrollArea.Controls.Add(rowPanel);
+                yOffset += rowPanelH + 16;
+            }
+
+            if (places.Count == 0)
+            {
+                _scrollArea.Controls.Add(new Label
+                {
+                    Text = "Stollar topilmadi",
+                    Font = new Font("Segoe UI", 10), ForeColor = Muted,
+                    Location = new Point(20, 20), AutoSize = true
+                });
             }
 
             _scrollArea.ResumeLayout();
