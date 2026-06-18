@@ -183,8 +183,13 @@ namespace WindowsFormsApp1.forms.main
                 {
                     try { PrintService.SetSetting("last_logged_in_user", ""); } catch { }
                     Session.Clear();
-                    Hide();
-                    new Form1().Show();
+                    if (WindowsFormsApp1.services.MultiMonoblokConfig.IsMultiMonoblokMode)
+                        Close();
+                    else
+                    {
+                        Hide();
+                        new Form1().Show();
+                    }
                 }
             };
             userPanel.Controls.Add(btnExit);

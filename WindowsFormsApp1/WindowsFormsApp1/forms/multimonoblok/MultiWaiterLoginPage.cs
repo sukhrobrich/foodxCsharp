@@ -297,12 +297,20 @@ namespace WindowsFormsApp1.forms.multimonoblok
 
             Form nextPage;
             if (role == "kassir" || role == "admin")
-                nextPage = new MultiCashierPage(_client, userName);
+            {
+                // CashierPage uchun Session ni to'ldirish (lokal DB + UI uchun kerak)
+                Session.UserId       = userId;
+                Session.UserName     = userName;
+                Session.Login        = login;
+                Session.UserCategory = role;
+                nextPage = new WindowsFormsApp1.forms.main.CashierPage();
+            }
             else
                 nextPage = new MultiTablePage(_client, userId, userName, role);
 
             nextPage.FormClosed += async (s, e) =>
             {
+                Session.Clear();
                 _client.Token = null;
                 this.Show();
                 await LoadStaffAsync();
