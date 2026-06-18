@@ -52,20 +52,13 @@ namespace WindowsFormsApp1.forms.multimonoblok
             footer.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, footer.Width, 0);
 
-            _lblConn = new Label
-            {
-                Text = $"Monoblok  •  {_client.ApiUrl}",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = TextMuted,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-            footer.Controls.Add(_lblConn);
+            // O'ng tomondagi tugmalar paneli (docking tartibiga ko'ra avval qo'shiladi)
+            Panel rightBtns = new Panel { Dock = DockStyle.Right, Width = 310, BackColor = BgCard };
 
             Button btnSetup = new Button
             {
                 Text = "⚙ Kafe o'zgartirish",
-                AutoSize = true, Height = 30,
+                Width = 150, Height = 30,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(243, 244, 246),
                 ForeColor = TextMuted,
@@ -76,12 +69,11 @@ namespace WindowsFormsApp1.forms.multimonoblok
             btnSetup.MouseEnter += (s, e) => { btnSetup.ForeColor = Gold; btnSetup.FlatAppearance.BorderColor = Gold; };
             btnSetup.MouseLeave += (s, e) => { btnSetup.ForeColor = TextMuted; btnSetup.FlatAppearance.BorderColor = Border; };
             btnSetup.Click += (s, e) => OpenSetup();
-            footer.Controls.Add(btnSetup);
 
             Button btnUpdate = new Button
             {
                 Text = $"⬆ Yangilash (v{UpdateService.APP_VERSION})",
-                AutoSize = true, Height = 30,
+                Width = 148, Height = 30,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(243, 244, 246),
                 ForeColor = TextMuted,
@@ -92,13 +84,28 @@ namespace WindowsFormsApp1.forms.multimonoblok
             btnUpdate.MouseEnter += (s, e) => { btnUpdate.ForeColor = Color.FromArgb(22, 163, 74); btnUpdate.FlatAppearance.BorderColor = Color.FromArgb(22, 163, 74); };
             btnUpdate.MouseLeave += (s, e) => { btnUpdate.ForeColor = TextMuted; btnUpdate.FlatAppearance.BorderColor = Border; };
             btnUpdate.Click += (s, e) => UpdateService.ManualCheck(this);
-            footer.Controls.Add(btnUpdate);
 
-            footer.Resize += (s, e) =>
+            rightBtns.Controls.Add(btnSetup);
+            rightBtns.Controls.Add(btnUpdate);
+            rightBtns.Resize += (s, e) =>
             {
-                btnSetup.Location   = new Point(footer.Width - btnSetup.Width - 12, (footer.Height - btnSetup.Height) / 2);
-                btnUpdate.Location  = new Point(btnSetup.Left - btnUpdate.Width - 8, (footer.Height - btnUpdate.Height) / 2);
+                int cy = (rightBtns.Height - btnSetup.Height) / 2;
+                btnSetup.Location  = new Point(rightBtns.Width - btnSetup.Width - 8, cy);
+                btnUpdate.Location = new Point(btnSetup.Left - btnUpdate.Width - 6, cy);
             };
+
+            // Adres labeli (Fill — rightBtns dan keyin qo'shiladi)
+            _lblConn = new Label
+            {
+                Text = $"Monoblok  •  {_client.ApiUrl}",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = TextMuted,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            footer.Controls.Add(rightBtns);  // avval Right-docked
+            footer.Controls.Add(_lblConn);   // keyin Fill
 
             this.Controls.Add(footer);
 
