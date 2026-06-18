@@ -1,6 +1,8 @@
 using System;
 using System.Data.SqlClient;
 using System.Drawing;
+using System.IO;
+using System.Net.Sockets;
 using System.Windows.Forms;
 using WindowsFormsApp1.forms.license;
 using WindowsFormsApp1.forms.main;
@@ -30,6 +32,9 @@ namespace WindowsFormsApp1
                 RunMultiMonoblokMode();
                 return;
             }
+
+            // 0.5. Lokal API serverni avtomatik ishga tushirish (start-local-api.bat)
+            StartLocalApiIfNeeded();
 
             // 1. Ulanish holatini aniqlash (central → local fallback)
             Session.IsOnline = dbconnect.CheckCentral();
@@ -205,6 +210,74 @@ namespace WindowsFormsApp1
                             "Diqqat: litsenziya " + r.DaysLeft + " kun ichida tugaydi!\nVaqtida to'lov qiling.",
                             "FoodX — Ogohlantirish", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
             }
+        }
+
+        // ── Local API auto-start ─────────────────────────────────────────────
+
+        static void StartLocalApiIfNeeded()
+        {
+            if (IsPort5050Open()) return;
+
+            // start-local-api.bat ni exe yonida qidirish
+            string dir = AppDomain.CurrentDomain.BaseDirectory;
+            string bat = Path.Combine(dir, "start-local-api.bat");
+            if (!File.Exists(bat)) return;
+
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName         = bat,
+                    WorkingDirectory = dir,
+                    WindowStyle      = System.Diagnostics.ProcessWindowStyle.Minimized,
+                    UseShellExecute  = true
+                });
+            }
+            catch { return; }
+
+            // API tayyor bo'lgunicha kutish — splash bilan (max 12 sekund)
+            Form splash = new Form
+            {
+                Text            = "FoodX",
+                Size            = new Size(380, 110),
+                StartPosition   = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                ControlBox      = false,
+                BackColor       = Color.White
+            };
+            Label lbl = new Label
+            {
+                Text      = "API server ishga tushmoqda...",
+                Dock      = DockStyle.Fill,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Font      = new Font("Segoe UI", 10)
+            };
+            splash.Controls.Add(lbl);
+            splash.Show();
+
+            for (int i = 1; i <= 24; i++)
+            {
+                Application.DoEvents();
+                System.Threading.Thread.Sleep(500);
+                if (IsPort5050Open()) break;
+                lbl.Text = $"API server ishga tushmoqda... ({i / 2 + 1}s)";
+            }
+
+            splash.Close();
+            splash.Dispose();
+        }
+
+        static bool IsPort5050Open()
+        {
+            try
+            {
+                using (var tcp = new TcpClient())
+                {
+                    tcp.Connect("localhost", 5050);
+                    return true;
+                }
+            }
+            catch { return false; }
         }
 
         // ── Yordamchi metodlar ───────────────────────────────────────────────

@@ -216,7 +216,8 @@ namespace WindowsFormsApp1.services
                     try { using (var rd = new StreamReader(err.GetResponseStream(), Encoding.UTF8)) errBody = rd.ReadToEnd(); } catch { }
                     throw new MultiApiException((int)err.StatusCode, errBody, wx);
                 }
-                throw;
+                // Server yoqilmagan yoki tarmoq xatosi — MultiApiException(0) sifatida qayta yuborish
+                throw new MultiApiException(0, "{\"message\":\"API serverga ulanib bo'lmadi\"}", wx);
             }
         }
 
