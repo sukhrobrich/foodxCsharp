@@ -40,5 +40,29 @@ namespace WindowsFormsApp1.services
         {
             try { if (File.Exists(CfgFile)) File.Delete(CfgFile); } catch { }
         }
+
+        // Stol ko'rinish rejimi: "horizontal" yoki "vertical"
+        private static readonly string LayoutFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "FoodX", "table_layout.txt");
+
+        public static string TableLayoutMode
+        {
+            get
+            {
+                try { return File.Exists(LayoutFile) ? File.ReadAllText(LayoutFile).Trim() : "horizontal"; }
+                catch { return "horizontal"; }
+            }
+            set
+            {
+                try
+                {
+                    string dir = Path.GetDirectoryName(LayoutFile);
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    File.WriteAllText(LayoutFile, value, Encoding.UTF8);
+                }
+                catch { }
+            }
+        }
     }
 }

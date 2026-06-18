@@ -27,16 +27,19 @@ namespace WindowsFormsApp1.forms.multimonoblok
         private Panel  _scrollArea;
         private Timer  _refreshTimer;
         private Label  _lblWelcome;
+        private Button _btnLayoutToggle;
+        private string _layoutMode; // "horizontal" | "vertical"
 
         // Stol holati — yangilanish kerakligini aniqlash uchun
         private readonly Dictionary<int, string> _lastState = new Dictionary<int, string>();
 
         public MultiTablePage(MultiMonoblokClient client, int userId, string userName, string userRole = "ofitsiant")
         {
-            _client   = client;
-            _userId   = userId;
-            _userName = userName;
-            _userRole = userRole;
+            _client      = client;
+            _userId      = userId;
+            _userName    = userName;
+            _userRole    = userRole;
+            _layoutMode  = MultiMonoblokConfig.TableLayoutMode;
             BuildUI();
 
             this.Load += async (s, e) => await RefreshAsync();
@@ -96,6 +99,33 @@ namespace WindowsFormsApp1.forms.multimonoblok
             AddLegend(legend, Danger, "Band", 110);
             AddLegend(legend, Gold, "Mening stolim", 200);
 
+            // Ko'rinish toggle tugmasi
+            _btnLayoutToggle = new Button
+            {
+                Width     = 150, Height = 28,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(243, 244, 246),
+                ForeColor = Muted,
+                Font      = new Font("Segoe UI", 8.5f), Cursor = Cursors.Hand
+            };
+            _btnLayoutToggle.FlatAppearance.BorderSize  = 1;
+            _btnLayoutToggle.FlatAppearance.BorderColor = Border;
+            _btnLayoutToggle.Click += (s, e) =>
+            {
+                _layoutMode = _layoutMode == "horizontal" ? "vertical" : "horizontal";
+                MultiMonoblokConfig.TableLayoutMode = _layoutMode;
+                UpdateLayoutToggleBtn();
+                _lastState.Clear(); // majburan qayta chizish
+                _refreshTimer.Stop();
+                RefreshAsync().ContinueWith(_ => { });
+                _refreshTimer.Start();
+            };
+            UpdateLayoutToggleBtn();
+            legend.Controls.Add(_btnLayoutToggle);
+            legend.Resize += (s, e) =>
+                _btnLayoutToggle.Location = new Point(legend.Width - _btnLayoutToggle.Width - 20,
+                    (legend.Height - _btnLayoutToggle.Height) / 2);
+
             // === SCROLL AREA ===
             _scrollArea = new Panel { Dock = DockStyle.Fill, BackColor = BgMain, AutoScroll = true, Padding = new Padding(16) };
 
@@ -135,6 +165,23 @@ namespace WindowsFormsApp1.forms.multimonoblok
             catch { }
         }
 
+        private void UpdateLayoutToggleBtn()
+        {
+            if (_btnLayoutToggle == null) return;
+            if (_layoutMode == "horizontal")
+            {
+                _btnLayoutToggle.Text      = "→ Gorizontal";
+                _btnLayoutToggle.ForeColor = Color.FromArgb(37, 99, 235);
+                _btnLayoutToggle.FlatAppearance.BorderColor = Color.FromArgb(37, 99, 235);
+            }
+            else
+            {
+                _btnLayoutToggle.Text      = "↕ Vertikal";
+                _btnLayoutToggle.ForeColor = Color.FromArgb(22, 163, 74);
+                _btnLayoutToggle.FlatAppearance.BorderColor = Color.FromArgb(22, 163, 74);
+            }
+        }
+
         private void BuildTableView(List<string> places)
         {
             if (this.IsDisposed) return;
@@ -152,11 +199,17 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 zones[zone].Add(p);
             }
 
-            // Karta o'lchami: 148×120, margin 6 → har bir karta 160px kenglik
+            // Zona va stol nomlarini tabiiy tartibda saralash
+            zoneOrder.Sort(NaturalCompare);
+            foreach (var zone in zones.Keys)
+                zones[zone].Sort((a, b) => NaturalCompare(
+                    MultiMonoblokClient.JsonStr(a, "name"),
+                    MultiMonoblokClient.JsonStr(b, "name")));
+
             const int cardW   = 148;
             const int cardH   = 120;
-            const int cardGap = 12; // margin 6+6
-            const int flowH   = cardH + 16; // flow ichida karta + yuqori/pastki boʻshliq
+            const int cardGap = 12;
+            const int flowH   = cardH + 16;
 
             int totalWidth = Math.Max(_scrollArea.ClientSize.Width - _scrollArea.Padding.Horizontal - 8, 300);
             int yOffset    = 0;
@@ -166,13 +219,7 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 var tableList = zones[zone];
 
                 // Zona sarlavhasi
-                Panel zoneHeader = new Panel
-                {
-                    Location  = new Point(0, yOffset),
-                    Width     = totalWidth,
-                    Height    = 36,
-                    BackColor = Color.Transparent
-                };
+                Panel zoneHeader = new Panel { Location = new Point(0, yOffset), Width = totalWidth, Height = 36, BackColor = Color.Transparent };
                 zoneHeader.Controls.Add(new Label
                 {
                     Text = zone, Font = new Font("Segoe UI", 11, FontStyle.Bold),
@@ -181,58 +228,94 @@ namespace WindowsFormsApp1.forms.multimonoblok
                 _scrollArea.Controls.Add(zoneHeader);
                 yOffset += 36;
 
-                // Ajratgich
-                _scrollArea.Controls.Add(new Panel
-                {
-                    Location  = new Point(0, yOffset),
-                    Width     = totalWidth, Height = 1, BackColor = Border
-                });
+                _scrollArea.Controls.Add(new Panel { Location = new Point(0, yOffset), Width = totalWidth, Height = 1, BackColor = Border });
                 yOffset += 6;
 
-                // Gorizontal scroll panel — faqat o'ngga yo'naltirilgan
-                int hScrollH   = SystemInformation.HorizontalScrollBarHeight;
-                int rowPanelH  = flowH + hScrollH + 4;
-                int flowWidth  = tableList.Count * (cardW + cardGap) + cardGap;
-
-                Panel rowPanel = new Panel
+                if (_layoutMode == "vertical")
                 {
-                    Location    = new Point(0, yOffset),
-                    Width       = totalWidth,
-                    Height      = rowPanelH,
-                    AutoScroll  = true,
-                    BackColor   = Color.Transparent
-                };
-
-                FlowLayoutPanel flow = new FlowLayoutPanel
+                    // ── VERTIKAL rejim: kartalar buralar, scrollArea tepadan pastga ──
+                    var flow = new FlowLayoutPanel
+                    {
+                        Location      = new Point(0, yOffset),
+                        Width         = totalWidth,
+                        AutoSize      = true,
+                        FlowDirection = FlowDirection.LeftToRight,
+                        WrapContents  = true,
+                        BackColor     = Color.Transparent
+                    };
+                    foreach (var t in tableList) flow.Controls.Add(MakeTableCard(t));
+                    _scrollArea.Controls.Add(flow);
+                    yOffset += flow.PreferredSize.Height + 16;
+                }
+                else
                 {
-                    Location      = new Point(0, 0),
-                    Width         = Math.Max(flowWidth, totalWidth),
-                    Height        = flowH, // flowH < rowPanelH → vertikal scroll chiqmaydi
-                    FlowDirection = FlowDirection.LeftToRight,
-                    WrapContents  = false,
-                    AutoSize      = false,
-                    BackColor     = Color.Transparent
-                };
+                    // ── GORIZONTAL rejim: bir qator, o'ngga scroll ──
+                    int hScrollH  = SystemInformation.HorizontalScrollBarHeight;
+                    int rowPanelH = flowH + hScrollH + 4;
+                    int flowWidth = tableList.Count * (cardW + cardGap) + cardGap;
 
-                foreach (var t in tableList)
-                    flow.Controls.Add(MakeTableCard(t));
-
-                rowPanel.Controls.Add(flow);
-                _scrollArea.Controls.Add(rowPanel);
-                yOffset += rowPanelH + 16;
+                    Panel rowPanel = new Panel
+                    {
+                        Location   = new Point(0, yOffset),
+                        Width      = totalWidth,
+                        Height     = rowPanelH,
+                        AutoScroll = true,
+                        BackColor  = Color.Transparent
+                    };
+                    var flow = new FlowLayoutPanel
+                    {
+                        Location      = new Point(0, 0),
+                        Width         = Math.Max(flowWidth, totalWidth),
+                        Height        = flowH,
+                        FlowDirection = FlowDirection.LeftToRight,
+                        WrapContents  = false,
+                        AutoSize      = false,
+                        BackColor     = Color.Transparent
+                    };
+                    foreach (var t in tableList) flow.Controls.Add(MakeTableCard(t));
+                    rowPanel.Controls.Add(flow);
+                    _scrollArea.Controls.Add(rowPanel);
+                    yOffset += rowPanelH + 16;
+                }
             }
 
             if (places.Count == 0)
-            {
                 _scrollArea.Controls.Add(new Label
                 {
                     Text = "Stollar topilmadi",
                     Font = new Font("Segoe UI", 10), ForeColor = Muted,
                     Location = new Point(20, 20), AutoSize = true
                 });
-            }
 
             _scrollArea.ResumeLayout();
+        }
+
+        // Tabiiy (raqamli) saralash: "Stol 2" < "Stol 10"
+        private static int NaturalCompare(string a, string b)
+        {
+            if (a == null && b == null) return 0;
+            if (a == null) return -1;
+            if (b == null) return 1;
+            int i = 0, j = 0;
+            while (i < a.Length || j < b.Length)
+            {
+                if (i >= a.Length) return -1;
+                if (j >= b.Length) return 1;
+                if (char.IsDigit(a[i]) && char.IsDigit(b[j]))
+                {
+                    long na = 0, nb = 0;
+                    while (i < a.Length && char.IsDigit(a[i])) na = na * 10 + (a[i++] - '0');
+                    while (j < b.Length && char.IsDigit(b[j])) nb = nb * 10 + (b[j++] - '0');
+                    if (na != nb) return na.CompareTo(nb);
+                }
+                else
+                {
+                    int cmp = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
+                    if (cmp != 0) return cmp;
+                    i++; j++;
+                }
+            }
+            return 0;
         }
 
         private Control MakeTableCard(string t)
