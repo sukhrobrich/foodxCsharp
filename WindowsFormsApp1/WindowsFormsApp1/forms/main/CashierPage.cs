@@ -1092,30 +1092,54 @@ namespace WindowsFormsApp1.forms.main
                 };
                 det.Controls.Add(totalCard);
 
-                // 2. TAOM QATORLARI (teskari tartibda qo'shamiz; Paint orqali chizamiz)
-                Font fFood = new Font("Segoe UI", 9);
+                // 2. TAOM QATORLARI (teskari tartibda qo'shamiz)
+                const int PriceColW = 120;
                 for (int fi = foods.Rows.Count - 1; fi >= 0; fi--)
                 {
                     DataRow fr       = foods.Rows[fi];
                     string  foodName = fr["name"].ToString();
                     int     qty      = Convert.ToInt32(fr["quantity"]);
                     decimal fp       = Convert.ToDecimal(fr["price"]);
-                    string  nameTxt  = $"× {qty}  {foodName}";
-                    string  priceTxt = (fp * qty).ToString("N0") + " so'm";
 
-                    Panel foodRow = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = C_White };
-                    foodRow.Paint += (s, e) =>
+                    Panel foodRow = new Panel
                     {
-                        var g = e.Graphics;
-                        g.DrawLine(new Pen(Color.FromArgb(235, 235, 235)), 16, 35, foodRow.Width - 16, 35);
-                        int priceW = 146;
-                        TextRenderer.DrawText(g, nameTxt, fFood,
-                            new Rectangle(16, 0, foodRow.Width - priceW - 8, 36), C_Dark,
-                            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                        TextRenderer.DrawText(g, priceTxt, fFood,
-                            new Rectangle(foodRow.Width - priceW, 0, priceW - 8, 36), C_Muted,
-                            TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+                        Dock = DockStyle.Top, Height = 36, BackColor = C_White,
+                        Padding = new Padding(0, 0, 0, 1)
                     };
+                    foodRow.Paint += (s, e) =>
+                        e.Graphics.DrawLine(new Pen(Color.FromArgb(235, 235, 235)),
+                            16, 35, foodRow.Width - 16, 35);
+
+                    Label lblPrice = new Label
+                    {
+                        Text      = (fp * qty).ToString("N0") + " so'm",
+                        Font      = new Font("Segoe UI", 9),
+                        ForeColor = C_Muted,
+                        Width     = PriceColW, Height = 35,
+                        TextAlign = ContentAlignment.MiddleRight,
+                    };
+                    Label lblName = new Label
+                    {
+                        Text         = $"x{qty}  {foodName}",
+                        Font         = new Font("Segoe UI", 9),
+                        ForeColor    = C_Dark,
+                        Height       = 35,
+                        TextAlign    = ContentAlignment.MiddleLeft,
+                        AutoEllipsis = true,
+                    };
+
+                    Action fixLayout = () =>
+                    {
+                        int w = foodRow.Width;
+                        if (w <= 0) return;
+                        lblPrice.Location = new Point(w - PriceColW - 8, 0);
+                        lblName.Location  = new Point(16, 0);
+                        lblName.Width     = w - PriceColW - 28;
+                    };
+                    foodRow.Resize      += (s, e) => fixLayout();
+                    foodRow.HandleCreated += (s, e) => fixLayout();
+                    foodRow.Controls.Add(lblPrice);
+                    foodRow.Controls.Add(lblName);
                     det.Controls.Add(foodRow);
                 }
 
