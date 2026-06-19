@@ -563,6 +563,24 @@ namespace WindowsFormsApp1.services
                     "  SELECT MIN(id) FROM ingredient_purchase " +
                     "  GROUP BY ingredient_id, purchased_at, quantity, price_per_unit " +
                     ")",
+
+                    // order.place_id tuzatish: eski DlOrdersFast markaziy place_id saqlardi
+                    // Agar order.place_id lokal place_in.id da yo'q, lekin place_in.central_id da bor → lokal id ga o'zgartiramiz
+                    @"IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_NAME='place_in' AND COLUMN_NAME='central_id')
+                      UPDATE o SET o.place_id = pi.id
+                      FROM [order] o
+                      JOIN place_in pi ON pi.central_id = o.place_id
+                      WHERE o.paid='NO'
+                        AND NOT EXISTS (SELECT 1 FROM place_in WHERE id = o.place_id)",
+
+                    // place_in.empty ni lokal order holatiga mos qilish (startup da bir martalik tuzatish)
+                    "UPDATE place_in SET empty='NO' " +
+                    "WHERE id IN (SELECT DISTINCT place_id FROM [order] WHERE paid='NO' AND place_id IS NOT NULL) " +
+                    "  AND empty <> 'NO'",
+                    "UPDATE place_in SET empty='YES' " +
+                    "WHERE empty='NO' " +
+                    "  AND id NOT IN (SELECT DISTINCT place_id FROM [order] WHERE paid='NO' AND place_id IS NOT NULL)",
                     };
                     foreach (string sql in fixes)
                     {

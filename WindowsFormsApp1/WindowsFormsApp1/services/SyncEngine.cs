@@ -2568,6 +2568,19 @@ namespace WindowsFormsApp1.services
                         // user_id markaziy va lokal o'rtasida farq qilishi mumkin (central_id orqali aniqlanadi)
                         int localUserId = EnsureLocalUser(local, central, Convert.ToInt32(r["user_id"]));
 
+                        // Central place_id → lokal place_id (ID lar farq qilishi mumkin)
+                        object localPlaceId = DBNull.Value;
+                        if (r["place_id"] != DBNull.Value)
+                        {
+                            int cpid = Convert.ToInt32(r["place_id"]);
+                            // 1) Lokal da xuddi shu id bor (DlPlaceIns IDENTITY_INSERT orqali tushgan)
+                            int? lpid = ScalarOrNull(local, "SELECT id FROM place_in WHERE id=@id", "@id", cpid);
+                            // 2) central_id bo'yicha topamiz (WinForms o'zi yaratgan joy)
+                            if (!lpid.HasValue)
+                                lpid = ScalarOrNull(local, "SELECT id FROM place_in WHERE central_id=@cid", "@cid", cpid);
+                            localPlaceId = lpid.HasValue ? (object)lpid.Value : (object)DBNull.Value;
+                        }
+
                         Exec(local,
                             "SET IDENTITY_INSERT [order] ON;" +
                             "INSERT INTO [order](id,user_id,place_id,payment_id,created_at,paid,total," +
@@ -2577,7 +2590,7 @@ namespace WindowsFormsApp1.services
                             " VALUES(@id,@uid,@plid,@pay,@cat,@paid,@tot,@disc,@discp,@cust,@custn," +
                             "  @dph,@dadr,@isdel,@note,@svf,@svt,@p2,@p2a,@isco,@tok,1,@id);" +
                             "SET IDENTITY_INSERT [order] OFF",
-                            P("@id",cid),P("@uid",localUserId),P("@plid",r["place_id"]),
+                            P("@id",cid),P("@uid",localUserId),P("@plid",localPlaceId),
                             P("@pay",r["payment_id"]),P("@cat",r["created_at"]),
                             P("@paid",r["paid"]),P("@tot",r["total"]),
                             P("@disc",r["discount_amount"]),P("@discp",r["discount_pct"]),
@@ -2588,13 +2601,18 @@ namespace WindowsFormsApp1.services
                             P("@p2",r["payment2_id"]),P("@p2a",r["payment2_amount"]),
                             P("@isco",r["is_customer_order"]),P("@tok",r["sync_token"]));
 
+                        // Stol bo'sh deb belgilangan bo'lsa ham, faol order tushsa empty='NO' qilamiz
+                        if (localPlaceId != DBNull.Value && r["paid"].ToString() == "NO")
+                            try { Exec(local, "UPDATE place_in SET empty='NO' WHERE id=@pid AND empty<>'NO'",
+                                P("@pid", localPlaceId)); } catch { }
+
                         string placeName = null;
-                        try { placeName = ScalarOrNullString(local, "SELECT room_name FROM place_in WHERE id=@id", "@id", r["place_id"]); }
-                        catch { /* nom topilmasa bildirishnoma generik bo'ladi */ }
+                        try { placeName = ScalarOrNullString(local, "SELECT room_name FROM place_in WHERE id=@id", "@id", localPlaceId); }
+                        catch { }
 
                         string waiterName = null;
                         try { waiterName = ScalarOrNullString(local, "SELECT name FROM [user] WHERE id=@id", "@id", localUserId); }
-                        catch { /* topilmasa bildirishnomada ofitsiant ko'rsatilmaydi */ }
+                        catch { }
 
                         NewOrderCreated?.Invoke(new NewOrderInfo
                         {
@@ -2610,6 +2628,22 @@ namespace WindowsFormsApp1.services
                 }
                 count++;
             }
+
+            // place_in.empty ni lokal order ma'lumotlariga mos qilish
+            // (gap: placed_id noto'g'ri mapping tufayli place_in.empty='YES' qolishi mumkin)
+            try
+            {
+                Exec(local,
+                    "UPDATE place_in SET empty='NO' " +
+                    "WHERE id IN (SELECT DISTINCT place_id FROM [order] WHERE paid='NO' AND place_id IS NOT NULL) " +
+                    "  AND empty <> 'NO'");
+                Exec(local,
+                    "UPDATE place_in SET empty='YES' " +
+                    "WHERE empty='NO' " +
+                    "  AND id NOT IN (SELECT DISTINCT place_id FROM [order] WHERE paid='NO' AND place_id IS NOT NULL)");
+            }
+            catch { }
+
             return count;
         }
 
