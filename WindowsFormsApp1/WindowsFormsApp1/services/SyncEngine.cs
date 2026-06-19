@@ -113,6 +113,7 @@ namespace WindowsFormsApp1.services
                 TryUl(() => SyncIngredientPurchases(local, central),  result);
                 TryUl(() => SyncFoodPurchases(local, central),        result);
                 TryUl(() => SyncCustomers(local, central),            result);
+                TryUl(() => RepairCentralOrderPlaceIds(local, central), result);
                 TryUl(() => SyncOrders(local, central),               result);
                 TryUl(() => SyncOrderFoods(local, central),           result);
                 TryUl(() => SyncOrderPayments(local, central),        result);
@@ -757,6 +758,97 @@ namespace WindowsFormsApp1.services
             return count;
         }
 
+        // ── place_id helper: central_id → nom lookup → fallback ─────────────
+        private static object ResolveCentralPlaceId(SqlConnection central, DataRow r)
+        {
+            // 1. place_in.central_id to'g'ridan topilgan
+            if (r.Table.Columns.Contains("pi_central_id") && r["pi_central_id"] != DBNull.Value)
+                return r["pi_central_id"];
+
+            // 2. Xona nomi + zona nomi bo'yicha markaziy place_in.id topamiz
+            string room = r.Table.Columns.Contains("place_room") ? r["place_room"] as string : null;
+            string zone = r.Table.Columns.Contains("place_zone") ? r["place_zone"] as string : null;
+            if (!string.IsNullOrEmpty(room) && !string.IsNullOrEmpty(zone))
+            {
+                try
+                {
+                    using (var cmd = new System.Data.SqlClient.SqlCommand(
+                        "SELECT TOP 1 pi.id FROM place_in pi " +
+                        "JOIN place_out po ON po.id=pi.place_out_id " +
+                        "WHERE pi.room_name=@rn AND po.name=@pn " +
+                        "AND pi.tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                    {
+                        cmd.Parameters.AddWithValue("@rn", room);
+                        cmd.Parameters.AddWithValue("@pn", zone);
+                        var val = cmd.ExecuteScalar();
+                        if (val != null && val != DBNull.Value)
+                            return Convert.ToInt32(val);
+                    }
+                }
+                catch { }
+            }
+
+            // 3. Fallback: lokal place_id (IDENTITY_INSERT holatda markaziy bilan mos)
+            return r.Table.Columns.Contains("place_id") ? r["place_id"] : (object)DBNull.Value;
+        }
+
+        // ── Markaziy DBdagi noto'g'ri place_id larni tuzatish (bir martalik repair) ──
+        private static int RepairCentralOrderPlaceIds(SqlConnection local, SqlConnection central)
+        {
+            int count = 0;
+            // Sinxronlangan va lokal place_in ga ega bo'lgan barcha ochiq orderlar
+            DataTable rows = ReadAll(local,
+                "SELECT o.central_id, pi.room_name, po.name AS zone_name " +
+                "FROM [order] o " +
+                "JOIN place_in pi ON pi.id = o.place_id " +
+                "JOIN place_out po ON po.id = pi.place_out_id " +
+                "WHERE o.central_id IS NOT NULL AND o.place_id IS NOT NULL AND o.paid='NO'");
+
+            foreach (DataRow r in rows.Rows)
+            {
+                int cenOrdId = Convert.ToInt32(r["central_id"]);
+                string room  = r["room_name"].ToString();
+                string zone  = r["zone_name"].ToString();
+
+                // Markaziy place_in.id ni nom+zona bo'yicha topamiz
+                int? correctCentralPlaceId = null;
+                try
+                {
+                    using (var cmd = new System.Data.SqlClient.SqlCommand(
+                        "SELECT TOP 1 pi.id FROM place_in pi " +
+                        "JOIN place_out po ON po.id=pi.place_out_id " +
+                        "WHERE pi.room_name=@rn AND po.name=@pn " +
+                        "AND pi.tenant_id=CAST(SESSION_CONTEXT(N'tenant_id') AS INT)", central))
+                    {
+                        cmd.Parameters.AddWithValue("@rn", room);
+                        cmd.Parameters.AddWithValue("@pn", zone);
+                        var val = cmd.ExecuteScalar();
+                        if (val != null && val != DBNull.Value)
+                            correctCentralPlaceId = Convert.ToInt32(val);
+                    }
+                }
+                catch { continue; }
+
+                if (!correctCentralPlaceId.HasValue) continue;
+
+                // Markaziy orderdagi mavjud place_id ni tekshiramiz
+                int? curPlaceId = ScalarOrNull(central,
+                    "SELECT place_id FROM [order] WHERE id=@id", "@id", cenOrdId);
+                if (curPlaceId.HasValue && curPlaceId.Value == correctCentralPlaceId.Value)
+                    continue; // Allaqachon to'g'ri
+
+                // Noto'g'ri place_id ni tuzatamiz
+                try
+                {
+                    Exec(central, "UPDATE [order] SET place_id=@pid WHERE id=@id",
+                        P("@pid", correctCentralPlaceId.Value), P("@id", cenOrdId));
+                    count++;
+                }
+                catch { }
+            }
+            return count;
+        }
+
         // ── 2. Buyurtmalar ───────────────────────────────────────────────────
         private static int SyncOrders(SqlConnection local, SqlConnection central)
         {
@@ -767,13 +859,16 @@ namespace WindowsFormsApp1.services
                 "  u.central_id  AS u_central_id, " +
                 "  p.central_id  AS p_central_id, " +
                 "  p2.central_id AS p2_central_id, " +
-                "  pi.central_id AS pi_central_id " +
+                "  pi.central_id AS pi_central_id, " +
+                "  pi.room_name  AS place_room, " +
+                "  po.name       AS place_zone " +
                 "FROM [order] o " +
                 "LEFT JOIN customer  c  ON c.id  = o.customer_id " +
                 "LEFT JOIN [user]    u  ON u.id  = o.user_id " +
                 "LEFT JOIN payment   p  ON p.id  = o.payment_id " +
                 "LEFT JOIN payment   p2 ON p2.id = o.payment2_id " +
                 "LEFT JOIN place_in  pi ON pi.id = o.place_id " +
+                "LEFT JOIN place_out po ON po.id = pi.place_out_id " +
                 "WHERE o.is_synced = 0");
 
             foreach (DataRow r in rows.Rows)
@@ -783,6 +878,9 @@ namespace WindowsFormsApp1.services
                 int? centralId = ScalarOrNull(central,
                     "SELECT id FROM [order] WHERE sync_token = @t", "@t", tok);
 
+                // place_id: central_id → name lookup → fallback
+                object centralPlaceId = ResolveCentralPlaceId(central, r);
+
                 if (centralId == null)
                 {
                     // Central ID lardan foydalanamiz (local ID o'rniga)
@@ -790,7 +888,6 @@ namespace WindowsFormsApp1.services
                     object centralUserId = r["u_central_id"]  == DBNull.Value ? r["user_id"]  : r["u_central_id"];
                     object centralPayId  = r["p_central_id"]  == DBNull.Value ? r["payment_id"] : r["p_central_id"];
                     object centralPay2Id = r["p2_central_id"] == DBNull.Value ? r["payment2_id"] : r["p2_central_id"];
-                    object centralPlaceId= r["pi_central_id"] == DBNull.Value ? r["place_id"]  : r["pi_central_id"];
 
                     object inserted = Exec(central,
                         "INSERT INTO [order] " +
@@ -818,14 +915,14 @@ namespace WindowsFormsApp1.services
                     object centralCustId2 = r["c_central_id"]  == DBNull.Value ? DBNull.Value : r["c_central_id"];
                     object centralPayId2  = r["p_central_id"]  == DBNull.Value ? r["payment_id"]  : r["p_central_id"];
                     object centralPay2Id2 = r["p2_central_id"] == DBNull.Value ? r["payment2_id"] : r["p2_central_id"];
-                    // FIX: Mavjud buyurtmani yangilash — delivery fieldlari ham qo'shildi
                     Exec(central,
                         "UPDATE [order] SET " +
                         "  paid=@paid, total=@tot, discount_amount=@disc, discount_pct=@discp, " +
                         "  payment_id=@pay, custom_svc_fee=@svf, custom_svc_type=@svt, " +
                         "  order_note=@note, payment2_id=@p2, payment2_amount=@p2a," +
                         "  customer_id=@cust, customer_name=@custn," +
-                        "  delivery_phone=@dph, delivery_address=@dadr, is_delivery=@isdel " +
+                        "  delivery_phone=@dph, delivery_address=@dadr, is_delivery=@isdel," +
+                        "  place_id=@pid " +
                         "WHERE id=@cid",
                         P("@paid",  r["paid"]),              P("@tot",   r["total"]),
                         P("@disc",  r["discount_amount"]),   P("@discp", r["discount_pct"]),
@@ -834,7 +931,7 @@ namespace WindowsFormsApp1.services
                         P("@p2",    centralPay2Id2),          P("@p2a",   r["payment2_amount"]),
                         P("@cust",  centralCustId2),          P("@custn", r["customer_name"]),
                         P("@dph",   r["delivery_phone"]),    P("@dadr",  r["delivery_address"]),
-                        P("@isdel", r["is_delivery"]),
+                        P("@isdel", r["is_delivery"]),        P("@pid",   centralPlaceId),
                         P("@cid",   centralId.Value));
                 }
 
@@ -1902,7 +1999,8 @@ namespace WindowsFormsApp1.services
                     "  discount_pct=@discp,payment_id=@pay,custom_svc_fee=@svf," +
                     "  custom_svc_type=@svt,order_note=@note,payment2_id=@p2,payment2_amount=@p2a," +
                     "  customer_id=@cust,customer_name=@custn," +
-                    "  delivery_phone=@dph,delivery_address=@dadr,is_delivery=@isdel " +
+                    "  delivery_phone=@dph,delivery_address=@dadr,is_delivery=@isdel," +
+                    "  place_id=@pid " +
                     "WHERE id=@cid",
                     P("@paid",r["paid"]),P("@tot",r["total"]),P("@disc",r["discount_amount"]),
                     P("@discp",r["discount_pct"]),P("@pay",centralPayId),
@@ -1911,7 +2009,7 @@ namespace WindowsFormsApp1.services
                     P("@p2a",r["payment2_amount"]),
                     P("@cust",centralCustId),P("@custn",r["customer_name"]),
                     P("@dph",r["delivery_phone"]),P("@dadr",r["delivery_address"]),
-                    P("@isdel",r["is_delivery"]),
+                    P("@isdel",r["is_delivery"]),P("@pid",centralPlaceId),
                     P("@cid",centralId.Value));
             }
 
