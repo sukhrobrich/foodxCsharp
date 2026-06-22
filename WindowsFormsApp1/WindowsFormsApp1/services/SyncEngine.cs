@@ -629,17 +629,24 @@ namespace WindowsFormsApp1.services
         private static int SyncRefRecipeIngredients(SqlConnection local, SqlConnection central)
         {
             int count = 0;
+            // Lokal food_id/ingredient_id → central_id orqali central IDs ga konvert
             foreach (DataRow r in ReadAll(local,
-                "SELECT id,food_id,ingredient_id,quantity_per_portion FROM recipe_ingredient").Rows)
+                "SELECT ri.quantity_per_portion," +
+                " f.central_id AS food_cid, i.central_id AS ing_cid " +
+                "FROM recipe_ingredient ri " +
+                "JOIN food f ON f.id=ri.food_id " +
+                "JOIN ingredient i ON i.id=ri.ingredient_id").Rows)
             {
+                // food yoki ingredient hali central ga sync bo'lmagan → keyingi siklda
+                if (r["food_cid"] == DBNull.Value || r["ing_cid"] == DBNull.Value) continue;
+                int cfid = Convert.ToInt32(r["food_cid"]);
+                int ciid = Convert.ToInt32(r["ing_cid"]);
+                // (food_id, ingredient_id) mantiqiy kalit — IDENTITY_INSERT yo'q, PK conflict yo'q
                 Exec(central,
-                    "IF EXISTS(SELECT 1 FROM recipe_ingredient WHERE id=@id)" +
-                    " UPDATE recipe_ingredient SET food_id=@fid,ingredient_id=@iid,quantity_per_portion=@qpp WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT recipe_ingredient ON;" +
-                    " INSERT INTO recipe_ingredient(id,food_id,ingredient_id,quantity_per_portion) VALUES(@id,@fid,@iid,@qpp);" +
-                    " SET IDENTITY_INSERT recipe_ingredient OFF END",
-                    P("@id",r["id"]),P("@fid",r["food_id"]),
-                    P("@iid",r["ingredient_id"]),P("@qpp",r["quantity_per_portion"]));
+                    "IF EXISTS(SELECT 1 FROM recipe_ingredient WHERE food_id=@fid AND ingredient_id=@iid)" +
+                    " UPDATE recipe_ingredient SET quantity_per_portion=@qpp WHERE food_id=@fid AND ingredient_id=@iid" +
+                    " ELSE INSERT INTO recipe_ingredient(food_id,ingredient_id,quantity_per_portion) VALUES(@fid,@iid,@qpp)",
+                    P("@fid",cfid), P("@iid",ciid), P("@qpp",r["quantity_per_portion"]));
                 count++;
             }
             return count;
@@ -1245,22 +1252,17 @@ namespace WindowsFormsApp1.services
             {
                 try
                 {
-                    // BUG FIX: avval central_id ga mos lokal yozuvni qidirish (duplikat oldini olish)
                     Exec(local,
                         "IF EXISTS (SELECT 1 FROM user_category WHERE central_id=@id) " +
                         "  UPDATE user_category SET name=@n,role_type=@rt,color=@c WHERE central_id=@id " +
-                        "ELSE IF EXISTS (SELECT 1 FROM user_category WHERE id=@id) " +
+                        "ELSE IF EXISTS (SELECT 1 FROM user_category WHERE id=@id AND central_id IS NULL) " +
                         "  UPDATE user_category SET name=@n,role_type=@rt,color=@c,central_id=@id WHERE id=@id " +
-                        "ELSE BEGIN " +
-                        "  SET IDENTITY_INSERT user_category ON; " +
-                        "  INSERT INTO user_category(id,name,role_type,color,central_id) VALUES(@id,@n,@rt,@c,@id); " +
-                        "  SET IDENTITY_INSERT user_category OFF " +
-                        "END",
+                        "ELSE INSERT INTO user_category(name,role_type,color,central_id) VALUES(@n,@rt,@c,@id)",
                         P("@id", r["id"]), P("@n", r["name"]),
                         P("@rt", r["role_type"]), P("@c", r["color"]));
                     count++;
                 }
-                catch { /* Bitta qator xato bersa ham qolganlari davom etsin */ }
+                catch { }
             }
             return count;
         }
@@ -1274,7 +1276,12 @@ namespace WindowsFormsApp1.services
             {
                 try
                 {
-                    // BUG FIX: login bo'yicha avval lokal yozuvni topish (duplikat oldini olish)
+                    // central user_category_id → lokal id konvert (FK xatolik oldini olish)
+                    int centralUcId = r["user_category_id"] == DBNull.Value ? 1 : Convert.ToInt32(r["user_category_id"]);
+                    int? localUcId = ScalarOrNull(local, "SELECT id FROM user_category WHERE central_id=@id", "@id", centralUcId)
+                                  ?? ScalarOrNull(local, "SELECT id FROM user_category WHERE id=@id", "@id", centralUcId);
+                    int ucId = localUcId ?? centralUcId;
+
                     Exec(local,
                         "IF EXISTS (SELECT 1 FROM [user] WHERE central_id=@id) " +
                         "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
@@ -1282,22 +1289,16 @@ namespace WindowsFormsApp1.services
                         "ELSE IF EXISTS (SELECT 1 FROM [user] WHERE login=@l) " +
                         "  UPDATE [user] SET name=@n,user_category_id=@uc,password=@pw,app_password=@ap," +
                         "    phone_number=@ph,updated_at=@ua,sort_order=@so,central_id=@id WHERE login=@l " +
-                        "ELSE IF EXISTS (SELECT 1 FROM [user] WHERE id=@id) " +
-                        "  UPDATE [user] SET name=@n,user_category_id=@uc,login=@l,password=@pw,app_password=@ap," +
-                        "    phone_number=@ph,updated_at=@ua,sort_order=@so,central_id=@id WHERE id=@id " +
-                        "ELSE BEGIN " +
-                        "  SET IDENTITY_INSERT [user] ON; " +
-                        "  INSERT INTO [user](id,name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order,central_id) " +
-                        "  VALUES(@id,@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so,@id); " +
-                        "  SET IDENTITY_INSERT [user] OFF " +
-                        "END",
-                        P("@id", r["id"]), P("@n", r["name"]), P("@uc", r["user_category_id"]),
+                        "ELSE " +
+                        "  INSERT INTO [user](name,user_category_id,login,password,app_password,phone_number,created_at,updated_at,sort_order,central_id) " +
+                        "  VALUES(@n,@uc,@l,@pw,@ap,@ph,@ca,@ua,@so,@id)",
+                        P("@id", r["id"]), P("@n", r["name"]), P("@uc", ucId),
                         P("@l", r["login"]), P("@pw", r["password"]), P("@ap", r["app_password"]),
                         P("@ph", r["phone_number"]), P("@ca", r["created_at"]),
                         P("@ua", r["updated_at"]), P("@so", r["sort_order"]));
                     count++;
                 }
-                catch { /* Bitta xodim xato bersa ham qolganlari (masalan yangi ofitsiant) davom etsin */ }
+                catch { }
             }
             return count;
         }
@@ -1347,17 +1348,13 @@ namespace WindowsFormsApp1.services
             DataTable rows = ReadAll(central, "SELECT id,name,printer_name,sort_order FROM food_category");
             foreach (DataRow r in rows.Rows)
             {
-                // BUG FIX: central_id ga mos lokal yozuvni topish (duplikat oldini olish)
+                // central_id bo'yicha topish, yo'q bo'lsa nom bo'yicha fallback, IDENTITY_INSERT yo'q
                 Exec(local,
                     "IF EXISTS (SELECT 1 FROM food_category WHERE central_id=@id) " +
                     "  UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so WHERE central_id=@id " +
-                    "ELSE IF EXISTS (SELECT 1 FROM food_category WHERE id=@id) " +
+                    "ELSE IF EXISTS (SELECT 1 FROM food_category WHERE id=@id AND central_id IS NULL) " +
                     "  UPDATE food_category SET name=@n,printer_name=@pn,sort_order=@so,central_id=@id WHERE id=@id " +
-                    "ELSE BEGIN " +
-                    "  SET IDENTITY_INSERT food_category ON; " +
-                    "  INSERT INTO food_category(id,name,printer_name,sort_order,central_id) VALUES(@id,@n,@pn,@so,@id); " +
-                    "  SET IDENTITY_INSERT food_category OFF " +
-                    "END",
+                    "ELSE INSERT INTO food_category(name,printer_name,sort_order,central_id) VALUES(@n,@pn,@so,@id)",
                     P("@id", r["id"]), P("@n", r["name"]),
                     P("@pn", r["printer_name"]), P("@so", r["sort_order"]));
                 count++;
@@ -1479,23 +1476,80 @@ namespace WindowsFormsApp1.services
         private static int DlPlaceOuts(SqlConnection local, SqlConnection central)
         {
             int count = 0;
+            bool hasCentralId = false;
+            try { using (var t = new SqlCommand("SELECT TOP 0 central_id FROM place_out", local)) { t.ExecuteNonQuery(); hasCentralId = true; } } catch { }
+
+            // Kategoriya nomini ham yuklaymiz — lokal place_category_id ni nom bo'yicha topish uchun
             DataTable rows = ReadAll(central,
-                "SELECT id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,ISNULL(price_type,'UZS') AS price_type,sort_order FROM place_out");
+                "SELECT po.id, pc.name AS cat_name, po.name, po.place_count," +
+                " po.created_at, po.updated_at, po.serviceFee, po.price," +
+                " ISNULL(po.price_type,'UZS') AS price_type, po.sort_order" +
+                " FROM place_out po LEFT JOIN place_category pc ON pc.id=po.place_category_id");
             foreach (DataRow r in rows.Rows)
             {
-                Exec(local,
-                    "IF EXISTS (SELECT 1 FROM place_out WHERE id=@id) " +
-                    "  UPDATE place_out SET place_category_id=@pc,name=@n,place_count=@cnt," +
-                    "    updated_at=@ua,serviceFee=@sf,price=@pr,price_type=@pt,sort_order=@so WHERE id=@id " +
-                    "ELSE BEGIN " +
-                    "  SET IDENTITY_INSERT place_out ON; " +
-                    "  INSERT INTO place_out(id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,price_type,sort_order) " +
-                    "  VALUES(@id,@pc,@n,@cnt,@ca,@ua,@sf,@pr,@pt,@so); " +
-                    "  SET IDENTITY_INSERT place_out OFF " +
-                    "END",
-                    P("@id", r["id"]), P("@pc", r["place_category_id"]), P("@n", r["name"]),
-                    P("@cnt", r["place_count"]), P("@ca", r["created_at"]), P("@ua", r["updated_at"]),
-                    P("@sf", r["serviceFee"]), P("@pr", r["price"]), P("@pt", r["price_type"]), P("@so", r["sort_order"]));
+                int cid = Convert.ToInt32(r["id"]);
+                string catName = r["cat_name"] as string;
+
+                // Lokal place_category_id ni nom bo'yicha topamiz
+                int? localCatId = catName != null
+                    ? ScalarOrNull(local, "SELECT TOP 1 id FROM place_category WHERE name=@n", "@n", catName)
+                    : null;
+                if (!localCatId.HasValue)
+                {
+                    DataTable cats = ReadAll(local, "SELECT TOP 1 id FROM place_category");
+                    if (cats.Rows.Count > 0) localCatId = Convert.ToInt32(cats.Rows[0]["id"]);
+                }
+                if (!localCatId.HasValue) continue;
+
+                // Lokal place_out ni topamiz: avval central_id, keyin id
+                int? lid = hasCentralId
+                    ? ScalarOrNull(local, "SELECT id FROM place_out WHERE central_id=@c", "@c", cid)
+                    : null;
+                if (!lid.HasValue)
+                    lid = ScalarOrNull(local, "SELECT id FROM place_out WHERE id=@c", "@c", cid);
+
+                if (lid.HasValue)
+                {
+                    Exec(local,
+                        "UPDATE place_out SET place_category_id=@pc,name=@n,place_count=@cnt," +
+                        "updated_at=@ua,serviceFee=@sf,price=@pr,price_type=@pt,sort_order=@so" +
+                        (hasCentralId ? ",central_id=@cid" : "") + " WHERE id=@lid",
+                        P("@pc", localCatId.Value), P("@n", r["name"]), P("@cnt", r["place_count"]),
+                        P("@ua", r["updated_at"]), P("@sf", r["serviceFee"]),
+                        P("@pr", r["price"]), P("@pt", r["price_type"]), P("@so", r["sort_order"]),
+                        P("@cid", cid), P("@lid", lid.Value));
+                }
+                else
+                {
+                    // Yangi zona: IDENTITY_INSERT bilan id saqlash (DlPlaceIns.place_out_id uchun)
+                    try
+                    {
+                        Exec(local,
+                            "SET IDENTITY_INSERT place_out ON;" +
+                            "INSERT INTO place_out(id,place_category_id,name,place_count,created_at,updated_at,serviceFee,price,price_type,sort_order" +
+                            (hasCentralId ? ",central_id" : "") + ")" +
+                            " VALUES(@id,@pc,@n,@cnt,@ca,@ua,@sf,@pr,@pt,@so" +
+                            (hasCentralId ? ",@cid" : "") + ");" +
+                            "SET IDENTITY_INSERT place_out OFF",
+                            P("@id", cid), P("@pc", localCatId.Value), P("@n", r["name"]),
+                            P("@cnt", r["place_count"]), P("@ca", r["created_at"]), P("@ua", r["updated_at"]),
+                            P("@sf", r["serviceFee"]), P("@pr", r["price"]), P("@pt", r["price_type"]),
+                            P("@so", r["sort_order"]), P("@cid", cid));
+                    }
+                    catch
+                    {
+                        // IDENTITY_INSERT muvaffaqiyatsiz — oddiy INSERT (DlPlaceIns central_id orqali topadi)
+                        Exec(local,
+                            "INSERT INTO place_out(place_category_id,name,place_count,created_at,updated_at,serviceFee,price,price_type,sort_order" +
+                            (hasCentralId ? ",central_id" : "") + ")" +
+                            " VALUES(@pc,@n,@cnt,@ca,@ua,@sf,@pr,@pt,@so" +
+                            (hasCentralId ? ",@cid" : "") + ")",
+                            P("@pc", localCatId.Value), P("@n", r["name"]),
+                            P("@cnt", r["place_count"]), P("@ca", r["created_at"]), P("@ua", r["updated_at"]),
+                            P("@sf", r["serviceFee"]), P("@pr", r["price"]), P("@pt", r["price_type"]),
+                            P("@so", r["sort_order"]), P("@cid", cid));
+                    }
+                }
                 count++;
             }
             return count;
@@ -1504,23 +1558,66 @@ namespace WindowsFormsApp1.services
         private static int DlPlaceIns(SqlConnection local, SqlConnection central)
         {
             int count = 0;
+            bool hasCentralId = false;
+            try { using (var t = new SqlCommand("SELECT TOP 0 central_id FROM place_in", local)) { t.ExecuteNonQuery(); hasCentralId = true; } } catch { }
+
             DataTable rows = ReadAll(central,
                 "SELECT id,place_out_id,room_name,empty,created_at,user_id,price FROM place_in");
             foreach (DataRow r in rows.Rows)
             {
-                // UPDATE da user_id va empty yangilanmaydi — lokal WinForms boshqaradi
-                Exec(local,
-                    "IF EXISTS (SELECT 1 FROM place_in WHERE id=@id) " +
-                    "  UPDATE place_in SET place_out_id=@po,room_name=@rn,price=@pr WHERE id=@id " +
-                    "ELSE BEGIN " +
-                    "  SET IDENTITY_INSERT place_in ON; " +
-                    "  INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,user_id,price) " +
-                    "  VALUES(@id,@po,@rn,@e,@ca,@uid,@pr); " +
-                    "  SET IDENTITY_INSERT place_in OFF " +
-                    "END",
-                    P("@id", r["id"]), P("@po", r["place_out_id"]), P("@rn", r["room_name"]),
-                    P("@e", r["empty"]), P("@ca", r["created_at"]),
-                    P("@uid", r["user_id"]), P("@pr", r["price"]));
+                int cid = Convert.ToInt32(r["id"]);
+                int centralPoId = Convert.ToInt32(r["place_out_id"]);
+
+                // central place_out_id → lokal place_out.id konvert (FK xatolik oldini olish)
+                int? localPoId = ScalarOrNull(local, "SELECT id FROM place_out WHERE central_id=@c", "@c", centralPoId)
+                              ?? ScalarOrNull(local, "SELECT id FROM place_out WHERE id=@c", "@c", centralPoId);
+                if (!localPoId.HasValue) continue; // zona hali yuklanmagan
+
+                // Lokal place_in ni topamiz: avval central_id, keyin id
+                int? lid = hasCentralId
+                    ? ScalarOrNull(local, "SELECT id FROM place_in WHERE central_id=@c", "@c", cid)
+                    : null;
+                if (!lid.HasValue)
+                    lid = ScalarOrNull(local, "SELECT id FROM place_in WHERE id=@c", "@c", cid);
+
+                if (lid.HasValue)
+                {
+                    // UPDATE da user_id va empty yangilanmaydi — lokal WinForms boshqaradi
+                    Exec(local,
+                        "UPDATE place_in SET place_out_id=@po,room_name=@rn,price=@pr" +
+                        (hasCentralId ? ",central_id=@cid" : "") + " WHERE id=@lid",
+                        P("@po", localPoId.Value), P("@rn", r["room_name"]),
+                        P("@pr", r["price"]), P("@cid", cid), P("@lid", lid.Value));
+                }
+                else
+                {
+                    // Yangi stol: IDENTITY_INSERT bilan id saqlash (DlOrders place_id uchun)
+                    try
+                    {
+                        Exec(local,
+                            "SET IDENTITY_INSERT place_in ON;" +
+                            "INSERT INTO place_in(id,place_out_id,room_name,empty,created_at,user_id,price" +
+                            (hasCentralId ? ",central_id" : "") + ")" +
+                            " VALUES(@id,@po,@rn,@e,@ca,@uid,@pr" +
+                            (hasCentralId ? ",@cid" : "") + ");" +
+                            "SET IDENTITY_INSERT place_in OFF",
+                            P("@id", cid), P("@po", localPoId.Value), P("@rn", r["room_name"]),
+                            P("@e", r["empty"]), P("@ca", r["created_at"]),
+                            P("@uid", r["user_id"]), P("@pr", r["price"]), P("@cid", cid));
+                    }
+                    catch
+                    {
+                        // IDENTITY_INSERT muvaffaqiyatsiz — oddiy INSERT
+                        Exec(local,
+                            "INSERT INTO place_in(place_out_id,room_name,empty,created_at,user_id,price" +
+                            (hasCentralId ? ",central_id" : "") + ")" +
+                            " VALUES(@po,@rn,@e,@ca,@uid,@pr" +
+                            (hasCentralId ? ",@cid" : "") + ")",
+                            P("@po", localPoId.Value), P("@rn", r["room_name"]),
+                            P("@e", r["empty"]), P("@ca", r["created_at"]),
+                            P("@uid", r["user_id"]), P("@pr", r["price"]), P("@cid", cid));
+                    }
+                }
                 count++;
             }
             return count;
@@ -1541,10 +1638,18 @@ namespace WindowsFormsApp1.services
                 ids.Append(r["id"]);
             }
 
-            // Aktiv (to'lanmagan) buyurtmasi yo'q va markaziy DBda yo'q place_in larni o'chir
-            Exec(local,
-                $"DELETE FROM place_in WHERE id NOT IN ({ids}) " +
-                $"AND id NOT IN (SELECT DISTINCT place_id FROM [order] WHERE paid='NO' AND place_id IS NOT NULL)");
+            // central_id bor bo'lsa — central_id bo'yicha o'chirish (id bo'yicha emas, lokal id farq qilishi mumkin)
+            bool hasCid = false;
+            try { using (var t = new SqlCommand("SELECT TOP 0 central_id FROM place_in", local)) { t.ExecuteNonQuery(); hasCid = true; } } catch { }
+
+            if (hasCid)
+                Exec(local,
+                    $"DELETE FROM place_in WHERE central_id IS NOT NULL AND central_id NOT IN ({ids}) " +
+                    $"AND id NOT IN (SELECT DISTINCT place_id FROM [order] WHERE paid='NO' AND place_id IS NOT NULL)");
+            else
+                Exec(local,
+                    $"DELETE FROM place_in WHERE id NOT IN ({ids}) " +
+                    $"AND id NOT IN (SELECT DISTINCT place_id FROM [order] WHERE paid='NO' AND place_id IS NOT NULL)");
 
             return count;
         }
@@ -1564,10 +1669,18 @@ namespace WindowsFormsApp1.services
                 ids.Append(r["id"]);
             }
 
-            // Ichida joy (place_in) qolmagan va markaziy DBda yo'q place_out larni o'chir
-            Exec(local,
-                $"DELETE FROM place_out WHERE id NOT IN ({ids}) " +
-                $"AND id NOT IN (SELECT DISTINCT place_out_id FROM place_in WHERE place_out_id IS NOT NULL)");
+            // central_id bor bo'lsa — central_id bo'yicha o'chirish
+            bool hasOutCid = false;
+            try { using (var t = new SqlCommand("SELECT TOP 0 central_id FROM place_out", local)) { t.ExecuteNonQuery(); hasOutCid = true; } } catch { }
+
+            if (hasOutCid)
+                Exec(local,
+                    $"DELETE FROM place_out WHERE central_id IS NOT NULL AND central_id NOT IN ({ids}) " +
+                    $"AND id NOT IN (SELECT DISTINCT place_out_id FROM place_in WHERE place_out_id IS NOT NULL)");
+            else
+                Exec(local,
+                    $"DELETE FROM place_out WHERE id NOT IN ({ids}) " +
+                    $"AND id NOT IN (SELECT DISTINCT place_out_id FROM place_in WHERE place_out_id IS NOT NULL)");
 
             return count;
         }
@@ -1578,15 +1691,34 @@ namespace WindowsFormsApp1.services
             DataTable rows = ReadAll(central, "SELECT id,name,sort_order FROM payment");
             foreach (DataRow r in rows.Rows)
             {
-                Exec(local,
-                    "IF EXISTS (SELECT 1 FROM payment WHERE id=@id) " +
-                    "  UPDATE payment SET name=@n,sort_order=@so WHERE id=@id " +
-                    "ELSE BEGIN " +
-                    "  SET IDENTITY_INSERT payment ON; " +
-                    "  INSERT INTO payment(id,name,sort_order) VALUES(@id,@n,@so); " +
-                    "  SET IDENTITY_INSERT payment OFF " +
-                    "END",
-                    P("@id", r["id"]), P("@n", r["name"]), P("@so", r["sort_order"]));
+                // central_id bo'yicha topish, keyin nom, keyin IDENTITY_INSERT (DlOrders payment_id uchun)
+                int? lid = ScalarOrNull(local, "SELECT id FROM payment WHERE central_id=@id", "@id", r["id"]);
+                if (!lid.HasValue)
+                    lid = ScalarOrNull(local, "SELECT id FROM payment WHERE id=@id", "@id", r["id"]);
+
+                if (lid.HasValue)
+                {
+                    Exec(local,
+                        "UPDATE payment SET name=@n,sort_order=@so,central_id=@id WHERE id=@lid",
+                        P("@id", r["id"]), P("@n", r["name"]), P("@so", r["sort_order"]), P("@lid", lid.Value));
+                }
+                else
+                {
+                    try
+                    {
+                        Exec(local,
+                            "SET IDENTITY_INSERT payment ON;" +
+                            "INSERT INTO payment(id,name,sort_order,central_id) VALUES(@id,@n,@so,@id);" +
+                            "SET IDENTITY_INSERT payment OFF",
+                            P("@id", r["id"]), P("@n", r["name"]), P("@so", r["sort_order"]));
+                    }
+                    catch
+                    {
+                        Exec(local,
+                            "INSERT INTO payment(name,sort_order,central_id) VALUES(@n,@so,@id)",
+                            P("@id", r["id"]), P("@n", r["name"]), P("@so", r["sort_order"]));
+                    }
+                }
                 count++;
             }
             return count;
@@ -1684,14 +1816,24 @@ namespace WindowsFormsApp1.services
                 "SELECT id,food_id,ingredient_id,quantity_per_portion FROM recipe_ingredient");
             foreach (DataRow r in rows.Rows)
             {
+                int centralFoodId = Convert.ToInt32(r["food_id"]);
+                int centralIngId  = Convert.ToInt32(r["ingredient_id"]);
+
+                // central food_id → lokal food_id (FK xatolik oldini olish)
+                int? localFoodId = ScalarOrNull(local, "SELECT id FROM food WHERE central_id=@c", "@c", centralFoodId)
+                                ?? ScalarOrNull(local, "SELECT id FROM food WHERE id=@c", "@c", centralFoodId);
+                // central ingredient_id → lokal ingredient_id
+                int? localIngId  = ScalarOrNull(local, "SELECT id FROM ingredient WHERE central_id=@c", "@c", centralIngId)
+                                ?? ScalarOrNull(local, "SELECT id FROM ingredient WHERE id=@c", "@c", centralIngId);
+
+                if (localFoodId == null || localIngId == null) continue; // hali yuklanmagan
+
+                // (food_id, ingredient_id) mantiqiy kalit — IDENTITY_INSERT yo'q, PK conflict yo'q
                 Exec(local,
-                    "IF EXISTS(SELECT 1 FROM recipe_ingredient WHERE id=@id)" +
-                    " UPDATE recipe_ingredient SET food_id=@fid,ingredient_id=@iid,quantity_per_portion=@qpp WHERE id=@id" +
-                    " ELSE BEGIN SET IDENTITY_INSERT recipe_ingredient ON;" +
-                    " INSERT INTO recipe_ingredient(id,food_id,ingredient_id,quantity_per_portion) VALUES(@id,@fid,@iid,@qpp);" +
-                    " SET IDENTITY_INSERT recipe_ingredient OFF END",
-                    P("@id",r["id"]),P("@fid",r["food_id"]),
-                    P("@iid",r["ingredient_id"]),P("@qpp",r["quantity_per_portion"]));
+                    "IF EXISTS(SELECT 1 FROM recipe_ingredient WHERE food_id=@fid AND ingredient_id=@iid)" +
+                    " UPDATE recipe_ingredient SET quantity_per_portion=@qpp WHERE food_id=@fid AND ingredient_id=@iid" +
+                    " ELSE INSERT INTO recipe_ingredient(food_id,ingredient_id,quantity_per_portion) VALUES(@fid,@iid,@qpp)",
+                    P("@fid", localFoodId.Value), P("@iid", localIngId.Value), P("@qpp", r["quantity_per_portion"]));
                 count++;
             }
             return count;
