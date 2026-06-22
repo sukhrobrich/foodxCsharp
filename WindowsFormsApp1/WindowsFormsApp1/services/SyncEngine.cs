@@ -1397,9 +1397,14 @@ namespace WindowsFormsApp1.services
                 "photo,created_at,updated_at,unit,description,is_unlimited,sort_order FROM food");
             foreach (DataRow r in rows.Rows)
             {
-                // BUG FIX: central_id ga mos lokal yozuvni topish (duplikat oldini olish)
-                // Avval central_id=@id tekshiriladi (eski lokal yozuv), keyin id=@id
-                // Faqat ikkisi ham yo'q bo'lsagina IDENTITY_INSERT qilinadi va central_id o'rnatiladi
+                // central food_category_id → lokal id ga konvert (FK xatolik oldini olish)
+                // Lokal food_category.id != central food_category.id bo'lishi mumkin
+                int centralFcId = r["food_category_id"] == DBNull.Value ? 0 : Convert.ToInt32(r["food_category_id"]);
+                int localFcId = centralFcId == 0 ? 0 :
+                    (ScalarOrNull(local, "SELECT id FROM food_category WHERE central_id=@id", "@id", centralFcId) ??
+                     ScalarOrNull(local, "SELECT id FROM food_category WHERE id=@id", "@id", centralFcId) ??
+                     centralFcId);
+
                 Exec(local,
                     "IF EXISTS (SELECT 1 FROM food WHERE central_id=@id) " +
                     "  UPDATE food SET food_category_id=@fc,name=@n,count=@cnt,original_price=@op," +
@@ -1416,7 +1421,7 @@ namespace WindowsFormsApp1.services
                     "  VALUES(@id,@fc,@n,@cnt,@op,@sp,@ph,@ca,@ua,@u,@d,@iu,@so,@id); " +
                     "  SET IDENTITY_INSERT food OFF " +
                     "END",
-                    P("@id", r["id"]), P("@fc", r["food_category_id"]), P("@n", r["name"]),
+                    P("@id", r["id"]), P("@fc", localFcId), P("@n", r["name"]),
                     P("@cnt", r["count"]), P("@op", r["original_price"]), P("@sp", r["selling_price"]),
                     P("@ph", r["photo"]), P("@ca", r["created_at"]), P("@ua", r["updated_at"]),
                     P("@u", r["unit"]), P("@d", r["description"]),
