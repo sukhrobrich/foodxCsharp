@@ -109,9 +109,11 @@ namespace WindowsFormsApp1.forms.main
             logoutPanel.Controls.Add(btnLogout);
             sidebar.Controls.Add(logoutPanel);
 
-            // Menu scroll panel (Fill) — add before Top controls
-            menuScrollPanel = new Panel { Dock = DockStyle.Fill, BackColor = BgCard, AutoScroll = true };
-            sidebar.Controls.Add(menuScrollPanel);
+            // Menu scroll panel (Fill) — outer panel scrolls, inner panel holds items
+            Panel menuOuter = new Panel { Dock = DockStyle.Fill, BackColor = BgCard, AutoScroll = true };
+            menuScrollPanel = new Panel { Left = 0, Top = 0, Width = 224, BackColor = BgCard };
+            menuOuter.Controls.Add(menuScrollPanel);
+            sidebar.Controls.Add(menuOuter);
 
             // User info box (Top) — add before logo so logo goes above it
             Panel userBox = new Panel { Height = 60, Dock = DockStyle.Top, BackColor = BgCard };
@@ -262,7 +264,7 @@ namespace WindowsFormsApp1.forms.main
                 AddMenuItem("Sozlamalar",    "⚙", ref y);
             }
 
-            menuScrollPanel.AutoScrollMinSize = new Size(0, y + 16);
+            menuScrollPanel.Height = y + 16;
         }
 
         private void AddSectionLabel(string title, ref int y)
