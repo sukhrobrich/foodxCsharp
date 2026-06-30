@@ -109,11 +109,14 @@ namespace WindowsFormsApp1.forms.main
             logoutPanel.Controls.Add(btnLogout);
             sidebar.Controls.Add(logoutPanel);
 
-            // Menu scroll panel (Fill) — outer panel scrolls, inner panel holds items
-            Panel menuOuter = new Panel { Dock = DockStyle.Fill, BackColor = BgCard, AutoScroll = true };
-            menuScrollPanel = new Panel { Left = 0, Top = 0, Width = 224, BackColor = BgCard };
-            menuOuter.Controls.Add(menuScrollPanel);
-            sidebar.Controls.Add(menuOuter);
+            // Menu area: clip panel + explicit VScrollBar
+            Panel menuClip = new Panel { Dock = DockStyle.Fill, BackColor = BgCard };
+            VScrollBar menuVsb = new VScrollBar { Dock = DockStyle.Right, Visible = false };
+            menuScrollPanel = new Panel { Left = 0, Top = 0, BackColor = BgCard };
+            menuClip.Controls.Add(menuVsb);
+            menuClip.Controls.Add(menuScrollPanel);
+            menuScrollPanel.BringToFront();
+            sidebar.Controls.Add(menuClip);
 
             // User info box (Top) — add before logo so logo goes above it
             Panel userBox = new Panel { Height = 60, Dock = DockStyle.Top, BackColor = BgCard };
@@ -180,7 +183,41 @@ namespace WindowsFormsApp1.forms.main
             panelContent = new Panel { Dock = DockStyle.Fill, BackColor = BgPage };
             rightSide.Controls.Add(panelContent);
 
-            this.Load += (s, e) => NavigateTo(1, "Stollar");
+            this.Load += (s, e) =>
+            {
+                NavigateTo(1, "Stollar");
+
+                int vsbW    = SystemInformation.VerticalScrollBarWidth;
+                int contentH = menuScrollPanel.Height;
+                int visibleH = menuClip.ClientSize.Height;
+
+                if (contentH > visibleH)
+                {
+                    menuScrollPanel.Width = menuClip.ClientSize.Width - vsbW;
+                    menuVsb.Minimum    = 0;
+                    menuVsb.LargeChange = visibleH;
+                    menuVsb.Maximum    = contentH - visibleH + menuVsb.LargeChange - 1;
+                    menuVsb.SmallChange = 22;
+                    menuVsb.Value      = 0;
+                    menuVsb.Visible    = true;
+                }
+                else
+                {
+                    menuScrollPanel.Width = menuClip.ClientSize.Width;
+                }
+
+                menuVsb.Scroll += (s2, e2) => menuScrollPanel.Top = -menuVsb.Value;
+
+                Action<int> doScroll = delta =>
+                {
+                    if (!menuVsb.Visible) return;
+                    int maxVal = menuVsb.Maximum - menuVsb.LargeChange + 1;
+                    menuVsb.Value = Math.Max(0, Math.Min(maxVal, menuVsb.Value + delta));
+                    menuScrollPanel.Top = -menuVsb.Value;
+                };
+                menuClip.MouseWheel        += (s2, e2) => doScroll(-e2.Delta / 4);
+                menuScrollPanel.MouseWheel += (s2, e2) => doScroll(-e2.Delta / 4);
+            };
 
             // ── Yangi buyurtma bildirishnomasi (toast + ovoz) ───────────────────
             _newOrderToastHandler = info =>
