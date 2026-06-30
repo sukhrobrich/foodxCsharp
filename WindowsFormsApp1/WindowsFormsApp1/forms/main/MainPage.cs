@@ -111,37 +111,28 @@ namespace WindowsFormsApp1.forms.main
 
             // Menu area: clip panel + permanent VScrollBar
             Panel menuClip = new Panel { Dock = DockStyle.Fill, BackColor = BgCard };
-            VScrollBar menuVsb = new VScrollBar { Dock = DockStyle.Right, Visible = true };
             menuScrollPanel = new Panel { Left = 0, Top = 0, BackColor = BgCard };
-            menuClip.Controls.Add(menuVsb);
+            VScrollBar menuVsb = new VScrollBar { Dock = DockStyle.Right, Visible = true };
             menuClip.Controls.Add(menuScrollPanel);
-            menuScrollPanel.BringToFront();
+            menuClip.Controls.Add(menuVsb);
             sidebar.Controls.Add(menuClip);
 
-            // Scroll wiring — runs on every resize (including first show/maximize)
-            menuVsb.Scroll += (s, e) => menuScrollPanel.Top = -menuVsb.Value;
+            menuVsb.Scroll += (s, e) =>
+            {
+                menuScrollPanel.Top = -e.NewValue;
+                menuClip.Invalidate(false);
+            };
             Action<int> doScroll = delta =>
             {
                 int maxVal = Math.Max(0, menuVsb.Maximum - menuVsb.LargeChange + 1);
-                menuVsb.Value = Math.Max(0, Math.Min(maxVal, menuVsb.Value + delta));
-                menuScrollPanel.Top = -menuVsb.Value;
+                int newVal = Math.Max(0, Math.Min(maxVal, menuVsb.Value + delta));
+                if (newVal == menuVsb.Value) return;
+                menuVsb.Value = newVal;
+                menuScrollPanel.Top = -newVal;
+                menuClip.Invalidate(false);
             };
             menuClip.MouseWheel        += (s2, e2) => doScroll(-e2.Delta / 4);
             menuScrollPanel.MouseWheel += (s2, e2) => doScroll(-e2.Delta / 4);
-            menuClip.Resize += (s, e) =>
-            {
-                int visibleH = menuClip.ClientSize.Height;
-                int contentH = menuScrollPanel.Height;
-                if (visibleH < 1 || contentH < 1) return;
-                menuScrollPanel.Width = menuClip.ClientSize.Width - menuVsb.Width;
-                menuVsb.Minimum     = 0;
-                menuVsb.SmallChange = 22;
-                menuVsb.LargeChange = visibleH;
-                menuVsb.Maximum     = Math.Max(contentH, visibleH + 1) - visibleH + menuVsb.LargeChange - 1;
-                int maxVal = Math.Max(0, menuVsb.Maximum - menuVsb.LargeChange + 1);
-                if (menuVsb.Value > maxVal) menuVsb.Value = maxVal;
-                menuScrollPanel.Top = -menuVsb.Value;
-            };
 
             // User info box (Top) — add before logo so logo goes above it
             Panel userBox = new Panel { Height = 60, Dock = DockStyle.Top, BackColor = BgCard };
@@ -209,6 +200,20 @@ namespace WindowsFormsApp1.forms.main
             rightSide.Controls.Add(panelContent);
 
             this.Load += (s, e) => NavigateTo(1, "Stollar");
+
+            // Shown: forma to'liq ko'ringandan keyin scrollbar qiymatlarini to'g'ri o'rnatish
+            this.Shown += (s, e) =>
+            {
+                int visibleH = menuClip.ClientSize.Height;
+                int contentH = menuScrollPanel.Height;
+                int vsbW     = SystemInformation.VerticalScrollBarWidth;
+                menuScrollPanel.Width = menuClip.ClientSize.Width - vsbW;
+                menuVsb.Minimum     = 0;
+                menuVsb.SmallChange = 22;
+                menuVsb.LargeChange = Math.Max(1, visibleH);
+                menuVsb.Maximum     = Math.Max(contentH - 1, menuVsb.LargeChange);
+                menuVsb.Value       = 0;
+            };
 
             // ── Yangi buyurtma bildirishnomasi (toast + ovoz) ───────────────────
             _newOrderToastHandler = info =>
