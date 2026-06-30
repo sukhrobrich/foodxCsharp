@@ -261,6 +261,8 @@ namespace WindowsFormsApp1.forms.main
                 AddMenuItem("Xodimlar",      "◉", ref y);
                 AddMenuItem("Sozlamalar",    "⚙", ref y);
             }
+
+            menuScrollPanel.AutoScrollMinSize = new Size(0, y + 16);
         }
 
         private void AddSectionLabel(string title, ref int y)
@@ -286,7 +288,7 @@ namespace WindowsFormsApp1.forms.main
             Panel item = new Panel
             {
                 Location = new Point(0, itemY),
-                Width = 236, Height = 44,
+                Width = 210, Height = 44,
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand
             };
