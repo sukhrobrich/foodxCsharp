@@ -153,14 +153,10 @@ namespace WindowsFormsApp1
                 });
             });
 
-            // 6. Asosiy forma — agar oxirgi marta kirgan xodim saqlangan bo'lsa,
-            //    login/PIN so'ramasdan to'g'ridan-to'g'ri uning sahifasiga o'tamiz.
-            //    Chiqish (logout) bosilganda saqlangan qiymat tozalanadi.
+            // 6. Asosiy forma — har doim xodim tanlash ekranini ko'rsatamiz.
+            //    Foydalanuvchi o'zi kim ekanini tanlaydi (admin/kassir/ofitsiant).
             if (IsAdminExists())
-            {
-                Form autoForm = TryAutoLoginForm();
-                Application.Run(autoForm ?? new Form1());
-            }
+                Application.Run(new Form1());
             else
                 Application.Run(new Password("admin", false));
 
@@ -443,55 +439,5 @@ namespace WindowsFormsApp1
             finally { Session.IsOnline = prevOnline; }
         }
 
-        // Oxirgi marta kirgan xodimni ("last_logged_in_user" sozlamasi) lokal bazadan
-        // topib, to'g'ridan-to'g'ri uning rolidagi sahifasini qaytaradi.
-        // Topilmasa (sozlama bo'sh, xodim o'chirilgan va h.k.) null qaytaradi — Form1 ko'rsatiladi.
-        static Form TryAutoLoginForm()
-        {
-            try
-            {
-                string saved = PrintService.GetSetting("last_logged_in_user", "");
-                if (!int.TryParse(saved, out int uid) || uid <= 0) return null;
-
-                bool prevOnline = Session.IsOnline;
-                Session.IsOnline = false;
-                string name = null, login = null, category = null;
-                try
-                {
-                    var db = new dbconnect();
-                    db.OpenCon();
-                    using (var cmd = new SqlCommand(
-                        @"SELECT u.name, u.login, ISNULL(uc.role_type, LOWER(uc.name)) AS category
-                          FROM [user] u JOIN user_category uc ON uc.id = u.user_category_id
-                          WHERE u.id=@id", db.GetCon()))
-                    {
-                        cmd.Parameters.AddWithValue("@id", uid);
-                        using (var dr = cmd.ExecuteReader())
-                        {
-                            if (dr.Read())
-                            {
-                                name     = dr["name"].ToString();
-                                login    = dr["login"].ToString();
-                                category = dr["category"].ToString().ToLower();
-                            }
-                        }
-                    }
-                    db.CloseCon();
-                }
-                finally { Session.IsOnline = prevOnline; }
-
-                if (name == null) return null;
-
-                Session.UserId       = uid;
-                Session.Login        = login;
-                Session.UserName     = name;
-                Session.UserCategory = category;
-
-                if (category == "admin")  return new MainPage(uid);
-                if (category == "kassir") return new CashierPage();
-                return new WaiterPage();
-            }
-            catch { return null; }
-        }
     }
 }
