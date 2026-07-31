@@ -180,7 +180,7 @@ namespace WindowsFormsApp1.forms.user
         {
             Panel root = new Panel { BackColor = BgPage };
 
-            userEditPanel = new Panel { Width = 380, Dock = DockStyle.Right, BackColor = BgCard, Visible = false };
+            userEditPanel = new Panel { Width = UIScale.EditPanelSm, Dock = DockStyle.Right, BackColor = BgCard, Visible = false };
             userEditPanel.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, 0, userEditPanel.Height);
             BuildUserEditPanel();
@@ -310,7 +310,7 @@ namespace WindowsFormsApp1.forms.user
         {
             Panel root = new Panel { BackColor = BgPage };
 
-            roleEditPanel = new Panel { Width = 380, Dock = DockStyle.Right, BackColor = BgCard, Visible = false };
+            roleEditPanel = new Panel { Width = UIScale.EditPanelSm, Dock = DockStyle.Right, BackColor = BgCard, Visible = false };
             roleEditPanel.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, 0, roleEditPanel.Height);
             BuildRoleEditPanel();

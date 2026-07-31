@@ -9,6 +9,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Windows.Forms;
 using WindowsFormsApp1.services;
+using WindowsFormsApp1.services;
 
 namespace WindowsFormsApp1.forms.settings
 {
@@ -318,7 +319,7 @@ namespace WindowsFormsApp1.forms.settings
             Panel body = new Panel { Dock = DockStyle.Fill, BackColor = BgMain };
             asosiyPrinterView.Controls.Add(body);
 
-            Panel leftWrap = new Panel { Width = 520, Dock = DockStyle.Left, BackColor = BgCard };
+            Panel leftWrap = new Panel { Width = UIScale.EditPanelLg, Dock = DockStyle.Left, BackColor = BgCard };
             leftWrap.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Border), leftWrap.Width-1, 0, leftWrap.Width-1, leftWrap.Height);
             leftWrap.Controls.Add(new Label { Text = "Asosiy printer  —  chek sozlamalari", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = TextD, Dock = DockStyle.Top, Height = 40, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(16, 0, 0, 0) });
             blocksListPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = BgCard };
@@ -384,7 +385,7 @@ namespace WindowsFormsApp1.forms.settings
             Panel body = new Panel { Dock = DockStyle.Fill, BackColor = BgMain };
             qoshimchaPrinterView.Controls.Add(body);
 
-            Panel leftWrap = new Panel { Width = 520, Dock = DockStyle.Left, BackColor = BgCard };
+            Panel leftWrap = new Panel { Width = UIScale.EditPanelLg, Dock = DockStyle.Left, BackColor = BgCard };
             leftWrap.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Border), leftWrap.Width-1, 0, leftWrap.Width-1, leftWrap.Height);
             leftWrap.Controls.Add(new Label { Text = "Qo'shimcha printer  —  oshxona chipta sozlamalari", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = TextD, Dock = DockStyle.Top, Height = 40, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(16, 0, 0, 0) });
             kitchenBlocksListPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = BgCard };

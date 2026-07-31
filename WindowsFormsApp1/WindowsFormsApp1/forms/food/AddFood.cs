@@ -111,7 +111,7 @@ namespace WindowsFormsApp1.forms.food
             header.Resize += (s, e) => btnReorderFoods.Location = new Point(header.Width - 116, 15);
 
             // EDIT PANEL (right fly-out)
-            editPanel = new Panel { Width = 440, Dock = DockStyle.Right, BackColor = CardBg, Visible = false };
+            editPanel = new Panel { Width = UIScale.EditPanelMd, Dock = DockStyle.Right, BackColor = CardBg, Visible = false };
             editPanel.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, 0, editPanel.Height);
             BuildEditPanel();

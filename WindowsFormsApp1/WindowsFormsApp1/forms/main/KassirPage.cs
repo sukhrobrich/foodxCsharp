@@ -47,7 +47,7 @@ namespace WindowsFormsApp1.forms.main
             BackColor       = BgPage;
             Text            = "FoodX — Kassir";
 
-            Panel sidebar = new Panel { Width = 240, Dock = DockStyle.Left, BackColor = Sidebar };
+            Panel sidebar = new Panel { Width = UIScale.Sidebar, Dock = DockStyle.Left, BackColor = Sidebar };
             Controls.Add(sidebar);
 
             _content = new Panel { Dock = DockStyle.Fill, BackColor = BgPage };

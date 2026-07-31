@@ -50,7 +50,7 @@ namespace WindowsFormsApp1.forms.main
             this.Text = "FoodX — Dashboard";
 
             // ======= SIDEBAR =======
-            Panel sidebar = new Panel { Width = 240, Dock = DockStyle.Left, BackColor = BgCard };
+            Panel sidebar = new Panel { Width = UIScale.Sidebar, Dock = DockStyle.Left, BackColor = BgCard };
             sidebar.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), sidebar.Width - 1, 0, sidebar.Width - 1, sidebar.Height);
             this.Controls.Add(sidebar);
@@ -146,7 +146,7 @@ namespace WindowsFormsApp1.forms.main
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
                 ForeColor = TextDark,
                 Location = new Point(16, 8),
-                AutoSize = false, Width = 208, Height = 22
+                AutoSize = false, Width = UIScale.Sidebar - 32, Height = 22
             });
             userBox.Controls.Add(new Label
             {
@@ -154,7 +154,7 @@ namespace WindowsFormsApp1.forms.main
                 Font = new Font("Segoe UI", 9),
                 ForeColor = roleColor,
                 Location = new Point(16, 32),
-                AutoSize = false, Width = 208, Height = 16
+                AutoSize = false, Width = UIScale.Sidebar - 32, Height = 16
             });
             sidebar.Controls.Add(userBox);
 
@@ -168,7 +168,7 @@ namespace WindowsFormsApp1.forms.main
                 Font = new Font("Segoe UI", 22, FontStyle.Bold),
                 ForeColor = Gold,
                 Location = new Point(0, 8),
-                Height = 36, Width = 240,
+                Height = 36, Width = UIScale.Sidebar,
                 TextAlign = ContentAlignment.MiddleCenter
             });
             Label lblClock = new Label
@@ -176,7 +176,7 @@ namespace WindowsFormsApp1.forms.main
                 Font = new Font("Segoe UI", 8.5f),
                 ForeColor = TextMuted,
                 Location = new Point(0, 48),
-                Height = 18, Width = 240,
+                Height = 18, Width = UIScale.Sidebar,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Text = DateTime.Now.ToString("dd.MM.yyyy  HH:mm")
             };
@@ -208,6 +208,13 @@ namespace WindowsFormsApp1.forms.main
                 int contentH = menuScrollPanel.Height;
                 int vsbW     = SystemInformation.VerticalScrollBarWidth;
                 menuScrollPanel.Width = menuClip.ClientSize.Width - vsbW;
+                int mw = menuScrollPanel.Width;
+                foreach (Control c in menuScrollPanel.Controls)
+                {
+                    c.Width = mw;
+                    foreach (Control child in c.Controls)
+                        if (child.Left == 52) child.Width = mw - 57;
+                }
                 menuVsb.Minimum     = 0;
                 menuVsb.SmallChange = 22;
                 menuVsb.LargeChange = Math.Max(1, visibleH);

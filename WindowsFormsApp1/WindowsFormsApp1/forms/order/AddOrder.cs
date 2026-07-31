@@ -117,7 +117,7 @@ namespace WindowsFormsApp1.forms.order
             // === LEFT: CATEGORIES (200px) ===
             panelCategories = new Panel
             {
-                Width = 200, Dock = DockStyle.Left,
+                Width = UIScale.CatPanel, Dock = DockStyle.Left,
                 BackColor = CardBg, AutoScroll = true
             };
             panelCategories.Paint += (s, e) =>
@@ -135,7 +135,7 @@ namespace WindowsFormsApp1.forms.order
             panelCategories.Controls.Add(lblCatTitle);
 
             // === RIGHT: CART (380px) ===
-            Panel cartPanel = new Panel { Width = 380, Dock = DockStyle.Right, BackColor = CardBg };
+            Panel cartPanel = new Panel { Width = UIScale.CartPanel, Dock = DockStyle.Right, BackColor = CardBg };
             cartPanel.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, 0, cartPanel.Height);
 
@@ -779,7 +779,7 @@ namespace WindowsFormsApp1.forms.order
 
                 Panel card = new Panel
                 {
-                    Width = 170, Height = 218,
+                    Width = UIScale.TilePhW, Height = UIScale.TilePhH,
                     BackColor = normalBg, Margin = new Padding(0, 0, 14, 14),
                     Cursor = outOfStock ? Cursors.Default : Cursors.Hand
                 };
@@ -800,7 +800,7 @@ namespace WindowsFormsApp1.forms.order
 
                 Panel imgArea = new Panel
                 {
-                    Width = 170, Height = 138, Location = new Point(0, 0),
+                    Width = UIScale.TilePhW, Height = UIScale.TileImgH, Location = new Point(0, 0),
                     BackColor = Color.FromArgb(237, 238, 240)
                 };
                 imgArea.Paint += (s, e) =>
@@ -833,7 +833,7 @@ namespace WindowsFormsApp1.forms.order
                         ForeColor = count > 0 ? Color.FromArgb(55, 65, 81) : Color.White,
                         BackColor = count > 0 ? Color.FromArgb(220, 220, 225) : Danger,
                         AutoSize = false, Width = 54, Height = 20,
-                        Location = new Point(108, 8), TextAlign = ContentAlignment.MiddleCenter
+                        Location = new Point(UIScale.TilePhW - 62, 8), TextAlign = ContentAlignment.MiddleCenter
                     };
                     imgArea.Controls.Add(lblStock);
                 }
@@ -846,7 +846,7 @@ namespace WindowsFormsApp1.forms.order
                     Text = name, Font = new Font("Segoe UI", 9, FontStyle.Bold),
                     ForeColor = outOfStock ? TextMuted : TextDark, BackColor = normalBg,
                     TextAlign = ContentAlignment.MiddleLeft,
-                    Location = new Point(10, 144), Width = 148, Height = 28, AutoSize = false
+                    Location = new Point(10, UIScale.TileImgH + 6), Width = UIScale.TilePhNamW, Height = 28, AutoSize = false
                 };
                 card.Controls.Add(lblName);
 
@@ -856,15 +856,15 @@ namespace WindowsFormsApp1.forms.order
                     Text = price.ToString("N0") + " so'm",
                     Font = new Font("Segoe UI", 8, FontStyle.Bold),
                     ForeColor = outOfStock ? TextMuted : Gold, BackColor = normalBg,
-                    AutoSize = false, Width = 116, Height = 20,
-                    Location = new Point(10, 176), TextAlign = ContentAlignment.MiddleLeft
+                    AutoSize = false, Width = UIScale.TilePhW - 54, Height = 20,
+                    Location = new Point(10, UIScale.TileImgH + 38), TextAlign = ContentAlignment.MiddleLeft
                 };
                 card.Controls.Add(lblPrice);
 
                 // + button bottom-right
                 Panel btnAdd = new Panel
                 {
-                    Width = 34, Height = 34, Location = new Point(128, 176),
+                    Width = 34, Height = 34, Location = new Point(UIScale.TilePhW - 42, UIScale.TileImgH + 38),
                     BackColor = Color.Transparent, Cursor = Cursors.Hand
                 };
                 btnAdd.Paint += (s, e) =>
@@ -904,7 +904,7 @@ namespace WindowsFormsApp1.forms.order
                 // ── TEXT MODE ────────────────────────────────────────────────
                 Panel card = new Panel
                 {
-                    Width = 200, Height = 106,
+                    Width = UIScale.TileTxW, Height = UIScale.TileTxH,
                     BackColor = normalBg, Margin = new Padding(0, 0, 14, 14),
                     Cursor = outOfStock ? Cursors.Default : Cursors.Hand
                 };
@@ -926,7 +926,7 @@ namespace WindowsFormsApp1.forms.order
                     Text = name, Font = new Font("Segoe UI", 10, FontStyle.Bold),
                     ForeColor = outOfStock ? TextMuted : TextDark, BackColor = normalBg,
                     TextAlign = ContentAlignment.MiddleCenter,
-                    Location = new Point(6, 12), Width = 188, Height = 46, AutoSize = false
+                    Location = new Point(6, 12), Width = UIScale.TileTxW - 12, Height = 46, AutoSize = false
                 };
                 card.Controls.Add(lblName);
 
@@ -937,7 +937,7 @@ namespace WindowsFormsApp1.forms.order
                     Font = new Font("Segoe UI", 7, FontStyle.Bold),
                     ForeColor = Color.White, BackColor = accentColor,
                     AutoSize = false, Width = 86, Height = 22,
-                    Location = new Point(108, 8), TextAlign = ContentAlignment.MiddleCenter
+                    Location = new Point(UIScale.TileTxW - 92, 8), TextAlign = ContentAlignment.MiddleCenter
                 };
                 card.Controls.Add(lblPrice);
 
@@ -953,7 +953,7 @@ namespace WindowsFormsApp1.forms.order
                                   : count > 0 ? Color.FromArgb(255, 248, 230)
                                               : Color.FromArgb(254, 226, 226),
                         AutoSize = false, Width = 78, Height = 18,
-                        Location = new Point(8, 80), TextAlign = ContentAlignment.MiddleCenter
+                        Location = new Point(8, UIScale.TileTxH - 26), TextAlign = ContentAlignment.MiddleCenter
                     };
                     card.Controls.Add(lblStock);
                 }
@@ -961,7 +961,7 @@ namespace WindowsFormsApp1.forms.order
                 // + button bottom-right
                 Panel btnAdd = new Panel
                 {
-                    Width = 36, Height = 36, Location = new Point(157, 64),
+                    Width = 36, Height = 36, Location = new Point(UIScale.TileTxW - 43, UIScale.TileTxH - 42),
                     BackColor = Color.Transparent, Cursor = Cursors.Hand
                 };
                 btnAdd.Paint += (s, e) =>

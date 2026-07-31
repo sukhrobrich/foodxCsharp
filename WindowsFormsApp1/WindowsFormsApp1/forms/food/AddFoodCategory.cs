@@ -134,7 +134,7 @@ namespace WindowsFormsApp1.forms.food
             categoriesListPanel.Resize += (s, e) => ResizeCards();
 
             // === RIGHT EDIT PANEL ===
-            editPanel = new Panel { Width = 360, Dock = DockStyle.Right, BackColor = CardBg, Visible = false };
+            editPanel = new Panel { Width = UIScale.EditPanelXs, Dock = DockStyle.Right, BackColor = CardBg, Visible = false };
             editPanel.Paint += (s, e) =>
                 e.Graphics.DrawLine(new Pen(Border), 0, 0, 0, editPanel.Height);
             BuildEditPanel();
