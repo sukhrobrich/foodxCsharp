@@ -1135,31 +1135,24 @@ namespace WindowsFormsApp1.forms.main
                         Text      = (fp * qty).ToString("N0") + " so'm",
                         Font      = new Font("Segoe UI", 9),
                         ForeColor = C_Muted,
-                        Width     = PriceColW, Height = 35,
+                        Width     = PriceColW,
+                        Dock      = DockStyle.Right,
                         TextAlign = ContentAlignment.MiddleRight,
+                        Padding   = new Padding(0, 0, 8, 0),
                     };
                     Label lblName = new Label
                     {
                         Text         = $"x{qty}  {foodName}",
                         Font         = new Font("Segoe UI", 9),
                         ForeColor    = C_Dark,
-                        Height       = 35,
+                        Dock         = DockStyle.Fill,
                         TextAlign    = ContentAlignment.MiddleLeft,
                         AutoEllipsis = true,
+                        Padding      = new Padding(16, 0, 0, 0),
                     };
-
-                    Action fixLayout = () =>
-                    {
-                        int w = foodRow.Width;
-                        if (w <= 0) return;
-                        lblPrice.Location = new Point(w - PriceColW - 8, 0);
-                        lblName.Location  = new Point(16, 0);
-                        lblName.Width     = w - PriceColW - 28;
-                    };
-                    foodRow.Resize      += (s, e) => fixLayout();
-                    foodRow.HandleCreated += (s, e) => fixLayout();
-                    foodRow.Controls.Add(lblPrice);
+                    // lblName (Fill) birinchi, lblPrice (Right) keyin — Right avval joy oladi, Fill qolganini egallaydi
                     foodRow.Controls.Add(lblName);
+                    foodRow.Controls.Add(lblPrice);
                     det.Controls.Add(foodRow);
                 }
 
